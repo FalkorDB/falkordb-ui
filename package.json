@@ -8,15 +8,15 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     },
     "./theme/tokens.css": "./dist/tokens.css",
     "./theme": {
+      "types": "./dist/tailwind-preset.d.ts",
       "import": "./dist/tailwind-preset.js",
-      "require": "./dist/tailwind-preset.cjs",
-      "types": "./dist/tailwind-preset.d.ts"
+      "require": "./dist/tailwind-preset.cjs"
     }
   },
   "files": [
@@ -71,6 +71,8 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@falkordb/canvas": "^0.0.44",
+    "@tailwindcss/postcss": "^4.2.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.2.3",
