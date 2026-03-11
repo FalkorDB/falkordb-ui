@@ -1,6 +1,6 @@
 import type { Preview } from '@storybook/react'
 import React from 'react'
-import '../src/theme/tokens.css'
+import './storybook.css'
 
 const preview: Preview = {
   globalTypes: {
