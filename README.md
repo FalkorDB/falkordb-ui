@@ -133,15 +133,9 @@ npm run storybook      # Start Storybook dev server
 npm run build-storybook # Build static Storybook
 ```
 
-## Versioning
+## Publishing
 
-This project uses [Changesets](https://github.com/changesets/changesets) for version management.
-
-```bash
-npx changeset          # Create a new changeset
-npx changeset version  # Bump versions
-npx changeset publish  # Publish to npm
-```
+Versions are published to npm automatically when a GitHub Release is created. Tag releases with `v` prefix (e.g., `v0.1.0`).
 
 ## License
 
