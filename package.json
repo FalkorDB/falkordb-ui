@@ -35,7 +35,7 @@
   "peerDependencies": {
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "tailwindcss": "^4.2.1"
+    "tailwindcss": "^3.4.0"
   },
   "license": "MIT",
   "repository": {
@@ -84,7 +84,7 @@
     "glob": "^13.0.6",
     "postcss": "^8.5.8",
     "storybook": "^8.6.14",
-    "tailwindcss": ">=3.4",
+    "tailwindcss": "^3.4.19",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
