@@ -87,12 +87,6 @@ Add `data-theme="dark"` or `data-theme="light"` to your root HTML element:
 | `Sidebar` | Collapsible icon sidebar with top/bottom sections |
 | `SidebarIcon` | Icon button for use inside Sidebar |
 
-### Graph Components
-
-| Component | Description |
-|-----------|-------------|
-| `SchemaViewer` | Database schema visualization (requires `@falkordb/canvas`) |
-
 ## Usage
 
 ```tsx
