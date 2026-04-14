@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FalkorDB Chat Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { height: 100vh; display: flex; font-family: -apple-system, sans-serif; }
+    falkordb-chat { flex: 1; height: 100vh; }
+  </style>
+</head>
+<body>
+  <script type="module" src="../dist/chat.js"></script>
+  <falkordb-chat user-name="Naseem" namespace="demo"></falkordb-chat>
+  <script>
+    const chat = document.querySelector('falkordb-chat')
+
+    chat.setSuggestions([
+      { title: 'Who knows who?', question: 'Find all connections between people', category: 'connection' },
+      { title: 'Compare entities', question: 'Compare two key entities in the graph', category: 'comparison' },
+      { title: 'Deep dive', question: 'Give me a detailed breakdown of the main topic', category: 'deep-dive' },
+      { title: 'Overview', question: 'Summarize the entire knowledge graph', category: 'overview' },
+    ])
+
+    chat.setConfig({
+      onQuery: async (question, history, respond, streamToken) => {
+        // Simulate streaming response
+        const words = ('This is a simulated response to your question: "' + question + '". ' +
+          'The knowledge graph contains many interesting connections between entities. ' +
+          'You can **bold** text, use `inline code`, and even create lists:\n- Item one\n- Item two').split(' ')
+        let accumulated = ''
+        for (const word of words) {
+          accumulated += (accumulated ? ' ' : '') + word
+          if (streamToken) streamToken(accumulated)
+          await new Promise(r => setTimeout(r, 60))
+        }
+        respond({
+          answer: accumulated,
+          queryId: 'test-' + Date.now(),
+          context: [
+            { content: 'Person A is a software engineer at TechCorp.', score: 0.95, metadata: { section: 'entity' } },
+            { content: 'Person A → WORKS_AT → TechCorp (since 2020)', score: 0.88, metadata: { section: 'relationship' } },
+            { content: 'TechCorp was founded in 2015 and focuses on AI solutions.', score: 0.75, metadata: { section: 'passage', source_doc: 'company-profile.pdf' } },
+          ],
+        })
+      },
+      onFeedback: (queryId, rating) => {
+        console.log('Feedback:', queryId, rating)
+      },
+      onNewChat: () => {
+        console.log('New chat started')
+      },
+    })
+  </script>
+</body>
+</html>
