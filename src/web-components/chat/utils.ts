@@ -157,33 +157,53 @@ export function annotateSources(
 // Minimal renderer for AI message content (bold, italic, code, links, lists)
 
 export function renderMarkdown(md: string): string {
-  let html = md
-    // Escape HTML
+  // Step 1: Extract code blocks into placeholders BEFORE any other processing
+  const codeBlocks: string[] = []
+  let processed = md.replace(/```([\s\S]*?)```/g, (_m, inner: string) => {
+    const content = inner.replace(/^[a-z]*\n/, '')
+    const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const idx = codeBlocks.length
+    codeBlocks.push(`<pre><code>${escaped}</code></pre>`)
+    return `\x00CODE${idx}\x00`
+  })
+
+  // Step 2: Escape HTML in the remaining text
+  processed = processed
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    // Code blocks
-    .replace(/```[\s\S]*?```/g, m => `<pre><code>${m.slice(3, -3).replace(/^[a-z]*\n/, '')}</code></pre>`)
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Bold
+
+  // Step 3: Inline code
+    .replace(/`([^`]+)`/g, (_m, c: string) => `<code>${c.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code>`)
+
+  // Step 4: Bold / italic
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    // Italic
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    // Links — handle entity links (#eN) and source links (#source:N) and regular
+
+  // Step 5: Entity/source/regular links — sanitize href
     .replace(/\[([^\]]*)\]\(#e(\d+)\)/g, '<button class="fc-entity-link" data-entity-idx="$2">$1</button>')
     .replace(/\[\\\[(\d+)\\\]\]\(#source:(\d+)\)/g, '<button class="fc-source-link" data-source-num="$2">$1</button>')
-    .replace(/\[([^\]]*)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    // Headings
+    .replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_m, text: string, href: string) => {
+      // Block javascript: and data: URIs
+      if (/^(javascript|data|vbscript):/i.test(href.trim())) return text
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`
+    })
+
+  // Step 6: Headings
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // Unordered lists
+
+  // Step 7: Lists
     .replace(/^\s*[-*] (.+)$/gm, '<li>$1</li>')
     .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
-    // Paragraphs (double newline)
+
+  // Step 8: Paragraphs and line breaks
     .replace(/\n\n/g, '</p><p>')
-    // Single newline
     .replace(/\n/g, '<br>')
-  return `<p>${html}</p>`
+
+  // Step 9: Restore code blocks
+  processed = processed.replace(/\x00CODE(\d+)\x00/g, (_m, idx: string) => codeBlocks[parseInt(idx)])
+
+  return `<p>${processed}</p>`
 }
 
 // ── Conversation storage ──────────────────────────────────────────────────
