@@ -184,7 +184,7 @@ export function renderMarkdown(md: string): string {
     .replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_m, text: string, href: string) => {
       // Block javascript: and data: URIs
       if (/^(javascript|data|vbscript):/i.test(href.trim())) return text
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`
+      return `<a href="${href.replace(/"/g, '%22')}" target="_blank" rel="noopener noreferrer">${text}</a>`
     })
 
   // Step 6: Headings

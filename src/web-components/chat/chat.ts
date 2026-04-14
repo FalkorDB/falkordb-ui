@@ -41,8 +41,10 @@ export class FalkorDBChat extends HTMLElement {
 
   connectedCallback() {
     this.namespace = this.getAttribute('namespace') || 'default'
-    this.render()
-    this.bindEvents()
+    if (!this.conversationEl) {
+      this.render()
+      this.bindEvents()
+    }
     this.loadState()
     this.refresh()
   }
@@ -77,6 +79,10 @@ export class FalkorDBChat extends HTMLElement {
   }
 
   // ── Internal ────────────────────────────────────────────────────────────
+
+  private esc(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  }
 
   private getUserName(): string {
     return this.config?.userName || this.getAttribute('user-name') || ''
@@ -148,7 +154,7 @@ export class FalkorDBChat extends HTMLElement {
               </button>
             </div>
             <div class="fc-query-inner">
-              <textarea class="fc-query-textarea" rows="1" placeholder="${this.getPlaceholder()}"></textarea>
+              <textarea class="fc-query-textarea" rows="1"></textarea>
               <button class="fc-action-btn fc-strategy-btn" title="Query strategy" type="button">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               </button>
@@ -167,6 +173,7 @@ export class FalkorDBChat extends HTMLElement {
 
     this.conversationEl = this.shadow.querySelector('.fc-conversation')!
     this.inputEl = this.shadow.querySelector('.fc-query-textarea')!
+    this.inputEl.placeholder = this.getPlaceholder()
     this.sendBtn = this.shadow.querySelector('.fc-send-btn')!
     this.stopBtn = this.shadow.querySelector('.fc-stop-btn')!
     this.newChatBtn = this.shadow.querySelector('.fc-new-chat-btn')!
@@ -280,7 +287,7 @@ export class FalkorDBChat extends HTMLElement {
     el.className = 'fc-empty'
     el.innerHTML = `
       <span class="fc-empty-label">Your graph assistant</span>
-      <h2 class="fc-empty-title">${userName ? `${greeting}, ${userName}` : 'Explore your knowledge graph'}</h2>
+      <h2 class="fc-empty-title">${userName ? `${greeting}, ${this.esc(userName)}` : 'Explore your knowledge graph'}</h2>
       <p class="fc-empty-subtitle">Ask questions and explore the knowledge in your data</p>
     `
 
@@ -310,8 +317,8 @@ export class FalkorDBChat extends HTMLElement {
     btn.innerHTML = `
       <div class="fc-suggestion-icon">${icons[s.category] || icons.overview}</div>
       <div style="flex:1;min-width:0">
-        <p class="fc-suggestion-title">${s.title}</p>
-        <p class="fc-suggestion-question">${s.question}</p>
+        <p class="fc-suggestion-title">${this.esc(s.title)}</p>
+        <p class="fc-suggestion-question">${this.esc(s.question)}</p>
       </div>
       <span class="fc-suggestion-arrow">→</span>
     `
@@ -533,7 +540,7 @@ export class FalkorDBChat extends HTMLElement {
             <span class="fc-source-idx">[${i + 1}]</span>
           </div>
           <p class="fc-source-content">${item.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
-          ${sourceDoc ? `<div class="fc-source-doc">📄 ${sourceDoc}</div>` : ''}
+          ${sourceDoc ? `<div class="fc-source-doc">📄 ${this.esc(sourceDoc)}</div>` : ''}
         `
         card.addEventListener('click', () => {
           const section = (item.metadata as Record<string,unknown>)?.section as string
@@ -609,7 +616,10 @@ export class FalkorDBChat extends HTMLElement {
       }
     }
 
+    const currentAbort = this.abortController
+
     const respond = (result: import('./types.js').QueryResult) => {
+      if (currentAbort?.signal.aborted) return
       const noContextPatterns = [
         /does not provide/i,
         /do(es)?n't (have|contain|include|mention|provide)/i,
@@ -689,4 +699,6 @@ export class FalkorDBChat extends HTMLElement {
   }
 }
 
-customElements.define('falkordb-chat', FalkorDBChat)
+if (!customElements.get('falkordb-chat')) {
+  customElements.define('falkordb-chat', FalkorDBChat)
+}

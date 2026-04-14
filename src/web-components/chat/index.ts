@@ -6,6 +6,7 @@ export type {
   ChatConfig,
   QueryResult,
   ChatMessageData,
+  ConversationData,
   ContextItem,
   ExplainGraph,
   ExplainNode,
