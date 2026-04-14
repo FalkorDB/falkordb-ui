@@ -17,6 +17,11 @@
       "types": "./dist/tailwind-preset.d.ts",
       "import": "./dist/tailwind-preset.js",
       "require": "./dist/tailwind-preset.cjs"
+    },
+    "./chat": {
+      "types": "./dist/chat.d.ts",
+      "import": "./dist/chat.js",
+      "require": "./dist/chat.cjs"
     }
   },
   "files": [

@@ -18,6 +18,7 @@ export default defineConfig({
       entry: {
         index: path.resolve(__dirname, 'src/index.ts'),
         'tailwind-preset': path.resolve(__dirname, 'src/theme/tailwind-preset.ts'),
+        'chat': path.resolve(__dirname, 'src/web-components/chat/index.ts'),
       },
       formats: ['es', 'cjs'],
     },
