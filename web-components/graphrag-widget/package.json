@@ -1,11 +1,12 @@
 {
-  "name": "@falkordb/chat-widget",
-  "version": "1.0.0",
+  "name": "@falkordb/graphrag-widget",
+  "version": "0.1.0",
   "description": "Embeddable chat widget powered by FalkorDB GraphRAG",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/FalkorDB/falkordb-chat-widget.git"
+    "url": "https://github.com/FalkorDB/falkordb-ui",
+    "directory": "web-components/graphrag-widget"
   },
   "keywords": ["falkordb", "chat", "widget", "graphrag", "knowledge-graph"],
   "main": "dist/falkordb-chat.iife.js",
