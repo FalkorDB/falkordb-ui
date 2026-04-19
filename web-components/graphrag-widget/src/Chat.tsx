@@ -6,6 +6,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   hasContext?: boolean;
+  userQuestion?: string;
 }
 
 interface Props {
@@ -46,6 +47,7 @@ export function Chat({ onSupportClick, history, onHistoryUpdate, showSuggestions
         role: "assistant",
         content: res.answer,
         hasContext: res.has_context,
+        userQuestion: question,
       };
       setMessages((prev) => [...prev, assistantMsg]);
       const newHistory = [
@@ -57,7 +59,7 @@ export function Chat({ onSupportClick, history, onHistoryUpdate, showSuggestions
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Something went wrong. Please try again.", hasContext: false },
+        { role: "assistant", content: "Something went wrong. Please try again.", hasContext: false, userQuestion: question },
       ]);
     } finally {
       setLoading(false);
@@ -101,7 +103,7 @@ export function Chat({ onSupportClick, history, onHistoryUpdate, showSuggestions
             {msg.role === "assistant" && msg.hasContext === false && (
               <button
                 class="fdb-btn fdb-btn--inline"
-                onClick={() => onSupportClick(lastUserQuestion)}
+                onClick={() => onSupportClick(msg.userQuestion ?? lastUserQuestion)}
               >
                 Contact Support
               </button>
