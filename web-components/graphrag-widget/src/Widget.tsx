@@ -1,5 +1,5 @@
 import { h } from "preact";
-import { useState } from "preact/hooks";
+import { useState, useEffect, useRef } from "preact/hooks";
 import { configure } from "./api";
 import { Chat } from "./Chat";
 import { Support } from "./Support";
@@ -21,8 +21,32 @@ export function Widget({ config }: { config: Config }) {
   const [view, setView] = useState<View>("chat");
   const [prefillMessage, setPrefillMessage] = useState("");
   const [history, setHistory] = useState<Array<{ role: string; content: string }>>([]);
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   configure(config.api, config.graph);
+
+  // Escape to close + focus management
+  useEffect(() => {
+    if (!open) return;
+    closeBtnRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  // Return focus to the FAB when the panel closes
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !open) {
+      fabRef.current?.focus();
+    }
+    wasOpenRef.current = open;
+  }, [open]);
 
   const positionClass = config.position === "bottom-left"
     ? "fdb-widget--bottom-left"
@@ -37,7 +61,7 @@ export function Widget({ config }: { config: Config }) {
     <div class={`fdb-widget ${positionClass}`}
          style={{ "--fdb-accent": config.accent } as any}>
       {open && (
-        <div class="fdb-panel" role="dialog" aria-label={config.title}>
+        <div id="fdb-panel" class="fdb-panel" role="dialog" aria-modal="false" aria-label={config.title}>
           <div class="fdb-panel__header">
             <span class="fdb-panel__logo">
               <svg width="28" height="28" viewBox="0 0 508 508" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -55,7 +79,7 @@ export function Widget({ config }: { config: Config }) {
               </svg>
             </span>
             <span class="fdb-panel__title">FalkorDB</span>
-            <button class="fdb-btn fdb-btn--icon fdb-btn--close"
+            <button ref={closeBtnRef} class="fdb-btn fdb-btn--icon fdb-btn--close"
                     onClick={() => setOpen(false)} aria-label="Close chat">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M1 1l12 12M13 1L1 13" stroke="currentColor"
@@ -84,9 +108,12 @@ export function Widget({ config }: { config: Config }) {
       )}
 
       <button
+        ref={fabRef}
         class={`fdb-fab ${open ? "fdb-fab--open" : ""}`}
         onClick={() => { setOpen((v) => !v); if (!open) setView("chat"); }}
-        aria-label="Open messaging window"
+        aria-label={open ? "Close messaging window" : "Open messaging window"}
+        aria-expanded={open}
+        aria-controls="fdb-panel"
       >
         {open ? (
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
