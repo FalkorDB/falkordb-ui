@@ -6,7 +6,7 @@
  * page already loads "Inter", the widget will pick it up automatically.
  */
 
-:root {
+.fdb-widget {
   --fdb-accent: #22C55E;
   --fdb-accent-glow: rgba(34, 197, 94, 0.25);
   --fdb-bg-deep: #0B1121;
