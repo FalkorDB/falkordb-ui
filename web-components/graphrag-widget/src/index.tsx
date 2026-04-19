@@ -15,8 +15,8 @@ const ROOT_ID = "fdb-widget-root";
 function warnMissingApi(): void {
   // eslint-disable-next-line no-console
   console.warn(
-    "[@falkordb/graphrag-widget] No `api` URL provided; widget will render but every request will fail. " +
-      "Set the `api` option (or data-api on the script tag).",
+    "[@falkordb/graphrag-widget] No `api` URL provided; falling back to same-origin requests. " +
+      "Set the `api` option (or data-api on the script tag) to point at a different backend.",
   );
 }
 
