@@ -8,7 +8,7 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "npm run build --workspace=@falkordb/graphrag-widget && storybook build"
   },
   "devDependencies": {
     "@storybook/addon-essentials": "^8.6.14",
