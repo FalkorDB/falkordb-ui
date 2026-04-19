@@ -46,28 +46,6 @@ npm install @falkordb/ui-chat
 
 ---
 
-## Multi-product architecture
-
-The same `<falkordb-chat>` element powers fundamentally different products:
-
-| Capability | GraphRAG-UI | QueryWeaver | Your product |
-|---|---|---|---|
-| **Core chat** | ✅ Built-in | ✅ Built-in | ✅ Built-in |
-| **Token streaming** | ✅ `streamToken` | Optional | ✅ `streamToken` |
-| **Stop generation** | ✅ `AbortSignal` | Optional | ✅ `AbortSignal` |
-| **Suggestions** | LLM-generated | Hard-coded | `setSuggestions()` |
-| **Bookmarks** | ✅ | Hidden via `hideBookmarks` | Configurable |
-| **Feedback 👍👎** | ✅ | Hidden via `hideFeedback` | Configurable |
-| **Source citations** | ✅ Graph retrieval path | Hidden via `hideSources` | Configurable |
-| **Strategy picker** | Deep Search / Fast / Auto | — (no `strategyOptions`) | Any options via `strategyOptions` |
-| **SQL display** | — | Custom renderer | `messageRenderers` |
-| **Table results** | — | Custom renderer | `messageRenderers` |
-| **Confirmations** | — | Custom renderer | `messageRenderers` |
-
-Each product configures the same element differently — the chat component provides the **shell**, each product provides the **brains**.
-
----
-
 ## HTML Attributes
 
 | Attribute | Type | Default | Description |
