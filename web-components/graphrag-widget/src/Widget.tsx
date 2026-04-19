@@ -26,6 +26,12 @@ export function Widget({ config }: { config: Config }) {
 
   configure(config.api, config.graph);
 
+  // Re-apply API config if it changes at runtime (also resets conversation
+  // history so we don't send stale context from a previous graph)
+  useEffect(() => {
+    configure(config.api, config.graph);
+  }, [config.api, config.graph]);
+
   // Escape to close + focus management
   useEffect(() => {
     if (!open) return;
@@ -78,7 +84,7 @@ export function Widget({ config }: { config: Config }) {
                 </g>
               </svg>
             </span>
-            <span class="fdb-panel__title">FalkorDB</span>
+            <span class="fdb-panel__title">{config.title}</span>
             <button ref={closeBtnRef} class="fdb-btn fdb-btn--icon fdb-btn--close"
                     onClick={() => setOpen(false)} aria-label="Close chat">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
