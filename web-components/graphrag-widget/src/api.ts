@@ -77,10 +77,30 @@ export async function sendMessage(question: string): Promise<ChatResponse> {
   const has_context =
     typeof data.has_context === "boolean" ? data.has_context : !!answer && answer.length > 0;
 
-  _history.push({ role: "user", content: question });
-  _history.push({ role: "assistant", content: answer });
+  const cleanedAnswer = stripCitations(answer);
 
-  return { answer, has_context };
+  _history.push({ role: "user", content: question });
+  _history.push({ role: "assistant", content: cleanedAnswer });
+
+  return { answer: cleanedAnswer, has_context };
+}
+
+/**
+ * Strip inline [N] citation markers and any trailing SOURCES: line from an
+ * answer. The GraphRAG-UI backend emits answers with numeric citation markers
+ * like "[2, 25]" that reference a sources panel. This widget does not render
+ * a sources panel, so the raw markers would just look like noise to the user.
+ */
+function stripCitations(answer: string): string {
+  return answer
+    // Drop bracketed citation groups like [2] or [2, 25] — digits/commas/spaces only
+    .replace(/\[\s*\d+(?:\s*,\s*\d+)*\s*\]/g, "")
+    // Remove a trailing SOURCES: ... line the backend sometimes appends
+    .replace(/\n?\s*SOURCES:\s*.+$/i, "")
+    // Collapse the double-spaces left where "word [3] ." became "word  ."
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
 }
 
 export async function submitSupport(req: Omit<SupportRequest, "graph_name">): Promise<boolean> {
