@@ -17,14 +17,17 @@
       "types": "./dist/tailwind-preset.d.ts",
       "import": "./dist/tailwind-preset.js",
       "require": "./dist/tailwind-preset.cjs"
+    },
+    "./chat": {
+      "types": "./dist/web-components/chat/index.d.ts",
+      "import": "./dist/chat.js",
+      "require": "./dist/chat.cjs"
     }
   },
   "files": [
     "dist"
   ],
-  "sideEffects": [
-    "*.css"
-  ],
+  "sideEffects": ["*.css", "./dist/chat.js", "./dist/chat.cjs"],
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.build.json && vite build",
