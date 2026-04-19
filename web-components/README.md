@@ -7,6 +7,7 @@ Framework-agnostic Web Components published as part of `@falkordb/ui`. Each comp
 | Component | Import | Element |
 |-----------|--------|---------|
 | [Chat](./chat/README.md) | `@falkordb/ui/chat` | `<falkordb-chat>` |
+| [GraphRAG Widget](./graphrag-widget/README.md) | `@falkordb/graphrag-widget` | `<script>` embed |
 
 ---
 

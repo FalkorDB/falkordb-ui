@@ -1,13 +1,13 @@
-# FalkorDB Chat Widget
+# FalkorDB GraphRAG Widget
 
 An embeddable chat widget powered by **GraphRAG** and **FalkorDB**. Drop a single `<script>` tag on any website to add an AI assistant that answers questions from your knowledge graph — no backend required.
 
 ![FalkorDB](https://img.shields.io/badge/FalkorDB-Graph%20Database-22C55E)
 ![Preact](https://img.shields.io/badge/Preact-10.x-673AB8)
-![npm](https://img.shields.io/badge/npm-@falkordb/chat--widget-CB3837)
+![npm](https://img.shields.io/npm/v/@falkordb/graphrag-widget)
 
 <p align="center">
-  <img src="docs/demo.gif" alt="FalkorDB Chat Widget Demo" width="640" />
+  <img src="docs/demo.gif" alt="FalkorDB GraphRAG Widget Demo" width="640" />
 </p>
 
 ---
@@ -27,20 +27,20 @@ The widget is a **pure frontend component** that connects directly to a [GraphRA
 ### Script Tag (any website)
 
 ```html
-<script src="https://unpkg.com/@falkordb/chat-widget"
+<script src="https://unpkg.com/@falkordb/graphrag-widget"
         data-api="https://your-graphrag-ui-server.com"
         data-graph="my-graph">
 </script>
 ```
 
-### npm (React, Vue, Angular)
+### npm (React, Vue, Angular, etc.)
 
 ```bash
-npm install @falkordb/chat-widget
+npm install @falkordb/graphrag-widget
 ```
 
 ```js
-import { mount } from '@falkordb/chat-widget';
+import { mount } from '@falkordb/graphrag-widget';
 
 const unmount = mount({
   api: 'https://your-graphrag-ui-server.com',
@@ -53,7 +53,14 @@ const unmount = mount({
 1. Run [GraphRAG-UI](https://github.com/FalkorDB/GraphRAG-UI) locally (provides the API server)
 2. Configure a predefined graph in GraphRAG-UI's `.env` (`PREDEFINED_GRAPHS`)
 3. Set `WIDGET_ALLOWED_ORIGINS` in GraphRAG-UI's `.env` to allow your embed origin
-4. Open `sample.html` and point `data-api` to `http://localhost:8000`
+4. Embed the widget in an HTML page and point `data-api` to `http://localhost:8000`
+
+From the monorepo root:
+
+```bash
+npm install
+npm run build --workspace=@falkordb/graphrag-widget
+```
 
 ---
 
@@ -97,4 +104,5 @@ These endpoints are unauthenticated, scoped to predefined graphs only, and rate-
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+MIT — see the repository root [LICENSE](../../LICENSE).
+

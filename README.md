@@ -11,6 +11,7 @@ Monorepo for FalkorDB UI packages. Build once, use across all FalkorDB projects.
 |---------|-----|-------------|
 | `packages/ui` | [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui) | React component library (Button, Card, Input, etc.) |
 | `web-components/chat` | [![npm](https://img.shields.io/npm/v/@falkordb/ui-chat)](https://www.npmjs.com/package/@falkordb/ui-chat) | Chat web component — framework-agnostic |
+| `web-components/graphrag-widget` | [![npm](https://img.shields.io/npm/v/@falkordb/graphrag-widget)](https://www.npmjs.com/package/@falkordb/graphrag-widget) | Embeddable GraphRAG-powered chat widget — one `<script>` tag |
 
 ---
 
