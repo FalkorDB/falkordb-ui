@@ -59,7 +59,7 @@ export async function fetchSuggestions(): Promise<Suggestion[]> {
 }
 
 export async function sendMessage(question: string): Promise<ChatResponse> {
-  _history.push({ role: "user", content: question });
+  const historyForRequest = _history.slice();
 
   const r = await fetch(`${_apiBase}/api/widget/query${qs()}`, {
     method: "POST",
@@ -67,19 +67,20 @@ export async function sendMessage(question: string): Promise<ChatResponse> {
     body: JSON.stringify({
       question,
       return_context: false,
-      history: _history.slice(0, -1), // exclude current question (server adds it)
+      history: historyForRequest,
     }),
   });
   if (!r.ok) throw new Error(`Query API error: ${r.status}`);
   const data = await r.json();
 
   const answer = data.answer ?? "";
+  const has_context =
+    typeof data.has_context === "boolean" ? data.has_context : !!answer && answer.length > 0;
+
+  _history.push({ role: "user", content: question });
   _history.push({ role: "assistant", content: answer });
 
-  return {
-    answer,
-    has_context: !!answer && answer.length > 0,
-  };
+  return { answer, has_context };
 }
 
 export async function submitSupport(req: Omit<SupportRequest, "graph_name">): Promise<boolean> {
