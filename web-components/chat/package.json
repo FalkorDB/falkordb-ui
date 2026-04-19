@@ -1,0 +1,31 @@
+{
+  "name": "@falkordb/ui-chat",
+  "version": "0.1.0",
+  "description": "FalkorDB chat web component — framework-agnostic",
+  "type": "module",
+  "main": "./dist/chat.cjs",
+  "module": "./dist/chat.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/chat.js",
+      "require": "./dist/chat.cjs"
+    }
+  },
+  "files": ["dist"],
+  "sideEffects": ["./dist/chat.js", "./dist/chat.cjs"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FalkorDB/falkordb-ui"
+  },
+  "keywords": ["falkordb", "chat", "web-component"]
+}
