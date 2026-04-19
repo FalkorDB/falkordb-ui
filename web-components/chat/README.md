@@ -7,14 +7,14 @@ Built to serve **multiple FalkorDB products** — GraphRAG-UI, QueryWeaver, and 
 ## Install
 
 ```bash
-npm install @falkordb/ui
+npm install @falkordb/ui-chat
 ```
 
 ## Quick start
 
 ```html
 <script type="module">
-  import '@falkordb/ui/chat'
+  import '@falkordb/ui-chat'
 </script>
 
 <falkordb-chat user-name="Naseem"></falkordb-chat>
@@ -343,7 +343,7 @@ falkordb-chat {
 ### React
 
 ```tsx
-import '@falkordb/ui/chat'
+import '@falkordb/ui-chat'
 import { useEffect, useRef } from 'react'
 
 // Tell TypeScript about the element
@@ -405,7 +405,7 @@ export function ChatPage() {
 </template>
 
 <script setup>
-import '@falkordb/ui/chat'
+import '@falkordb/ui-chat'
 import { onMounted, ref } from 'vue'
 
 const chatRef = ref(null)
@@ -434,7 +434,7 @@ onMounted(() => {
 
 ```ts
 // app.component.ts
-import '@falkordb/ui/chat'
+import '@falkordb/ui-chat'
 import { Component, ElementRef, AfterViewInit, ViewChild } from '@angular/core'
 
 @Component({
@@ -479,7 +479,7 @@ export class AppModule {}
 <!DOCTYPE html>
 <html>
 <body style="margin:0; height:100vh; display:flex;">
-  <script type="module" src="node_modules/@falkordb/ui/dist/chat.js"></script>
+  <script type="module" src="node_modules/@falkordb/ui-chat/dist/chat.js"></script>
   <falkordb-chat user-name="Naseem" style="flex:1"></falkordb-chat>
   <script>
     const chat = document.querySelector('falkordb-chat')
@@ -708,7 +708,7 @@ chat.setConfig({
 
 ## TypeScript types
 
-All types are exported from `@falkordb/ui/chat`:
+All types are exported from `@falkordb/ui-chat`:
 
 ```ts
 import type {
@@ -728,5 +728,5 @@ import type {
   MessageRenderer,
   MessageRenderHelpers,
   MessageAction,
-} from '@falkordb/ui/chat'
+} from '@falkordb/ui-chat'
 ```
