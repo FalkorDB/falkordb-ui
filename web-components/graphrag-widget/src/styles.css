@@ -1,5 +1,10 @@
 /* All styles scoped under .fdb-widget to avoid leaking into host page */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/*
+ * Uses a system-font stack instead of loading Google Fonts. Remote webfonts
+ * (fonts.googleapis.com) would leak every visitor's IP to Google from every
+ * host page, which is a GDPR concern for an embeddable widget. If a host
+ * page already loads "Inter", the widget will pick it up automatically.
+ */
 
 :root {
   --fdb-accent: #22C55E;
@@ -385,7 +390,7 @@
   font-size: 13px;
   line-height: 1.55;
   animation: fdb-msg-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .fdb-bubble p { margin: 0; }
 .fdb-bubble--user {
