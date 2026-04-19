@@ -1,4 +1,5 @@
 import type { StorybookConfig } from '@storybook/react-vite'
+import path from 'path'
 
 const config: StorybookConfig = {
   stories: ['../stories/**/*.stories.@(ts|tsx)'],
@@ -13,6 +14,12 @@ const config: StorybookConfig = {
           require('autoprefixer'),
         ],
       },
+    }
+    // Resolve @ alias to packages/core/src
+    config.resolve = config.resolve || {}
+    config.resolve.alias = {
+      ...(config.resolve.alias as Record<string, string> || {}),
+      '@': path.resolve(__dirname, '../packages/core/src'),
     }
     return config
   },

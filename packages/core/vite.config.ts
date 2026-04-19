@@ -26,7 +26,7 @@ export default defineConfig({
       output: {
         globals: { react: 'React', 'react-dom': 'ReactDOM' },
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') return 'tokens.css'
+          if (assetInfo.name?.endsWith('.css')) return 'tokens.css'
           return assetInfo.name || ''
         },
       },

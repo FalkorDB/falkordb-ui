@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Sidebar, SidebarIcon } from '../src/components/layout/sidebar'
+import { Sidebar, SidebarIcon } from '../packages/core/src/components/layout/sidebar'
 import { Home, Settings, Users, HelpCircle } from 'lucide-react'
 
 const meta: Meta<typeof Sidebar> = {
