@@ -25,7 +25,13 @@ let _apiBase = "";
 let _graphId = "";
 
 export function configure(apiBase: string, graphId: string): void {
-  _apiBase = apiBase.replace(/\/$/, "");
+  const nextBase = apiBase.replace(/\/$/, "");
+  // Reset conversation history when the backend or graph changes so we never
+  // send stale context from a previous session / different graph.
+  if (nextBase !== _apiBase || graphId !== _graphId) {
+    _history = [];
+  }
+  _apiBase = nextBase;
   _graphId = graphId;
 }
 
@@ -44,7 +50,9 @@ export interface Suggestion {
 
 export async function fetchSuggestions(): Promise<Suggestion[]> {
   try {
-    const r = await fetch(`${_apiBase}/api/widget/suggestions${qs()}`);
+    const r = await fetch(`${_apiBase}/api/widget/suggestions${qs()}`, {
+      credentials: "omit",
+    });
     if (!r.ok) return [];
     const data = await r.json();
     // Response shape: { domain_summary, suggestions: [{ title, question, category }] }
@@ -63,6 +71,7 @@ export async function sendMessage(question: string): Promise<ChatResponse> {
 
   const r = await fetch(`${_apiBase}/api/widget/query${qs()}`, {
     method: "POST",
+    credentials: "omit",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       question,
@@ -103,7 +112,7 @@ function stripCitations(answer: string): string {
     .trim();
 }
 
-export async function submitSupport(req: Omit<SupportRequest, "graph_name">): Promise<boolean> {
+export async function submitSupport(req: SupportRequest): Promise<boolean> {
   // GraphRAG-UI doesn't expose a support endpoint; fall back to mailto.
   const subject = encodeURIComponent("Support Request — FalkorDB Widget");
   const body = encodeURIComponent(
