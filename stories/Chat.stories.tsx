@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { useEffect, useRef } from 'react'
-import '../src/web-components/chat/index.ts'
+import React, { useEffect, useRef } from 'react'
+import '../web-components/chat/src/index.ts'
 
 // Teach TypeScript about the custom element in JSX
-declare global {
+declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
       'falkordb-chat': React.HTMLAttributes<HTMLElement> & {
+        ref?: React.RefObject<HTMLElement>
         'user-name'?: string
         namespace?: string
         placeholder?: string
