@@ -9,14 +9,15 @@
     "directory": "web-components/graphrag-widget"
   },
   "keywords": ["falkordb", "chat", "widget", "graphrag", "knowledge-graph"],
-  "main": "dist/falkordb-chat.iife.js",
+  "main": "dist/falkordb-chat.mjs",
   "module": "dist/falkordb-chat.mjs",
   "types": "dist/index.d.ts",
+  "unpkg": "dist/falkordb-chat.iife.js",
+  "jsdelivr": "dist/falkordb-chat.iife.js",
   "exports": {
     ".": {
-      "import": "./dist/falkordb-chat.mjs",
-      "require": "./dist/falkordb-chat.iife.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/falkordb-chat.mjs"
     }
   },
   "files": [
