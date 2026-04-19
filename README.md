@@ -106,6 +106,46 @@ See [web-components/chat/README.md](web-components/chat/README.md) for full docu
 
 ---
 
+## @falkordb/graphrag-widget — Embeddable GraphRAG Chat Widget
+
+A one-`<script>`-tag floating chat widget powered by FalkorDB GraphRAG. Drop it on any website to add an AI assistant that answers questions from a pre-ingested knowledge graph — no backend code required on the embedder's side.
+
+```bash
+npm install @falkordb/graphrag-widget
+```
+
+```js
+import { mount } from '@falkordb/graphrag-widget'
+
+mount({
+  api: 'https://your-graphrag-ui-server.com',
+  graph: 'my-graph',
+})
+```
+
+Or via script tag:
+
+```html
+<script src="https://unpkg.com/@falkordb/graphrag-widget"
+        data-api="https://your-graphrag-ui-server.com"
+        data-graph="my-graph">
+</script>
+```
+
+See [web-components/graphrag-widget/README.md](web-components/graphrag-widget/README.md) for full documentation.
+
+Requires a [GraphRAG-UI](https://github.com/FalkorDB/GraphRAG-UI) server exposing the public `/api/widget/*` endpoints.
+
+## Storybook
+
+All components — React + web components — are demoed in Storybook:
+
+```bash
+npm run storybook
+```
+
+---
+
 ## Development
 
 ```bash
@@ -120,6 +160,7 @@ npm run build-storybook   # Build static Storybook
 ```bash
 npm run build --workspace=packages/ui
 npm run build --workspace=web-components/chat
+npm run build --workspace=@falkordb/graphrag-widget
 ```
 
 ## Publishing
