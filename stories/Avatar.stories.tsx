@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Avatar, AvatarFallback, AvatarImage } from '../packages/core/src/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '../packages/ui/src/components/ui/avatar'
 
 const meta: Meta = {
   title: 'UI/Avatar',

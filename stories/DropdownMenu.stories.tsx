@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Button } from '../packages/core/src/components/ui/button'
+import { Button } from '../packages/ui/src/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,7 +7,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '../packages/core/src/components/ui/dropdown-menu'
+} from '../packages/ui/src/components/ui/dropdown-menu'
 
 const meta: Meta = {
   title: 'UI/DropdownMenu',

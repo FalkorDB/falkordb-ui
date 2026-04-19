@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Button } from '../packages/core/src/components/ui/button'
+import { Button } from '../packages/ui/src/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -8,9 +8,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '../packages/core/src/components/ui/dialog'
-import { Input } from '../packages/core/src/components/ui/input'
-import { Label } from '../packages/core/src/components/ui/label'
+} from '../packages/ui/src/components/ui/dialog'
+import { Input } from '../packages/ui/src/components/ui/input'
+import { Label } from '../packages/ui/src/components/ui/label'
 
 const meta: Meta = {
   title: 'UI/Dialog',

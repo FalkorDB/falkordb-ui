@@ -5,7 +5,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../packages/core/src/components/ui/select'
+} from '../packages/ui/src/components/ui/select'
 
 const meta: Meta = {
   title: 'UI/Select',

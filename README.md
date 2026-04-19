@@ -9,7 +9,7 @@ Monorepo for FalkorDB UI packages. Build once, use across all FalkorDB projects.
 
 | Package | npm | Description |
 |---------|-----|-------------|
-| `packages/core` | [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui) | React component library (Button, Card, Input, etc.) |
+| `packages/ui` | [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui) | React component library (Button, Card, Input, etc.) |
 | `web-components/chat` | [![npm](https://img.shields.io/npm/v/@falkordb/ui-chat)](https://www.npmjs.com/package/@falkordb/ui-chat) | Chat web component — framework-agnostic |
 
 ---
@@ -117,7 +117,7 @@ npm run build-storybook   # Build static Storybook
 ### Build a specific package
 
 ```bash
-npm run build --workspace=packages/core
+npm run build --workspace=packages/ui
 npm run build --workspace=web-components/chat
 ```
 

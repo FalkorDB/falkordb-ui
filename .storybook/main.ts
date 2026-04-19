@@ -15,11 +15,11 @@ const config: StorybookConfig = {
         ],
       },
     }
-    // Resolve @ alias to packages/core/src
+    // Resolve @ alias to packages/ui/src
     config.resolve = config.resolve || {}
     config.resolve.alias = {
       ...(config.resolve.alias as Record<string, string> || {}),
-      '@': path.resolve(__dirname, '../packages/core/src'),
+      '@': path.resolve(__dirname, '../packages/ui/src'),
     }
     return config
   },

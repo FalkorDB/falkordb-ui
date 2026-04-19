@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Button } from '../packages/core/src/components/ui/button'
+import { Button } from '../packages/ui/src/components/ui/button'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../packages/core/src/components/ui/tooltip'
+} from '../packages/ui/src/components/ui/tooltip'
 
 const meta: Meta = {
   title: 'UI/Tooltip',
