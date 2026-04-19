@@ -1,7 +1,7 @@
 // src/web-components/chat/chat.ts
 
 import { CHAT_STYLES } from './styles.js'
-import type { ChatConfig, ChatMessageData, ConversationData, SuggestionItem, QueryStrategy } from './types.js'
+import type { ChatConfig, ChatMessageData, ConversationData, SuggestionItem, QueryStrategy, MessageRenderHelpers } from './types.js'
 import {
   getGreeting, formatRelativeTime, annotateEntities, annotateSources, renderMarkdown,
   loadConversations, saveConversations, getActiveId, setActiveId,
@@ -78,6 +78,38 @@ export class FalkorDBChat extends HTMLElement {
     this.handleNewChat()
   }
 
+  /**
+   * Programmatically add a message to the conversation. This is the
+   * primary way custom integrations inject non-standard message types
+   * (e.g. sql-query, query-result, confirmation).
+   *
+   * @example
+   * ```ts
+   * chat.addMessage({
+   *   id: Date.now().toString(),
+   *   type: 'sql-query',
+   *   content: 'SELECT * FROM users LIMIT 5',
+   *   timestamp: new Date().toISOString(),
+   *   data: { confidence: 0.92 },
+   * })
+   * ```
+   */
+  addMessage(msg: ChatMessageData) {
+    const currentId = this.conversationId || Date.now().toString()
+    if (!this.conversationId) {
+      this.conversationId = currentId
+      setActiveId(currentId, this.namespace)
+    }
+    this.messages = [...this.messages, msg]
+    this.persistMessages(currentId, this.messages.filter(m => !m.isStreaming))
+    this.refresh()
+  }
+
+  /** Get a readonly snapshot of the current messages. */
+  getMessages(): readonly ChatMessageData[] {
+    return [...this.messages]
+  }
+
   // ── Internal ────────────────────────────────────────────────────────────
 
   private esc(s: string): string {
@@ -138,21 +170,7 @@ export class FalkorDBChat extends HTMLElement {
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="fc-query-wrap" style="position:relative">
-            <div class="fc-popover">
-              <p class="fc-popover-label">Query Mode</p>
-              <button class="fc-strategy-option" data-value="multi_path">
-                <span class="fc-strategy-name">Deep Search</span>
-                <span class="fc-strategy-desc">Comprehensive search across the full graph</span>
-              </button>
-              <button class="fc-strategy-option" data-value="local">
-                <span class="fc-strategy-name">Fast</span>
-                <span class="fc-strategy-desc">Quick answers from nearby context</span>
-              </button>
-              <button class="fc-strategy-option" data-value="null">
-                <span class="fc-strategy-name">Auto</span>
-                <span class="fc-strategy-desc">Let the system choose the best approach</span>
-              </button>
-            </div>
+            <div class="fc-popover"></div>
             <div class="fc-query-inner">
               <textarea class="fc-query-textarea" rows="1"></textarea>
               <button class="fc-action-btn fc-strategy-btn" title="Query strategy" type="button">
@@ -209,16 +227,6 @@ export class FalkorDBChat extends HTMLElement {
       this.strategyPopover.classList.toggle('fc-open')
     })
 
-    this.strategyPopover.querySelectorAll('.fc-strategy-option').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const val = (btn as HTMLElement).dataset.value
-        this.strategy = (val === 'null' ? null : val) as QueryStrategy
-        this.config?.onStrategyChange?.(this.strategy)
-        this.strategyPopover.classList.remove('fc-open')
-        this.updateStrategyUI()
-      })
-    })
-
     this.shadow.addEventListener('click', () => this.strategyPopover.classList.remove('fc-open'))
 
     this.conversationEl.addEventListener('scroll', () => {
@@ -232,10 +240,38 @@ export class FalkorDBChat extends HTMLElement {
   }
 
   private updateStrategyUI() {
-    this.strategyPopover.querySelectorAll('.fc-strategy-option').forEach(btn => {
-      const val = (btn as HTMLElement).dataset.value
-      const active = (val === 'null' && this.strategy === null) || val === this.strategy
-      btn.classList.toggle('fc-active', active)
+    const options = this.config?.strategyOptions
+    const hasOptions = options && options.length > 0
+
+    // Hide strategy button when no options provided
+    this.strategyBtn.style.display = hasOptions ? 'flex' : 'none'
+
+    // Rebuild popover content from config options
+    this.strategyPopover.innerHTML = ''
+    if (!hasOptions) return
+
+    const label = document.createElement('p')
+    label.className = 'fc-popover-label'
+    label.textContent = 'Query Mode'
+    this.strategyPopover.appendChild(label)
+
+    options.forEach(opt => {
+      const btn = document.createElement('button')
+      btn.className = 'fc-strategy-option'
+      btn.dataset.value = String(opt.value)
+      const isActive = (opt.value === null && this.strategy === null) || opt.value === this.strategy
+      if (isActive) btn.classList.add('fc-active')
+      btn.innerHTML = `
+        <span class="fc-strategy-name">${this.esc(opt.label)}</span>
+        ${opt.description ? `<span class="fc-strategy-desc">${this.esc(opt.description)}</span>` : ''}
+      `
+      btn.addEventListener('click', () => {
+        this.strategy = opt.value as QueryStrategy
+        this.config?.onStrategyChange?.(opt.value)
+        this.strategyPopover.classList.remove('fc-open')
+        this.updateStrategyUI()
+      })
+      this.strategyPopover.appendChild(btn)
     })
   }
 
@@ -282,13 +318,15 @@ export class FalkorDBChat extends HTMLElement {
   private renderEmptyState(): HTMLElement {
     const userName = this.getUserName()
     const greeting = getGreeting()
+    const label = this.config?.emptyStateLabel ?? 'Your graph assistant'
+    const subtitle = this.config?.emptyStateSubtitle ?? 'Ask questions and explore the knowledge in your data'
 
     const el = document.createElement('div')
     el.className = 'fc-empty'
     el.innerHTML = `
-      <span class="fc-empty-label">Your graph assistant</span>
+      <span class="fc-empty-label">${this.esc(label)}</span>
       <h2 class="fc-empty-title">${userName ? `${greeting}, ${this.esc(userName)}` : 'Explore your knowledge graph'}</h2>
-      <p class="fc-empty-subtitle">Ask questions and explore the knowledge in your data</p>
+      <p class="fc-empty-subtitle">${this.esc(subtitle)}</p>
     `
 
     if (this.suggestions.length > 0) {
@@ -327,12 +365,27 @@ export class FalkorDBChat extends HTMLElement {
   }
 
   private renderMessage(msg: ChatMessageData, question?: string): HTMLElement {
+    // ── User message ─────────────────────────────────────────────────────
     if (msg.type === 'user') {
       const el = document.createElement('div')
       el.className = 'fc-msg-user'
       el.innerHTML = `<div class="fc-msg-user-bubble">${msg.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>`
       return el
     }
+
+    // ── Custom message type → delegate to registered renderer ────────────
+    if (msg.type !== 'ai' && this.config?.messageRenderers?.[msg.type]) {
+      const renderer = this.config.messageRenderers[msg.type]
+      const helpers: MessageRenderHelpers = {
+        escapeHtml: (s: string) => this.esc(s),
+        host: this,
+      }
+      const el = renderer(msg, helpers)
+      el.dataset.msgId = msg.id
+      return el
+    }
+
+    // ── AI message (built-in) ────────────────────────────────────────────
 
     const el = document.createElement('div')
     el.className = 'fc-msg-ai'
@@ -385,7 +438,7 @@ export class FalkorDBChat extends HTMLElement {
     if (!msg.isStreaming) {
       const toolbar = this.renderToolbar(msg, question)
       el.appendChild(toolbar)
-      if (msg.context && msg.context.length > 0) {
+      if (!this.config?.hideSources && msg.context && msg.context.length > 0) {
         el.appendChild(this.renderSourcesPanel(msg))
       }
     }
@@ -419,28 +472,30 @@ export class FalkorDBChat extends HTMLElement {
     })
     left.appendChild(copyBtn)
 
-    const bkmBtn = document.createElement('button')
-    const bookmarked = isBookmarked(msg.content)
-    bkmBtn.className = `fc-toolbar-btn${bookmarked ? ' fc-bookmarked' : ''}`
-    const bookmarkIcon = `<svg width="12" height="12" fill="${bookmarked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`
-    bkmBtn.innerHTML = `${bookmarkIcon} ${bookmarked ? 'Saved' : 'Save'}`
-    bkmBtn.addEventListener('click', () => {
-      if (isBookmarked(msg.content)) {
-        const bkms = getBookmarks()
-        const existing = bkms.find(b => b.messageContent === msg.content)
-        if (existing) removeBookmark(existing.id)
-        bkmBtn.className = 'fc-toolbar-btn'
-        bkmBtn.innerHTML = `<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Save`
-      } else {
-        addBookmark({ messageContent: msg.content, question: question || '', conversationId: this.conversationId || '' })
-        bkmBtn.className = 'fc-toolbar-btn fc-bookmarked'
-        bkmBtn.innerHTML = `<svg width="12" height="12" fill="currentColor" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Saved`
-      }
-    })
-    left.appendChild(bkmBtn)
+    if (!this.config?.hideBookmarks) {
+      const bkmBtn = document.createElement('button')
+      const bookmarked = isBookmarked(msg.content)
+      bkmBtn.className = `fc-toolbar-btn${bookmarked ? ' fc-bookmarked' : ''}`
+      const bookmarkIcon = `<svg width="12" height="12" fill="${bookmarked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`
+      bkmBtn.innerHTML = `${bookmarkIcon} ${bookmarked ? 'Saved' : 'Save'}`
+      bkmBtn.addEventListener('click', () => {
+        if (isBookmarked(msg.content)) {
+          const bkms = getBookmarks()
+          const existing = bkms.find(b => b.messageContent === msg.content)
+          if (existing) removeBookmark(existing.id)
+          bkmBtn.className = 'fc-toolbar-btn'
+          bkmBtn.innerHTML = `<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Save`
+        } else {
+          addBookmark({ messageContent: msg.content, question: question || '', conversationId: this.conversationId || '' })
+          bkmBtn.className = 'fc-toolbar-btn fc-bookmarked'
+          bkmBtn.innerHTML = `<svg width="12" height="12" fill="currentColor" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Saved`
+        }
+      })
+      left.appendChild(bkmBtn)
+    }
     toolbar.appendChild(left)
 
-    if (msg.queryId && this.config?.onFeedback) {
+    if (!this.config?.hideFeedback && msg.queryId && this.config?.onFeedback) {
       const feedbackWrap = document.createElement('div')
       feedbackWrap.className = 'fc-feedback-wrap'
 
@@ -657,7 +712,7 @@ export class FalkorDBChat extends HTMLElement {
     }
 
     try {
-      await this.config.onQuery(text, history, respond, streamToken, this.abortController.signal)
+      await this.config.onQuery(text, history, respond, streamToken, this.abortController.signal, this.strategy)
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       const errMsg: ChatMessageData = {

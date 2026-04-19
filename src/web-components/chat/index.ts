@@ -14,4 +14,9 @@ export type {
   SourceMapEntry,
   BookmarkData,
   QueryStrategy,
+  StrategyOption,
+  MessageRenderer,
+  MessageRenderHelpers,
+  MessageAction,
+  ChatHistoryMessage,
 } from './types.js'
