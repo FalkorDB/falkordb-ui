@@ -1,5 +1,5 @@
 import { h } from "preact";
-import { useState } from "preact/hooks";
+import { useState, useRef, useEffect } from "preact/hooks";
 import { submitSupport } from "./api";
 
 interface Props {
@@ -16,6 +16,8 @@ export function Support({ onBack, prefillMessage = "", history }: Props) {
   const [message, setMessage] = useState(prefillMessage);
   const [emailError, setEmailError] = useState("");
   const [state, setState] = useState<State>("idle");
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   function validateEmail(v: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -30,6 +32,7 @@ export function Support({ onBack, prefillMessage = "", history }: Props) {
     setEmailError("");
     setState("submitting");
     const ok = await submitSupport({ name, email, message, history });
+    if (!mountedRef.current) return;
     setState(ok ? "success" : "error");
   }
 
