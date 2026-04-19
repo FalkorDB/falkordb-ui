@@ -4,6 +4,9 @@ import path from 'path'
 const config: StorybookConfig = {
   stories: ['../stories/**/*.stories.@(ts|tsx)'],
   addons: ['@storybook/addon-essentials'],
+  staticDirs: [
+    { from: '../web-components/graphrag-widget/dist', to: '/graphrag-widget' },
+  ],
   framework: '@storybook/react-vite',
   viteFinal: (config) => {
     // Override the library build's empty PostCSS — Storybook needs Tailwind
