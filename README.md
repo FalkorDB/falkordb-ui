@@ -1,38 +1,34 @@
-# @falkordb/ui
+# FalkorDB UI
 
-[![npm version](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui)
-[![npm downloads](https://img.shields.io/npm/dm/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui)
 [![CI](https://github.com/FalkorDB/falkordb-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/FalkorDB/falkordb-ui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Shared UI component library for FalkorDB applications. Built with React, TypeScript, Tailwind CSS, and Radix UI.
+Monorepo for FalkorDB UI packages. Build once, use across all FalkorDB projects.
 
-## Installation
+## Packages
+
+| Package | npm | Description |
+|---------|-----|-------------|
+| `packages/core` | [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui) | React component library (Button, Card, Input, etc.) |
+| `web-components/chat` | [![npm](https://img.shields.io/npm/v/@falkordb/ui-chat)](https://www.npmjs.com/package/@falkordb/ui-chat) | Chat web component — framework-agnostic |
+
+---
+
+## @falkordb/ui — React Components
 
 ```bash
 npm install @falkordb/ui
 ```
 
-### Peer Dependencies
-
-```bash
-npm install react react-dom tailwindcss
-```
-
-## Setup
-
-### 1. Import the theme tokens
+### Setup
 
 ```tsx
-// main.tsx or layout.tsx
+// 1. Import theme tokens
 import '@falkordb/ui/theme/tokens.css'
 ```
 
-### 2. Add the Tailwind preset
-
 ```ts
-// tailwind.config.ts
-import type { Config } from 'tailwindcss'
+// 2. tailwind.config.ts
 import { falkordbPreset } from '@falkordb/ui/theme'
 
 export default {
@@ -41,53 +37,15 @@ export default {
     './src/**/*.{ts,tsx}',
     './node_modules/@falkordb/ui/**/*.{js,mjs}',
   ],
-} satisfies Config
+}
 ```
 
-### 3. Set the theme
-
-Add `data-theme="dark"` or `data-theme="light"` to your root HTML element:
-
 ```html
+<!-- 3. Set theme on root element -->
 <html data-theme="dark">
 ```
 
-## Components
-
-### UI Components
-
-| Component | Description |
-|-----------|-------------|
-| `Button` | Primary action button with variants (default, destructive, outline, secondary, ghost, link) |
-| `Input` | Text input field |
-| `Textarea` | Multi-line text input |
-| `Label` | Form label |
-| `Badge` | Status indicator with variants |
-| `Card` | Container with header, content, footer |
-| `Alert` | Feedback message with variants |
-| `Dialog` | Modal dialog |
-| `AlertDialog` | Confirmation dialog |
-| `Select` | Dropdown select |
-| `DropdownMenu` | Context/action menu |
-| `Tooltip` | Hover tooltip |
-| `Switch` | Toggle switch |
-| `Avatar` | User avatar with image + fallback |
-| `Table` | Data table |
-| `Toast` / `Toaster` | Toast notifications |
-| `Progress` | Progress bar |
-| `Skeleton` | Loading placeholder |
-| `Separator` | Visual divider |
-| `LoadingSpinner` | Animated spinner |
-| `ThemeToggle` | Light/dark theme switcher |
-
-### Layout Components
-
-| Component | Description |
-|-----------|-------------|
-| `Sidebar` | Collapsible icon sidebar with top/bottom sections |
-| `SidebarIcon` | Icon button for use inside Sidebar |
-
-## Usage
+### Usage
 
 ```tsx
 import { Button, Card, CardHeader, CardTitle, CardContent } from '@falkordb/ui'
@@ -95,41 +53,77 @@ import { Button, Card, CardHeader, CardTitle, CardContent } from '@falkordb/ui'
 function App() {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Welcome</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Button>Get Started</Button>
-      </CardContent>
+      <CardHeader><CardTitle>Welcome</CardTitle></CardHeader>
+      <CardContent><Button>Get Started</Button></CardContent>
     </Card>
   )
 }
 ```
 
-## Utilities
+### Components
 
-```tsx
-import { cn } from '@falkordb/ui' // className merge utility (clsx + tailwind-merge)
+| Component | Description |
+|-----------|-------------|
+| `Button` | Action button with variants |
+| `Input` | Text input field |
+| `Textarea` | Multi-line text input |
+| `Label` | Form label |
+| `Badge` | Status indicator |
+| `Card` | Container with header, content, footer |
+| `Alert` / `AlertDialog` | Feedback and confirmation dialogs |
+| `Dialog` | Modal dialog |
+| `Select` | Dropdown select |
+| `DropdownMenu` | Context/action menu |
+| `Tooltip` | Hover tooltip |
+| `Switch` | Toggle switch |
+| `Avatar` | User avatar |
+| `Table` | Data table |
+| `Toast` / `Toaster` | Toast notifications |
+| `Progress` | Progress bar |
+| `Skeleton` | Loading placeholder |
+| `Sidebar` / `SidebarIcon` | Collapsible icon sidebar |
+| `LoadingSpinner` | Animated spinner |
+| `ThemeToggle` | Light/dark theme switcher |
+
+---
+
+## @falkordb/ui-chat — Chat Web Component
+
+```bash
+npm install @falkordb/ui-chat
 ```
 
-## Hooks
-
-```tsx
-import { useIsMobile, useToast } from '@falkordb/ui'
+```js
+import '@falkordb/ui-chat'
 ```
+
+```html
+<falkordb-chat namespace="myGraph"></falkordb-chat>
+```
+
+See [web-components/chat/README.md](web-components/chat/README.md) for full documentation.
+
+---
 
 ## Development
 
 ```bash
-npm install
-npm run build          # Build the library
-npm run storybook      # Start Storybook dev server
-npm run build-storybook # Build static Storybook
+npm install               # Install all workspace packages
+npm run build             # Build all packages
+npm run storybook         # Start Storybook dev server
+npm run build-storybook   # Build static Storybook
+```
+
+### Build a specific package
+
+```bash
+npm run build --workspace=packages/core
+npm run build --workspace=web-components/chat
 ```
 
 ## Publishing
 
-Versions are published to npm automatically when a GitHub Release is created. Tag releases with `v` prefix (e.g., `v0.1.0`).
+Each package is published independently to npm when a GitHub Release is created. Tag releases with `v` prefix (e.g., `v0.1.0`).
 
 ## License
 
