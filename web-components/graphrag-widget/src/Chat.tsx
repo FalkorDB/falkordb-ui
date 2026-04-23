@@ -16,6 +16,12 @@ interface Props {
   showSuggestions?: boolean;
 }
 
+// Shown when the backend reports the LLM answer wasn't grounded in the
+// graph (has_context=false). Keeps the widget honest about scope and
+// gently redirects the user to in-domain questions.
+const OUT_OF_SCOPE_MESSAGE =
+  "Hey, I'm the FalkorDB assistant, ask me anything about the FalkorDB docs only. For other questions, please contact support using the button below.";
+
 export function Chat({ onSupportClick, history, onHistoryUpdate, showSuggestions = true }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -43,9 +49,13 @@ export function Chat({ onSupportClick, history, onHistoryUpdate, showSuggestions
 
     try {
       const res: ChatResponse = await sendMessage(question);
+      // When the backend tells us the answer wasn't grounded in the graph,
+      // replace the LLM's off-topic text with a branded out-of-scope
+      // message that steers the user back to FalkorDB-related questions.
+      const content = res.has_context ? res.answer : OUT_OF_SCOPE_MESSAGE;
       const assistantMsg: Message = {
         role: "assistant",
-        content: res.answer,
+        content,
         hasContext: res.has_context,
         userQuestion: question,
       };
@@ -53,7 +63,7 @@ export function Chat({ onSupportClick, history, onHistoryUpdate, showSuggestions
       const newHistory = [
         ...history,
         { role: "user", content: question },
-        { role: "assistant", content: res.answer },
+        { role: "assistant", content },
       ];
       onHistoryUpdate(newHistory);
     } catch {

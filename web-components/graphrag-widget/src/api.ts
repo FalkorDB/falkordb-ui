@@ -83,6 +83,10 @@ export async function sendMessage(question: string): Promise<ChatResponse> {
   const data = await r.json();
 
   const answer = data.answer ?? "";
+  // Trust the backend's has_context signal. Only fall back to the
+  // "answer-is-non-empty" heuristic when the field is missing entirely
+  // (e.g. older server). A truthy answer does NOT imply grounding —
+  // the LLM may have returned an off-topic general-knowledge reply.
   const has_context =
     typeof data.has_context === "boolean" ? data.has_context : !!answer && answer.length > 0;
 
@@ -113,13 +117,22 @@ function stripCitations(answer: string): string {
 }
 
 export async function submitSupport(req: SupportRequest): Promise<boolean> {
-  // GraphRAG-UI doesn't expose a support endpoint; fall back to mailto.
-  const subject = encodeURIComponent("Support Request — FalkorDB Widget");
-  const body = encodeURIComponent(
-    `Name: ${req.name}\nEmail: ${req.email}\n\nMessage:\n${req.message}\n\nChat History:\n${req.history.map((m) => `${m.role}: ${m.content}`).join("\n")}`,
-  );
-  window.open(`mailto:support@falkordb.com?subject=${subject}&body=${body}`, "_blank");
-  return true;
+  try {
+    const r = await fetch(`${_apiBase}/api/widget/support${qs()}`, {
+      method: "POST",
+      credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: req.name,
+        email: req.email,
+        message: req.message,
+        history: req.history,
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 export function resetHistory(): void {
