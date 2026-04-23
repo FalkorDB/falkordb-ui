@@ -41,8 +41,8 @@ export function Support({ onBack, prefillMessage = "", history }: Props) {
       <div class="fdb-support fdb-support--success">
         <div class="fdb-support__checkmark">
           <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-            <circle cx="20" cy="20" r="20" fill="#22C55E" fill-opacity="0.15" />
-            <path d="M12 20l6 6 10-12" stroke="#22C55E" stroke-width="2.5"
+            <circle cx="20" cy="20" r="20" fill="#7466FF" fill-opacity="0.15" />
+            <path d="M12 20l6 6 10-12" stroke="#7466FF" stroke-width="2.5"
                   stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </div>

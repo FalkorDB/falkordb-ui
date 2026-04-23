@@ -46,7 +46,7 @@ export function mount(options: WidgetConfig): () => void {
     api: options.api,
     graph: options.graph ?? "falkordb-docs",
     title: options.title ?? "FalkorDB",
-    accent: options.accent ?? "#22C55E",
+    accent: options.accent ?? "#7466FF",
     position: options.position ?? "bottom-right",
     suggestions: options.suggestions ?? true,
   };
@@ -67,7 +67,7 @@ function getConfig() {
     api: script?.dataset.api ?? "",
     graph: script?.dataset.graph ?? "falkordb-docs",
     title: script?.dataset.title ?? "FalkorDB",
-    accent: script?.dataset.accent ?? "#22C55E",
+    accent: script?.dataset.accent ?? "#7466FF",
     position: (script?.dataset.position ?? "bottom-right") as "bottom-right" | "bottom-left",
     suggestions: script?.dataset.suggestions !== "false",
   };

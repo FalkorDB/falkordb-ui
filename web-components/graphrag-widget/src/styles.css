@@ -7,8 +7,9 @@
  */
 
 .fdb-widget {
-  --fdb-accent: #22C55E;
-  --fdb-accent-glow: rgba(34, 197, 94, 0.25);
+  --fdb-accent: #7466FF;
+  --fdb-accent-secondary: #C15CFF;
+  --fdb-accent-glow: rgba(116, 102, 255, 0.25);
   --fdb-bg-deep: #0B1121;
   --fdb-bg-panel: #0F172A;
   --fdb-bg-surface: #1E293B;
@@ -18,7 +19,7 @@
   --fdb-text-primary: #F8FAFC;
   --fdb-text-secondary: #94A3B8;
   --fdb-text-muted: #64748B;
-  --fdb-text-on-accent: #052E16;
+  --fdb-text-on-accent: #FFFFFF;
   --fdb-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3);
   --fdb-radius: 16px;
   --fdb-radius-sm: 10px;
@@ -37,10 +38,10 @@
 .fdb-fab {
   position: fixed;
   bottom: 24px;
-  width: 60px;
-  height: 60px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--fdb-accent), #16A34A);
+  background: linear-gradient(135deg, var(--fdb-accent), var(--fdb-accent-secondary));
   border: none;
   cursor: pointer;
   display: flex;
@@ -77,7 +78,7 @@
 
 @keyframes fdb-pulse {
   0%, 100% { box-shadow: 0 4px 20px var(--fdb-accent-glow), 0 2px 8px rgba(0, 0, 0, 0.3); }
-  50% { box-shadow: 0 4px 32px rgba(34, 197, 94, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3); }
+  50% { box-shadow: 0 4px 32px rgba(116, 102, 255, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -89,9 +90,9 @@
 /* ── Panel ──────────────────────────────────────────── */
 .fdb-panel {
   position: fixed;
-  bottom: 96px;
-  width: 380px;
-  height: 560px;
+  bottom: 104px;
+  width: 440px;
+  height: 640px;
   background: var(--fdb-bg-panel);
   border: 1px solid var(--fdb-border);
   border-radius: var(--fdb-radius);
@@ -115,11 +116,11 @@
   .fdb-panel { animation: none; }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 480px) {
   .fdb-panel {
     width: calc(100vw - 16px);
     height: calc(100vh - 120px);
-    max-height: 600px;
+    max-height: 680px;
     right: 8px !important;
     left: 8px !important;
     bottom: 88px;
@@ -193,7 +194,7 @@
 .fdb-btn--icon:hover { color: var(--fdb-text-primary); background: var(--fdb-bg-elevated); }
 .fdb-btn--close:hover { color: #EF4444; background: rgba(239, 68, 68, 0.1); }
 .fdb-btn--primary {
-  background: linear-gradient(135deg, var(--fdb-accent), #16A34A);
+  background: linear-gradient(135deg, var(--fdb-accent), var(--fdb-accent-secondary));
   color: var(--fdb-text-on-accent);
   font-weight: 600;
   font-size: 14px;
@@ -223,17 +224,17 @@
 .fdb-btn--inline {
   display: inline-block;
   margin-top: 8px;
-  background: rgba(34, 197, 94, 0.08);
+  background: rgba(116, 102, 255, 0.08);
   color: var(--fdb-accent);
   font-size: 12px;
   font-weight: 500;
   padding: 5px 12px;
-  border: 1px solid rgba(34, 197, 94, 0.25);
+  border: 1px solid rgba(116, 102, 255, 0.25);
   border-radius: 100px;
 }
-.fdb-btn--inline:hover { background: rgba(34, 197, 94, 0.15); border-color: var(--fdb-accent); }
+.fdb-btn--inline:hover { background: rgba(116, 102, 255, 0.15); border-color: var(--fdb-accent); }
 .fdb-btn--send {
-  background: linear-gradient(135deg, var(--fdb-accent), #16A34A);
+  background: linear-gradient(135deg, var(--fdb-accent), var(--fdb-accent-secondary));
   color: var(--fdb-text-on-accent);
   width: 38px;
   height: 38px;
@@ -313,15 +314,20 @@
   animation: fdb-fade-in 500ms ease;
 }
 .fdb-chat__welcome-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05));
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 12px;
-  border: 1px solid rgba(34, 197, 94, 0.2);
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(116, 102, 255, 0.35);
+}
+.fdb-chat__welcome-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .fdb-chat__welcome-title {
   font-size: 15px;
@@ -394,7 +400,7 @@
 }
 .fdb-bubble p { margin: 0; }
 .fdb-bubble--user {
-  background: linear-gradient(135deg, var(--fdb-accent), #16A34A);
+  background: linear-gradient(135deg, var(--fdb-accent), var(--fdb-accent-secondary));
   color: var(--fdb-text-on-accent);
   align-self: flex-end;
   font-weight: 500;
@@ -481,7 +487,7 @@
 }
 .fdb-suggestion-card:hover {
   border-color: var(--fdb-accent);
-  background: rgba(34, 197, 94, 0.06);
+  background: rgba(116, 102, 255, 0.06);
 }
 
 /* ── Support Form ───────────────────────────────────── */

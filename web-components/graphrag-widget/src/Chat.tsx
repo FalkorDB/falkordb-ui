@@ -1,6 +1,7 @@
 import { h } from "preact";
 import { useState, useEffect, useRef } from "preact/hooks";
 import { fetchSuggestions, sendMessage, ChatResponse, Suggestion } from "./api";
+import logoSvg from "./assets/falkordb-logo.svg?raw";
 
 interface Message {
   role: "user" | "assistant";
@@ -83,12 +84,7 @@ export function Chat({ onSupportClick, history, onHistoryUpdate, showSuggestions
       <div class="fdb-chat__messages">
         {messages.length === 0 && (
           <div class="fdb-chat__welcome">
-            <div class="fdb-chat__welcome-icon">
-              <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
-                <text x="16" y="22" text-anchor="middle" font-size="16"
-                      fill="#22C55E" font-family="Inter,sans-serif" font-weight="700">F</text>
-              </svg>
-            </div>
+            <div class="fdb-chat__welcome-icon" dangerouslySetInnerHTML={{ __html: logoSvg }} />
             <p class="fdb-chat__welcome-title">How can I help?</p>
             <p class="fdb-chat__welcome-subtitle">Ask me anything about your docs.</p>
           </div>
