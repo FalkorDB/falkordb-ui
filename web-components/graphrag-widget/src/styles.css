@@ -415,6 +415,43 @@
   border-radius: var(--fdb-radius-sm) var(--fdb-radius-sm) var(--fdb-radius-sm) 4px;
 }
 
+/* ── Like/dislike feedback ──────────────────────── */
+.fdb-feedback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--fdb-border-subtle);
+}
+.fdb-feedback__btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--fdb-radius-xs);
+  padding: 4px 6px;
+  cursor: pointer;
+  color: var(--fdb-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--fdb-transition), background var(--fdb-transition), border-color var(--fdb-transition);
+}
+.fdb-feedback__btn:hover:not(:disabled) {
+  color: var(--fdb-accent);
+  background: rgba(116, 102, 255, 0.1);
+}
+.fdb-feedback__btn:disabled { cursor: default; }
+.fdb-feedback__btn--active {
+  color: var(--fdb-accent);
+  border-color: rgba(116, 102, 255, 0.4);
+  background: rgba(116, 102, 255, 0.12);
+}
+.fdb-feedback__thanks {
+  font-size: 11px;
+  color: var(--fdb-text-muted);
+  margin-left: 4px;
+}
+
 @keyframes fdb-msg-in {
   from { opacity: 0; transform: translateY(8px) scale(0.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }

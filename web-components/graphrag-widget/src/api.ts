@@ -12,6 +12,7 @@
 export interface ChatResponse {
   answer: string;
   has_context: boolean;
+  query_id: string | null;
 }
 
 export interface SupportRequest {
@@ -23,6 +24,47 @@ export interface SupportRequest {
 
 let _apiBase = "";
 let _graphId = "";
+
+const SESSION_STORAGE_KEY = "fdb-widget-session";
+
+/**
+ * Generate a stable per-tab session id. Using sessionStorage means a refresh
+ * keeps the same id (so we can correlate follow-up questions in analytics)
+ * while a new tab/window starts a fresh session. We never send PII — the
+ * backend hashes IP + User-Agent before storing.
+ */
+function getSessionId(): string {
+  try {
+    const existing = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (existing) return existing;
+    const fresh = generateUuid();
+    sessionStorage.setItem(SESSION_STORAGE_KEY, fresh);
+    return fresh;
+  } catch {
+    // sessionStorage may be disabled (privacy mode). Fall back to an
+    // ephemeral in-memory id; analytics still works for the current page
+    // load, just won't survive a refresh.
+    if (!_memorySessionId) _memorySessionId = generateUuid();
+    return _memorySessionId;
+  }
+}
+
+let _memorySessionId = "";
+
+function generateUuid(): string {
+  const c = (globalThis.crypto as Crypto | undefined);
+  if (c?.randomUUID) return c.randomUUID();
+  // Fallback for older browsers — RFC 4122 v4 from getRandomValues.
+  const bytes = new Uint8Array(16);
+  (c?.getRandomValues ?? ((b: Uint8Array) => {
+    for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256);
+    return b;
+  }))(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export function configure(apiBase: string, graphId: string): void {
   const nextBase = apiBase.replace(/\/$/, "");
@@ -41,6 +83,12 @@ function qs(): string {
 
 // Internal history for multi-turn conversations
 let _history: Array<{ role: string; content: string }> = [];
+
+// Cap how many prior messages are sent to the server on each request.
+// 10 messages = last 5 Q/A turns — enough for natural follow-ups without
+// blowing up token cost or latency. The full transcript is still kept
+// locally and rendered in the UI; this only limits what we transmit.
+const HISTORY_SEND_LIMIT = 10;
 
 export interface Suggestion {
   title: string;
@@ -67,7 +115,7 @@ export async function fetchSuggestions(): Promise<Suggestion[]> {
 }
 
 export async function sendMessage(question: string): Promise<ChatResponse> {
-  const historyForRequest = _history.slice();
+  const historyForRequest = _history.slice(-HISTORY_SEND_LIMIT);
 
   const r = await fetch(`${_apiBase}/api/widget/query${qs()}`, {
     method: "POST",
@@ -77,12 +125,15 @@ export async function sendMessage(question: string): Promise<ChatResponse> {
       question,
       return_context: false,
       history: historyForRequest,
+      session_id: getSessionId(),
     }),
   });
   if (!r.ok) throw new Error(`Query API error: ${r.status}`);
   const data = await r.json();
 
   const answer = data.answer ?? "";
+  const query_id: string | null =
+    typeof data.query_id === "string" && data.query_id.length > 0 ? data.query_id : null;
   // Trust the backend's has_context signal. Only fall back to the
   // "answer-is-non-empty" heuristic when the field is missing entirely
   // (e.g. older server). A truthy answer does NOT imply grounding —
@@ -95,7 +146,32 @@ export async function sendMessage(question: string): Promise<ChatResponse> {
   _history.push({ role: "user", content: question });
   _history.push({ role: "assistant", content: cleanedAnswer });
 
-  return { answer: cleanedAnswer, has_context };
+  return { answer: cleanedAnswer, has_context, query_id };
+}
+
+export type FeedbackValue = "like" | "dislike";
+
+/**
+ * Send like/dislike for a previously answered query. Best-effort: the
+ * server records it as a property on the (session)-[:ASKED]->(query) edge.
+ * Never throws — feedback is non-essential UX.
+ */
+export async function submitFeedback(query_id: string, value: FeedbackValue): Promise<boolean> {
+  try {
+    const r = await fetch(`${_apiBase}/api/widget/feedback${qs()}`, {
+      method: "POST",
+      credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: getSessionId(),
+        query_id,
+        value,
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 /**
