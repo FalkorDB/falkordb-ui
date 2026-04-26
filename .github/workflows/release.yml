@@ -21,15 +21,37 @@ jobs:
       - name: Update npm
         run: npm install -g npm@latest
       - run: npm ci --legacy-peer-deps
-      - run: npm run build
+
+      - name: Resolve package and version from tag
+        id: pkg
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Expected tag format: <web-component-dir>-v<version>
+          # e.g. graphrag-widget-v0.1.1
+          if [[ ! "$TAG" =~ ^(.+)-v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+            echo "::error::Tag '$TAG' does not match '<package-dir>-v<version>'"
+            exit 1
+          fi
+          DIR="${BASH_REMATCH[1]}"
+          VERSION="${BASH_REMATCH[2]}"
+          PKG_PATH="web-components/$DIR"
+          if [[ ! -f "$PKG_PATH/package.json" ]]; then
+            echo "::error::No package.json at $PKG_PATH"
+            exit 1
+          fi
+          PKG_NAME=$(node -p "require('./$PKG_PATH/package.json').name")
+          echo "name=$PKG_NAME"     >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+          echo "path=$PKG_PATH"     >> "$GITHUB_OUTPUT"
+          echo "Releasing $PKG_NAME@$VERSION from $PKG_PATH"
+
+      - name: Build target workspace
+        run: npm run build -w ${{ steps.pkg.outputs.name }}
 
       - name: Set version from Git tag
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Setting version to $VERSION"
-          npm version "$VERSION" --no-git-tag-version
+        run: npm version "${{ steps.pkg.outputs.version }}" --no-git-tag-version -w ${{ steps.pkg.outputs.name }}
 
       - name: Publish
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public -w ${{ steps.pkg.outputs.name }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
