@@ -1,6 +1,6 @@
 node_modules/
 dist/
 storybook-static/
+coverage/
 *.tsbuildinfo
 .DS_Store
-web-components/graphrag-widget/sample.html

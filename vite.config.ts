@@ -1,46 +1,39 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react-swc'
-import path from 'path'
+import { resolve } from "node:path";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+import dts from "vite-plugin-dts";
+
+import pkg from "./package.json" with { type: "json" };
+
+// Everything shipped as a dependency stays external so a consumer that already
+// uses Radix or lucide does not end up with two copies in its bundle.
+const external = [
+	...Object.keys(pkg.dependencies),
+	...Object.keys(pkg.peerDependencies),
+	"react/jsx-runtime",
+].map((name) => new RegExp(`^${name}(/.*)?$`));
 
 export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  css: {
-    postcss: { plugins: [] },
-  },
-  build: {
-    emptyOutDir: false,
-    lib: {
-      entry: {
-        index: path.resolve(__dirname, 'src/index.ts'),
-        'tailwind-preset': path.resolve(__dirname, 'src/theme/tailwind-preset.ts'),
-        'chat': path.resolve(__dirname, 'src/web-components/chat/index.ts'),
-      },
-      formats: ['es', 'cjs'],
-    },
-    rollupOptions: {
-      external: [
-        'react',
-        'react-dom',
-        'react/jsx-runtime',
-        '@falkordb/canvas',
-        'd3',
-      ],
-      output: {
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM',
-        },
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') return 'tokens.css'
-          return assetInfo.name || ''
-        },
-      },
-    },
-    cssCodeSplit: false,
-  },
-})
+	plugins: [
+		react(),
+		dts({
+			tsconfigPath: "./tsconfig.build.json",
+			rollupTypes: true,
+		}),
+	],
+	resolve: {
+		alias: {
+			"@": resolve(import.meta.dirname, "src"),
+		},
+	},
+	build: {
+		lib: {
+			entry: resolve(import.meta.dirname, "src/index.ts"),
+			formats: ["es", "cjs"],
+			fileName: (format) => (format === "es" ? "index.js" : "index.cjs"),
+		},
+		rollupOptions: { external },
+		sourcemap: true,
+		emptyOutDir: true,
+	},
+});

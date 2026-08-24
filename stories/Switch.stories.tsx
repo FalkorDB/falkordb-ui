@@ -1,22 +1,31 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { Switch } from '../packages/ui/src/components/ui/switch'
-import { Label } from '../packages/ui/src/components/ui/label'
+import type { Meta, StoryObj } from "@storybook/react";
 
-const meta: Meta<typeof Switch> = {
-  title: 'UI/Switch',
-  component: Switch,
-}
+import { Switch } from "@/components/switch";
 
-export default meta
-type Story = StoryObj<typeof Switch>
+const meta = {
+	title: "Primitives/Switch",
+	component: Switch,
+	tags: ["autodocs"],
+} satisfies Meta<typeof Switch>;
 
-export const Default: Story = {}
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const WithLabel: Story = {
-  render: () => (
-    <div className="flex items-center space-x-2">
-      <Switch id="airplane-mode" />
-      <Label htmlFor="airplane-mode">Airplane Mode</Label>
-    </div>
-  ),
-}
+export const Default: Story = {
+	render: (args) => (
+		<label className="flex items-center gap-3 text-sm">
+			<Switch {...args} />
+			Animate force layout
+		</label>
+	),
+};
+
+export const Checked: Story = {
+	...Default,
+	args: { defaultChecked: true },
+};
+
+export const Disabled: Story = {
+	...Default,
+	args: { disabled: true, defaultChecked: true },
+};
