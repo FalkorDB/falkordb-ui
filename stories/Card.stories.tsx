@@ -1,51 +1,48 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../packages/ui/src/components/ui/card'
-import { Button } from '../packages/ui/src/components/ui/button'
-import { Input } from '../packages/ui/src/components/ui/input'
-import { Label } from '../packages/ui/src/components/ui/label'
+import type { Meta, StoryObj } from "@storybook/react";
 
-const meta: Meta = {
-  title: 'UI/Card',
-}
+import { Button } from "@/components/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/card";
 
-export default meta
+const meta = {
+	title: "Primitives/Card",
+	component: Card,
+	tags: ["autodocs"],
+	decorators: [
+		(Story) => (
+			<div className="max-w-sm">
+				<Story />
+			</div>
+		),
+	],
+} satisfies Meta<typeof Card>;
 
-export const Default: StoryObj = {
-  render: () => (
-    <Card className="w-[350px]">
-      <CardHeader>
-        <CardTitle>Card Title</CardTitle>
-        <CardDescription>Card description goes here.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p>Card content area.</p>
-      </CardContent>
-      <CardFooter>
-        <Button>Action</Button>
-      </CardFooter>
-    </Card>
-  ),
-}
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const WithForm: StoryObj = {
-  render: () => (
-    <Card className="w-[350px]">
-      <CardHeader>
-        <CardTitle>Create Project</CardTitle>
-        <CardDescription>Deploy a new project in one click.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid w-full gap-4">
-          <div className="flex flex-col space-y-1.5">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" placeholder="Name of your project" />
-          </div>
-        </div>
-      </CardContent>
-      <CardFooter className="flex justify-between">
-        <Button variant="outline">Cancel</Button>
-        <Button>Deploy</Button>
-      </CardFooter>
-    </Card>
-  ),
-}
+export const Default: Story = {
+	render: (args) => (
+		<Card {...args}>
+			<CardHeader>
+				<CardTitle>social-network</CardTitle>
+				<CardDescription>114,342 nodes · 291,880 relationships</CardDescription>
+			</CardHeader>
+			<CardContent className="text-sm text-muted-foreground">
+				Last queried 4 minutes ago. Indexes are up to date.
+			</CardContent>
+			<CardFooter className="gap-2">
+				<Button size="sm">Open</Button>
+				<Button size="sm" variant="destructive">
+					Delete
+				</Button>
+			</CardFooter>
+		</Card>
+	),
+};
+
+export const ContentOnly: Story = {
+	render: (args) => (
+		<Card {...args}>
+			<CardContent className="p-6 text-sm">A bare container with no header or footer.</CardContent>
+		</Card>
+	),
+};

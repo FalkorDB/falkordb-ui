@@ -1,28 +1,34 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { Textarea } from '../packages/ui/src/components/ui/textarea'
-import { Label } from '../packages/ui/src/components/ui/label'
+import type { Meta, StoryObj } from "@storybook/react";
 
-const meta: Meta<typeof Textarea> = {
-  title: 'UI/Textarea',
-  component: Textarea,
-}
+import { Textarea } from "@/components/textarea";
 
-export default meta
-type Story = StoryObj<typeof Textarea>
+const meta = {
+	title: "Primitives/Textarea",
+	component: Textarea,
+	tags: ["autodocs"],
+	args: { placeholder: "MATCH (n) RETURN n LIMIT 25" },
+	decorators: [
+		(Story) => (
+			<div className="max-w-md">
+				<Story />
+			</div>
+		),
+	],
+} satisfies Meta<typeof Textarea>;
 
-export const Default: Story = {
-  args: { placeholder: 'Type your message here.' },
-}
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const WithLabel: Story = {
-  render: () => (
-    <div className="grid w-full max-w-sm gap-1.5">
-      <Label htmlFor="message">Your message</Label>
-      <Textarea id="message" placeholder="Type your message here." />
-    </div>
-  ),
-}
+export const Default: Story = {};
+
+export const WithValue: Story = {
+	args: { defaultValue: "MATCH (a:Person)-[:KNOWS]->(b:Person)\nRETURN a, b\nLIMIT 100", rows: 5 },
+};
+
+export const Invalid: Story = {
+	args: { "aria-invalid": true, defaultValue: "MATCH (n RETURN n" },
+};
 
 export const Disabled: Story = {
-  args: { placeholder: 'Disabled', disabled: true },
-}
+	args: { disabled: true, defaultValue: "Read-only connection" },
+};

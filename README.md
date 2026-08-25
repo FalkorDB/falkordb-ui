@@ -1,171 +1,171 @@
-# FalkorDB UI
+# @falkordb/ui
 
 [![CI](https://github.com/FalkorDB/falkordb-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/FalkorDB/falkordb-ui/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Monorepo for FalkorDB UI packages. Build once, use across all FalkorDB projects.
+The shared FalkorDB design system. One themeable set of React primitives so every
+FalkorDB product — Browser, QueryWeaver, GraphRAG, Code Graph — renders buttons,
+inputs and dialogs the same way.
 
-## Packages
+Built on [Radix UI](https://www.radix-ui.com) primitives and
+[Tailwind CSS](https://tailwindcss.com) v4, in the shadcn/ui style: unstyled,
+accessible behaviour underneath, FalkorDB's palette on top.
 
-| Package | npm | Description |
-|---------|-----|-------------|
-| `packages/ui` | [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui) | React component library (Button, Card, Input, etc.) |
-| `web-components/chat` | [![npm](https://img.shields.io/npm/v/@falkordb/ui-chat)](https://www.npmjs.com/package/@falkordb/ui-chat) | Chat web component — framework-agnostic |
-| `web-components/graphrag-widget` | [![npm](https://img.shields.io/npm/v/@falkordb/graphrag-widget)](https://www.npmjs.com/package/@falkordb/graphrag-widget) | Embeddable GraphRAG-powered chat widget — one `<script>` tag |
-
----
-
-## @falkordb/ui — React Components
+## Install
 
 ```bash
 npm install @falkordb/ui
 ```
 
-### Setup
+React 18.3+ or 19 is a peer dependency.
 
-```tsx
-// 1. Import theme tokens
-import '@falkordb/ui/theme/tokens.css'
-```
+## Setup
+
+Pick the option that matches your project. Both give identical output.
+
+### Option 1 — prebuilt CSS (no Tailwind required)
+
+Works on any stack, including Tailwind v3 projects.
 
 ```ts
-// 2. tailwind.config.ts
-import { falkordbPreset } from '@falkordb/ui/theme'
-
-export default {
-  presets: [falkordbPreset],
-  content: [
-    './src/**/*.{ts,tsx}',
-    './node_modules/@falkordb/ui/**/*.{js,mjs}',
-  ],
-}
+import "@falkordb/ui/styles.css";
 ```
 
-```html
-<!-- 3. Set theme on root element -->
-<html data-theme="dark">
+### Option 2 — Tailwind v4 source
+
+Use this if you want to build your own utilities from the same tokens.
+
+```css
+@import "tailwindcss";
+@import "@falkordb/ui/theme.css";
+
+/* Tailwind cannot see inside node_modules by default. */
+@source "../node_modules/@falkordb/ui/dist";
 ```
 
-### Usage
+### Dark mode
+
+The theme is driven by a `dark` class on an ancestor element. Either manage it
+yourself, or let `ThemeProvider` do it:
 
 ```tsx
-import { Button, Card, CardHeader, CardTitle, CardContent } from '@falkordb/ui'
+import { ThemeProvider, ThemeToggle } from "@falkordb/ui";
 
-function App() {
-  return (
-    <Card>
-      <CardHeader><CardTitle>Welcome</CardTitle></CardHeader>
-      <CardContent><Button>Get Started</Button></CardContent>
-    </Card>
-  )
+export function App() {
+	return (
+		<ThemeProvider defaultTheme="system">
+			<ThemeToggle />
+		</ThemeProvider>
+	);
 }
 ```
 
-### Components
+`ThemeProvider` persists the choice to `localStorage` (pass `storageKey={null}`
+to opt out) and follows the OS setting while the theme is `"system"`.
 
-| Component | Description |
-|-----------|-------------|
-| `Button` | Action button with variants |
-| `Input` | Text input field |
-| `Textarea` | Multi-line text input |
-| `Label` | Form label |
-| `Badge` | Status indicator |
-| `Card` | Container with header, content, footer |
-| `Alert` / `AlertDialog` | Feedback and confirmation dialogs |
-| `Dialog` | Modal dialog |
-| `Select` | Dropdown select |
-| `DropdownMenu` | Context/action menu |
-| `Tooltip` | Hover tooltip |
-| `Switch` | Toggle switch |
-| `Avatar` | User avatar |
-| `Table` | Data table |
-| `Toast` / `Toaster` | Toast notifications |
-| `Progress` | Progress bar |
-| `Skeleton` | Loading placeholder |
-| `Sidebar` / `SidebarIcon` | Collapsible icon sidebar |
-| `LoadingSpinner` | Animated spinner |
-| `ThemeToggle` | Light/dark theme switcher |
+## Usage
 
----
+```tsx
+import { Button, Card, CardContent, CardHeader, CardTitle } from "@falkordb/ui";
 
-## @falkordb/ui-chat — Chat Web Component
-
-```bash
-npm install @falkordb/ui-chat
+export function GraphCard() {
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>social-network</CardTitle>
+			</CardHeader>
+			<CardContent>
+				<Button onClick={run}>Run query</Button>
+			</CardContent>
+		</Card>
+	);
+}
 ```
 
-```js
-import '@falkordb/ui-chat'
+## Components
+
+| Component | Exports                                                                                                                       |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Button    | `Button`, `buttonVariants`                                                                                                    |
+| Input     | `Input`                                                                                                                       |
+| Textarea  | `Textarea`                                                                                                                    |
+| Select    | `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`, `SelectGroup`, `SelectLabel`, `SelectSeparator`      |
+| Checkbox  | `Checkbox`                                                                                                                    |
+| Switch    | `Switch`                                                                                                                      |
+| Badge     | `Badge`, `badgeVariants`                                                                                                      |
+| Card      | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`                                             |
+| Tooltip   | `Tooltip`, `TooltipProvider`, `TooltipTrigger`, `TooltipContent`                                                              |
+| Dialog    | `Dialog`, `DialogTrigger`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogFooter`, `DialogClose` |
+| Toast     | `Toaster`, `toast`, `useToast`, `dismiss`, `ToastAction`                                                                      |
+| Table     | `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableRow`, `TableHead`, `TableCell`, `TableCaption`                      |
+| Tabs      | `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`                                                                              |
+| Theme     | `ThemeProvider`, `useTheme`, `ThemeToggle`                                                                                    |
+
+Plus the `cn()` class-merging helper.
+
+### Buttons and tooltips
+
+Icon-only buttons need an accessible name. Pass `tooltip` and the button supplies
+its own `TooltipProvider`, so it works without any setup in the surrounding tree:
+
+```tsx
+<Button size="icon" variant="ghost" tooltip="Export graph as CSV">
+	<Download />
+</Button>
 ```
 
-```html
-<falkordb-chat namespace="myGraph"></falkordb-chat>
+### Toasts
+
+Mount `<Toaster />` once near the root; `toast()` then works from anywhere,
+including outside React:
+
+```tsx
+import { Toaster, toast } from "@falkordb/ui";
+
+toast({ variant: "destructive", title: "Query failed", description: error.message });
 ```
 
-See [web-components/chat/README.md](web-components/chat/README.md) for full documentation.
+## Theming
 
----
+Every colour is a CSS custom property, so a product can rebrand without forking a
+component:
 
-## @falkordb/graphrag-widget — Embeddable GraphRAG Chat Widget
-
-A one-`<script>`-tag floating chat widget powered by FalkorDB GraphRAG. Drop it on any website to add an AI assistant that answers questions from a pre-ingested knowledge graph — no backend code required on the embedder's side.
-
-```bash
-npm install @falkordb/graphrag-widget
+```css
+:root {
+	--primary: hsl(200 100% 50%);
+}
 ```
 
-```js
-import { mount } from '@falkordb/graphrag-widget'
+| Group    | Tokens                                                                      |
+| -------- | --------------------------------------------------------------------------- |
+| Surfaces | `--background`, `--card`, `--popover`, `--secondary`, `--muted`, `--accent` |
+| Intent   | `--primary`, `--destructive`, `--success`, `--warning`                      |
+| Chrome   | `--border`, `--input`, `--ring`, `--radius`                                 |
+| Brand    | `--brand-coral`, `--brand-orchid`, `--brand-violet`, `--brand-gradient`     |
+| Type     | `--font-sans`, `--font-mono`                                                |
 
-mount({
-  api: 'https://your-graphrag-ui-server.com',
-  graph: 'my-graph',
-})
-```
-
-Or via script tag:
-
-```html
-<script src="https://unpkg.com/@falkordb/graphrag-widget"
-        data-api="https://your-graphrag-ui-server.com"
-        data-graph="my-graph">
-</script>
-```
-
-See [web-components/graphrag-widget/README.md](web-components/graphrag-widget/README.md) for full documentation.
-
-Requires a [GraphRAG-UI](https://github.com/FalkorDB/GraphRAG-UI) server exposing the public `/api/widget/*` endpoints.
-
-## Storybook
-
-All components — React + web components — are demoed in Storybook:
-
-```bash
-npm run storybook
-```
-
----
+Each surface and intent token has a matching `-foreground` pair.
 
 ## Development
 
 ```bash
-npm install               # Install all workspace packages
-npm run build             # Build all packages
-npm run storybook         # Start Storybook dev server
-npm run build-storybook   # Build static Storybook
+npm install
+npm run storybook     # component workbench on :6006
+npm run build         # dist/index.js + index.cjs + index.d.ts + styles.css
+npm run test          # Vitest + Testing Library (jsdom)
+npm run coverage      # enforces 100% coverage of src/
+npm run typecheck
+npm run lint
+npm run format
 ```
 
-### Build a specific package
+Storybook is published from `main` to GitHub Pages.
 
-```bash
-npm run build --workspace=packages/ui
-npm run build --workspace=web-components/chat
-npm run build --workspace=@falkordb/graphrag-widget
-```
+## Releasing
 
-## Publishing
-
-Each package is published independently to npm when a GitHub Release is created. Tag releases with `v` prefix (e.g., `v0.1.0`).
+Publishing runs on GitHub Release creation with a `v<version>` tag, using npm
+OIDC trusted publishing — no tokens in the repo.
 
 ## License
 

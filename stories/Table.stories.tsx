@@ -1,52 +1,84 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj } from "@storybook/react";
+
+import { Badge } from "@/components/badge";
 import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../packages/ui/src/components/ui/table'
+	Table,
+	TableBody,
+	TableCaption,
+	TableCell,
+	TableFooter,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/table";
 
-const meta: Meta = {
-  title: 'UI/Table',
-}
+const rows = [
+	{ label: "Person", nodes: 9_892, indexed: true },
+	{ label: "Movie", nodes: 3_741, indexed: true },
+	{ label: "Genre", nodes: 21, indexed: false },
+];
 
-export default meta
+const meta = {
+	title: "Primitives/Table",
+	component: Table,
+	tags: ["autodocs"],
+} satisfies Meta<typeof Table>;
 
-export const Default: StoryObj = {
-  render: () => (
-    <Table>
-      <TableCaption>A list of recent invoices.</TableCaption>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-[100px]">Invoice</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Method</TableHead>
-          <TableHead className="text-right">Amount</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        <TableRow>
-          <TableCell className="font-medium">INV001</TableCell>
-          <TableCell>Paid</TableCell>
-          <TableCell>Credit Card</TableCell>
-          <TableCell className="text-right">$250.00</TableCell>
-        </TableRow>
-        <TableRow>
-          <TableCell className="font-medium">INV002</TableCell>
-          <TableCell>Pending</TableCell>
-          <TableCell>PayPal</TableCell>
-          <TableCell className="text-right">$150.00</TableCell>
-        </TableRow>
-        <TableRow>
-          <TableCell className="font-medium">INV003</TableCell>
-          <TableCell>Unpaid</TableCell>
-          <TableCell>Bank Transfer</TableCell>
-          <TableCell className="text-right">$350.00</TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
-  ),
-}
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+	render: (args) => (
+		<Table {...args}>
+			<TableCaption>Node labels in social-network.</TableCaption>
+			<TableHeader>
+				<TableRow>
+					<TableHead>Label</TableHead>
+					<TableHead className="text-right">Nodes</TableHead>
+					<TableHead>Indexed</TableHead>
+				</TableRow>
+			</TableHeader>
+			<TableBody>
+				{rows.map((row) => (
+					<TableRow key={row.label}>
+						<TableCell className="font-medium">{row.label}</TableCell>
+						<TableCell className="text-right font-mono">{row.nodes.toLocaleString()}</TableCell>
+						<TableCell>
+							<Badge variant={row.indexed ? "success" : "secondary"}>{row.indexed ? "Yes" : "No"}</Badge>
+						</TableCell>
+					</TableRow>
+				))}
+			</TableBody>
+			<TableFooter>
+				<TableRow>
+					<TableCell>Total</TableCell>
+					<TableCell className="text-right font-mono">
+						{rows.reduce((sum, row) => sum + row.nodes, 0).toLocaleString()}
+					</TableCell>
+					<TableCell />
+				</TableRow>
+			</TableFooter>
+		</Table>
+	),
+};
+
+export const WithSelectedRow: Story = {
+	render: (args) => (
+		<Table {...args}>
+			<TableHeader>
+				<TableRow>
+					<TableHead>Label</TableHead>
+					<TableHead className="text-right">Nodes</TableHead>
+				</TableRow>
+			</TableHeader>
+			<TableBody>
+				{rows.map((row, index) => (
+					<TableRow key={row.label} data-state={index === 1 ? "selected" : undefined}>
+						<TableCell className="font-medium">{row.label}</TableCell>
+						<TableCell className="text-right font-mono">{row.nodes.toLocaleString()}</TableCell>
+					</TableRow>
+				))}
+			</TableBody>
+		</Table>
+	),
+};
