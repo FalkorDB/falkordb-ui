@@ -26,6 +26,14 @@ describe("Checkbox", () => {
 		expect(container.querySelector(".lucide-minus")).toBeInTheDocument();
 	});
 
+	it("drives the indicator from data-state so uncontrolled checkboxes work", () => {
+		const { container } = render(<Checkbox aria-label="Select all" defaultChecked="indeterminate" />);
+
+		expect(screen.getByRole("checkbox")).toHaveAttribute("data-state", "indeterminate");
+		expect(container.querySelector(".lucide-minus")).toHaveClass("group-data-[state=indeterminate]:block");
+		expect(container.querySelector(".lucide-check")).toHaveClass("group-data-[state=indeterminate]:hidden");
+	});
+
 	it("renders the check indicator when checked", () => {
 		const { container } = render(<Checkbox aria-label="Select all" checked />);
 

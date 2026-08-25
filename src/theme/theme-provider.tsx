@@ -21,6 +21,24 @@ const prefersDark = () =>
 const resolve = (theme: Theme): ResolvedTheme =>
 	theme === "system" ? (prefersDark() ? "dark" : "light") : theme;
 
+// Storage can throw when it is disabled or the quota is full; persistence is optional.
+const readStoredTheme = (storageKey: string): Theme | null => {
+	try {
+		const stored = window.localStorage.getItem(storageKey);
+		return stored === "light" || stored === "dark" || stored === "system" ? stored : null;
+	} catch {
+		return null;
+	}
+};
+
+const writeStoredTheme = (storageKey: string, theme: Theme) => {
+	try {
+		window.localStorage.setItem(storageKey, theme);
+	} catch {
+		// Ignore — the theme still applies for this session.
+	}
+};
+
 export interface ThemeProviderProps {
 	children: ReactNode;
 	defaultTheme?: Theme;
@@ -38,8 +56,7 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
 	const [theme, setThemeState] = useState<Theme>(() => {
 		if (typeof window === "undefined" || !storageKey) return defaultTheme;
-		const stored = window.localStorage.getItem(storageKey);
-		return stored === "light" || stored === "dark" || stored === "system" ? stored : defaultTheme;
+		return readStoredTheme(storageKey) ?? defaultTheme;
 	});
 	const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => resolve(theme));
 
@@ -64,7 +81,7 @@ export function ThemeProvider({
 	const setTheme = useCallback(
 		(next: Theme) => {
 			setThemeState(next);
-			if (storageKey) window.localStorage.setItem(storageKey, next);
+			if (storageKey) writeStoredTheme(storageKey, next);
 		},
 		[storageKey],
 	);

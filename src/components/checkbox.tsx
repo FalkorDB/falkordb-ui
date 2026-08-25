@@ -20,12 +20,10 @@ export const Checkbox = forwardRef<
 		)}
 		{...props}
 	>
-		<CheckboxPrimitive.Indicator className="flex items-center justify-center text-current">
-			{props.checked === "indeterminate" ? (
-				<Minus className="size-3.5" aria-hidden />
-			) : (
-				<Check className="size-3.5" aria-hidden />
-			)}
+		{/* Both glyphs mount; `data-state` picks one, so uncontrolled usage works too. */}
+		<CheckboxPrimitive.Indicator className="group flex items-center justify-center text-current">
+			<Check className="size-3.5 group-data-[state=indeterminate]:hidden" aria-hidden />
+			<Minus className="hidden size-3.5 group-data-[state=indeterminate]:block" aria-hidden />
 		</CheckboxPrimitive.Indicator>
 	</CheckboxPrimitive.Root>
 ));

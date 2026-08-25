@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider, useTheme } from "@/theme/theme-provider";
 import { ThemeToggle } from "@/theme/theme-toggle";
@@ -114,6 +114,25 @@ describe("ThemeProvider", () => {
 
 		await userEvent.click(screen.getByRole("button", { name: "go dark" }));
 		expect(window.localStorage.length).toBe(0);
+		expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+	});
+
+	it("survives storage that throws", async () => {
+		vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+			throw new DOMException("denied", "SecurityError");
+		});
+		vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+			throw new DOMException("denied", "SecurityError");
+		});
+
+		render(
+			<ThemeProvider defaultTheme="light">
+				<Probe />
+			</ThemeProvider>,
+		);
+		expect(screen.getByTestId("theme")).toHaveTextContent("light");
+
+		await userEvent.click(screen.getByRole("button", { name: "go dark" }));
 		expect(screen.getByTestId("theme")).toHaveTextContent("dark");
 	});
 
