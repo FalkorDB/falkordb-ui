@@ -41,7 +41,7 @@ export const Variants: Story = {
 				>
 					Destructive
 				</Button>
-				<Button variant="outline" onClick={() => toast({ variant: "success", title: "Graph created" })}>
+				<Button variant="secondary" onClick={() => toast({ variant: "success", title: "Graph created" })}>
 					Success
 				</Button>
 				<Button

@@ -71,7 +71,7 @@ describe("Button", () => {
 
 	it("shows a tooltip on hover without a consumer-mounted provider", async () => {
 		render(
-			<Button size="icon" tooltip="Export graph">
+			<Button size="none" tooltip="Export graph">
 				<svg />
 			</Button>,
 		);
@@ -93,9 +93,8 @@ describe("Button", () => {
 
 	it.each([
 		["default", "bg-primary"],
-		["secondary", "bg-secondary"],
-		["outline", "border-primary"],
-		["ghost", "bg-transparent"],
+		["secondary", "border-primary"],
+		["cancel", "border-border"],
 		["destructive", "border-destructive"],
 		["link", "underline-offset-4"],
 	] as const)("applies the %s variant", (variant, expected) => {
@@ -103,26 +102,30 @@ describe("Button", () => {
 	});
 
 	it.each([
-		["sm", "h-8"],
-		["default", "h-10"],
-		["lg", "h-12"],
-		["icon", "size-10"],
+		["default", "px-4"],
+		["wide", "px-12"],
 	] as const)("applies the %s size", (size, expected) => {
 		expect(buttonVariants({ size })).toContain(expected);
 	});
 
-	it.each(["rounded-md", "text-sm", "font-medium", "[&_svg]:size-4", "[&_svg]:shrink-0"])(
-		"puts %s on the sized presets and not on size=none",
-		(chrome) => {
-			expect(buttonVariants({ size: "default" })).toContain(chrome);
-			expect(buttonVariants({ size: "none" })).not.toContain(chrome);
-		},
-	);
+	it("rounds every look except none", () => {
+		expect(buttonVariants({ variant: "default" })).toContain("rounded-lg");
+		expect(buttonVariants({ variant: "none" })).not.toContain("rounded-lg");
+	});
+
+	it("holds the primary hover back while the button is disabled", () => {
+		expect(buttonVariants({ variant: "default" })).toContain("enabled:hover:bg-primary/80");
+	});
 
 	it("leaves nothing but behaviour when both axes are none", () => {
 		const classes = buttonVariants({ variant: "none", size: "none" });
-		expect(classes).not.toContain("bg-primary");
+		expect(classes).not.toContain("rounded");
 		expect(classes).not.toContain("px-");
+	});
+
+	it("centres its content while loading", () => {
+		render(<Button isLoading>Run</Button>);
+		expect(screen.getByRole("button")).toHaveClass("justify-center");
 	});
 
 	it("renders a truncating label after the children", () => {

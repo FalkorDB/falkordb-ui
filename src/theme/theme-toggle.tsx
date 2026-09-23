@@ -5,7 +5,7 @@ import { useTheme } from "@/theme/theme-provider";
 
 export type ThemeToggleProps = Omit<ButtonProps, "children" | "onClick">;
 
-export function ThemeToggle({ variant = "ghost", size = "icon", ...props }: ThemeToggleProps) {
+export function ThemeToggle({ variant = "none", size = "none", ...props }: ThemeToggleProps) {
 	const { resolvedTheme, toggleTheme } = useTheme();
 	const label = resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme";
 

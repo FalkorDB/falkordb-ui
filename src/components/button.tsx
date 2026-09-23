@@ -6,37 +6,33 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/tooltip";
 
-// Radius, typography, focus ring and icon handling ride on the size rather than
-// the base, so `size="none"` really does leave the geometry to the consumer.
-const chrome =
-	"justify-center whitespace-nowrap rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0";
-
-export const buttonVariants = cva("inline-flex items-center gap-2 transition-colors disabled:opacity-50", {
-	variants: {
-		variant: {
-			default: "bg-primary text-primary-foreground hover:bg-primary/90",
-			secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-			outline:
-				"border-2 border-primary bg-transparent text-primary hover:bg-primary hover:text-primary-foreground",
-			ghost: "bg-transparent hover:bg-secondary hover:text-secondary-foreground",
-			destructive:
-				"border-2 border-destructive bg-transparent text-destructive hover:bg-destructive hover:text-destructive-foreground",
-			link: "bg-transparent text-primary underline-offset-4 hover:underline",
-			none: "",
+// The looks are FalkorDB's: a filled primary, three outlined siblings, and a
+// `none` pair for a consumer that dictates its own geometry. Padding belongs to
+// the size because the outlined pair is deliberately wider than the filled one.
+export const buttonVariants = cva(
+	"flex items-center gap-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+	{
+		variants: {
+			variant: {
+				default: "rounded-lg bg-primary enabled:hover:bg-primary/80",
+				secondary: "rounded-lg border-2 border-primary bg-transparent text-primary",
+				cancel: "rounded-lg border-2 border-border bg-transparent",
+				destructive: "rounded-lg border-2 border-destructive bg-transparent text-destructive",
+				link: "bg-transparent text-primary underline-offset-4 hover:underline",
+				none: "",
+			},
+			size: {
+				default: "px-4 py-[10px]",
+				wide: "px-12 py-2",
+				none: "",
+			},
 		},
-		size: {
-			sm: `h-8 px-3 ${chrome}`,
-			default: `h-10 px-4 py-2 ${chrome}`,
-			lg: `h-12 px-8 ${chrome}`,
-			icon: `size-10 ${chrome}`,
-			none: "",
+		defaultVariants: {
+			variant: "default",
+			size: "default",
 		},
 	},
-	defaultVariants: {
-		variant: "default",
-		size: "default",
-	},
-});
+);
 
 export interface ButtonProps
 	extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
@@ -93,7 +89,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 		const button = (
 			<Comp
 				ref={ref}
-				className={cn(buttonVariants({ variant, size }), className)}
+				className={cn(buttonVariants({ variant, size }), isLoading && "justify-center", className)}
 				disabled={disabled ?? isLoading}
 				// `asChild` hands rendering to the child, which owns its own type.
 				{...(asChild ? {} : { type })}

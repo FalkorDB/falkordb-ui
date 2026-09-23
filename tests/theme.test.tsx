@@ -185,10 +185,10 @@ describe("ThemeToggle", () => {
 	it("accepts variant and size overrides", () => {
 		render(
 			<ThemeProvider defaultTheme="light">
-				<ThemeToggle variant="outline" size="sm" />
+				<ThemeToggle variant="secondary" size="wide" />
 			</ThemeProvider>,
 		);
 
-		expect(screen.getByRole("button")).toHaveClass("h-8");
+		expect(screen.getByRole("button")).toHaveClass("px-12");
 	});
 });

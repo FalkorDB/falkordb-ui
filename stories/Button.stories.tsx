@@ -27,8 +27,7 @@ export const Variants: Story = {
 		<div className="flex flex-wrap items-center gap-3">
 			<Button {...args} variant="default" />
 			<Button {...args} variant="secondary" />
-			<Button {...args} variant="outline" />
-			<Button {...args} variant="ghost" />
+			<Button {...args} variant="cancel" />
 			<Button {...args} variant="destructive" />
 			<Button {...args} variant="link" />
 		</div>
@@ -38,12 +37,8 @@ export const Variants: Story = {
 export const Sizes: Story = {
 	render: (args) => (
 		<div className="flex flex-wrap items-center gap-3">
-			<Button {...args} size="sm" />
 			<Button {...args} size="default" />
-			<Button {...args} size="lg" />
-			<Button {...args} size="icon" aria-label="Download">
-				<Download />
-			</Button>
+			<Button {...args} size="wide" />
 		</div>
 	),
 };
@@ -71,8 +66,8 @@ export const Disabled: Story = {
 /** Icon-only buttons should always carry a tooltip. */
 export const IconWithTooltip: Story = {
 	args: {
-		size: "icon",
-		variant: "ghost",
+		variant: "none",
+		size: "none",
 		tooltip: "Export graph as CSV",
 		children: <Download />,
 	},
