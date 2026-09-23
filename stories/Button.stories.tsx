@@ -77,3 +77,26 @@ export const IconWithTooltip: Story = {
 		children: <Download />,
 	},
 };
+
+/** A long label truncates instead of stretching the button. */
+export const WithLabel: Story = {
+	args: {
+		className: "w-40",
+		children: <Download />,
+		label: "Export this graph as CSV",
+	},
+};
+
+/**
+ * `variant="none"` with `size="none"` strips every look, leaving the loading,
+ * label and tooltip behaviour for a consumer that dictates its own styling.
+ */
+export const Unstyled: Story = {
+	args: {
+		variant: "none",
+		size: "none",
+		className: "flex gap-2 rounded-lg bg-primary px-4 py-[10px]",
+		children: <Download />,
+		label: "Export",
+	},
+};

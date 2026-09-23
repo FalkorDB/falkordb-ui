@@ -110,4 +110,45 @@ describe("Button", () => {
 	] as const)("applies the %s size", (size, expected) => {
 		expect(buttonVariants({ size })).toContain(expected);
 	});
+
+	it.each(["rounded-md", "text-sm", "font-medium", "[&_svg]:size-4", "[&_svg]:shrink-0"])(
+		"puts %s on the sized presets and not on size=none",
+		(chrome) => {
+			expect(buttonVariants({ size: "default" })).toContain(chrome);
+			expect(buttonVariants({ size: "none" })).not.toContain(chrome);
+		},
+	);
+
+	it("leaves nothing but behaviour when both axes are none", () => {
+		const classes = buttonVariants({ variant: "none", size: "none" });
+		expect(classes).not.toContain("bg-primary");
+		expect(classes).not.toContain("px-");
+	});
+
+	it("renders a truncating label after the children", () => {
+		render(
+			<Button label="Run query">
+				<svg data-testid="icon" />
+			</Button>,
+		);
+
+		const label = screen.getByText("Run query");
+		expect(label).toHaveClass("truncate");
+		expect(screen.getByTestId("icon").nextElementSibling).toBe(label);
+	});
+
+	it("passes labelClassName to the label, which className cannot reach", () => {
+		render(<Button label="Run" labelClassName="text-center" />);
+		expect(screen.getByText("Run")).toHaveClass("text-center");
+	});
+
+	it("drops the label for the spinner while loading", () => {
+		render(<Button label="Run" isLoading />);
+		expect(screen.queryByText("Run")).not.toBeInTheDocument();
+	});
+
+	it("sizes the spinner with loaderSize", () => {
+		render(<Button isLoading loaderSize={16} />);
+		expect(screen.getByRole("button").querySelector("svg")).toHaveAttribute("width", "16");
+	});
 });
