@@ -14,7 +14,7 @@ import {
 	DialogTrigger,
 } from "@/components/dialog";
 
-function renderDialog(contentProps: { hideCloseButton?: boolean } = {}) {
+function renderDialog(contentProps: { hideCloseButton?: boolean; overlayClassName?: string } = {}) {
 	return render(
 		<Dialog>
 			<DialogTrigger asChild>
@@ -88,5 +88,14 @@ describe("Dialog", () => {
 		await screen.findByRole("dialog");
 
 		expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+	});
+
+	it("passes overlayClassName to the backdrop", async () => {
+		const { baseElement } = renderDialog({ overlayClassName: "bg-black/80" });
+
+		await userEvent.click(screen.getByRole("button", { name: "Delete graph" }));
+		await screen.findByRole("dialog");
+
+		expect(baseElement.querySelector(".bg-black\\/80")).toBeInTheDocument();
 	});
 });

@@ -29,12 +29,14 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 export interface DialogContentProps extends ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
 	/** Hides the built-in top-right close button. */
 	hideCloseButton?: boolean;
+	/** Classes for the backdrop, which the content's `className` cannot reach. */
+	overlayClassName?: string;
 }
 
 export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DialogContentProps>(
-	({ className, children, hideCloseButton = false, ...props }, ref) => (
+	({ className, children, hideCloseButton = false, overlayClassName, ...props }, ref) => (
 		<DialogPortal>
-			<DialogOverlay />
+			<DialogOverlay className={overlayClassName} />
 			<DialogPrimitive.Content
 				ref={ref}
 				className={cn(
