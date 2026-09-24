@@ -6,25 +6,25 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/tooltip";
 
+// The looks are FalkorDB's: a filled primary, three outlined siblings, and a
+// `none` pair for a consumer that dictates its own geometry. Padding belongs to
+// the size because the outlined pair is deliberately wider than the filled one.
 export const buttonVariants = cva(
-	"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+	"flex items-center gap-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50",
 	{
 		variants: {
 			variant: {
-				default: "bg-primary text-primary-foreground hover:bg-primary/90",
-				secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-				outline:
-					"border-2 border-primary bg-transparent text-primary hover:bg-primary hover:text-primary-foreground",
-				ghost: "bg-transparent hover:bg-secondary hover:text-secondary-foreground",
-				destructive:
-					"border-2 border-destructive bg-transparent text-destructive hover:bg-destructive hover:text-destructive-foreground",
+				default: "rounded-lg bg-primary enabled:hover:bg-primary/80",
+				secondary: "rounded-lg border-2 border-primary bg-transparent text-primary",
+				cancel: "rounded-lg border-2 border-border bg-transparent",
+				destructive: "rounded-lg border-2 border-destructive bg-transparent text-destructive",
 				link: "bg-transparent text-primary underline-offset-4 hover:underline",
+				none: "",
 			},
 			size: {
-				sm: "h-8 px-3",
-				default: "h-10 px-4 py-2",
-				lg: "h-12 px-8",
-				icon: "size-10",
+				default: "px-4 py-[10px]",
+				wide: "px-12 py-2",
+				none: "",
 			},
 		},
 		defaultVariants: {
@@ -40,6 +40,12 @@ export interface ButtonProps
 	asChild?: boolean;
 	/** Swaps the content for a spinner and disables the button. */
 	isLoading?: boolean;
+	/** Pixel size of the spinner. Only bites when `size` leaves icons unconstrained. */
+	loaderSize?: number;
+	/** Trailing text that truncates rather than widening the button. */
+	label?: ReactNode;
+	/** Classes for the label, which `className` cannot reach. */
+	labelClassName?: string;
 	/** Wraps the button in a tooltip. Icon-only buttons should always set this. */
 	tooltip?: ReactNode;
 	tooltipSide?: "top" | "right" | "bottom" | "left";
@@ -53,6 +59,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 			size,
 			asChild = false,
 			isLoading = false,
+			loaderSize,
+			label,
+			labelClassName,
 			disabled,
 			tooltip,
 			tooltipSide,
@@ -63,16 +72,30 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 		ref,
 	) => {
 		const Comp = asChild ? Slot : "button";
+
+		// A lone child, so `asChild` still has exactly one element to graft onto.
+		let content: ReactNode = children;
+		if (isLoading) {
+			content = <Loader2 size={loaderSize} className="animate-spin" aria-hidden />;
+		} else if (label != null) {
+			content = (
+				<>
+					{children}
+					<span className={cn("truncate", labelClassName)}>{label}</span>
+				</>
+			);
+		}
+
 		const button = (
 			<Comp
 				ref={ref}
-				className={cn(buttonVariants({ variant, size }), className)}
+				className={cn(buttonVariants({ variant, size }), isLoading && "justify-center", className)}
 				disabled={disabled ?? isLoading}
 				// `asChild` hands rendering to the child, which owns its own type.
 				{...(asChild ? {} : { type })}
 				{...props}
 			>
-				{isLoading ? <Loader2 className="animate-spin" aria-hidden /> : children}
+				{content}
 			</Comp>
 		);
 

@@ -38,7 +38,7 @@ export const Default: Story = {
 				<Input placeholder="Graph name" />
 				<DialogFooter>
 					<DialogClose asChild>
-						<Button variant="ghost">Cancel</Button>
+						<Button variant="cancel">Cancel</Button>
 					</DialogClose>
 					<Button>Create</Button>
 				</DialogFooter>
@@ -62,7 +62,7 @@ export const Destructive: Story = {
 				</DialogHeader>
 				<DialogFooter>
 					<DialogClose asChild>
-						<Button variant="ghost">Cancel</Button>
+						<Button variant="cancel">Cancel</Button>
 					</DialogClose>
 					<Button variant="destructive">Delete</Button>
 				</DialogFooter>

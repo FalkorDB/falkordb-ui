@@ -14,7 +14,7 @@ import {
 	DialogTrigger,
 } from "@/components/dialog";
 
-function renderDialog(contentProps: { hideCloseButton?: boolean } = {}) {
+function renderDialog(contentProps: { hideCloseButton?: boolean; overlayClassName?: string } = {}) {
 	return render(
 		<Dialog>
 			<DialogTrigger asChild>
@@ -39,6 +39,17 @@ describe("Dialog", () => {
 	it("stays closed until the trigger is used", () => {
 		renderDialog();
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
+	// A gap would be overridden by a consumer that lays the header out in a row.
+	it("spaces the header rather than gapping it", async () => {
+		renderDialog();
+
+		await userEvent.click(screen.getByRole("button", { name: "Delete graph" }));
+		const header = (await screen.findByText("Delete social-network?")).parentElement;
+
+		expect(header).toHaveClass("space-y-1.5");
+		expect(header).not.toHaveClass("gap-1.5");
 	});
 
 	it("opens with an accessible title and description", async () => {
@@ -88,5 +99,14 @@ describe("Dialog", () => {
 		await screen.findByRole("dialog");
 
 		expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+	});
+
+	it("passes overlayClassName to the backdrop", async () => {
+		const { baseElement } = renderDialog({ overlayClassName: "bg-black/80" });
+
+		await userEvent.click(screen.getByRole("button", { name: "Delete graph" }));
+		await screen.findByRole("dialog");
+
+		expect(baseElement.querySelector(".bg-black\\/80")).toBeInTheDocument();
 	});
 });

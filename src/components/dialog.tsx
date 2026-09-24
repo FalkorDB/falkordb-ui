@@ -29,12 +29,14 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 export interface DialogContentProps extends ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
 	/** Hides the built-in top-right close button. */
 	hideCloseButton?: boolean;
+	/** Classes for the backdrop, which the content's `className` cannot reach. */
+	overlayClassName?: string;
 }
 
 export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DialogContentProps>(
-	({ className, children, hideCloseButton = false, ...props }, ref) => (
+	({ className, children, hideCloseButton = false, overlayClassName, ...props }, ref) => (
 		<DialogPortal>
-			<DialogOverlay />
+			<DialogOverlay className={overlayClassName} />
 			<DialogPrimitive.Content
 				ref={ref}
 				className={cn(
@@ -65,8 +67,9 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
 );
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
+// Spacing, not a gap, so a consumer that lays the header out in a row keeps its own.
 export const DialogHeader = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (
-	<div className={cn("flex flex-col gap-1.5 text-left", className)} {...props} />
+	<div className={cn("flex flex-col space-y-1.5 text-left", className)} {...props} />
 );
 DialogHeader.displayName = "DialogHeader";
 

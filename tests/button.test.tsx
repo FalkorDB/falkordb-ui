@@ -71,7 +71,7 @@ describe("Button", () => {
 
 	it("shows a tooltip on hover without a consumer-mounted provider", async () => {
 		render(
-			<Button size="icon" tooltip="Export graph">
+			<Button size="none" tooltip="Export graph">
 				<svg />
 			</Button>,
 		);
@@ -93,9 +93,8 @@ describe("Button", () => {
 
 	it.each([
 		["default", "bg-primary"],
-		["secondary", "bg-secondary"],
-		["outline", "border-primary"],
-		["ghost", "bg-transparent"],
+		["secondary", "border-primary"],
+		["cancel", "border-border"],
 		["destructive", "border-destructive"],
 		["link", "underline-offset-4"],
 	] as const)("applies the %s variant", (variant, expected) => {
@@ -103,11 +102,56 @@ describe("Button", () => {
 	});
 
 	it.each([
-		["sm", "h-8"],
-		["default", "h-10"],
-		["lg", "h-12"],
-		["icon", "size-10"],
+		["default", "px-4"],
+		["wide", "px-12"],
 	] as const)("applies the %s size", (size, expected) => {
 		expect(buttonVariants({ size })).toContain(expected);
+	});
+
+	it("rounds every look except none", () => {
+		expect(buttonVariants({ variant: "default" })).toContain("rounded-lg");
+		expect(buttonVariants({ variant: "none" })).not.toContain("rounded-lg");
+	});
+
+	it("holds the primary hover back while the button is disabled", () => {
+		expect(buttonVariants({ variant: "default" })).toContain("enabled:hover:bg-primary/80");
+	});
+
+	it("leaves nothing but behaviour when both axes are none", () => {
+		const classes = buttonVariants({ variant: "none", size: "none" });
+		expect(classes).not.toContain("rounded");
+		expect(classes).not.toContain("px-");
+	});
+
+	it("centres its content while loading", () => {
+		render(<Button isLoading>Run</Button>);
+		expect(screen.getByRole("button")).toHaveClass("justify-center");
+	});
+
+	it("renders a truncating label after the children", () => {
+		render(
+			<Button label="Run query">
+				<svg data-testid="icon" />
+			</Button>,
+		);
+
+		const label = screen.getByText("Run query");
+		expect(label).toHaveClass("truncate");
+		expect(screen.getByTestId("icon").nextElementSibling).toBe(label);
+	});
+
+	it("passes labelClassName to the label, which className cannot reach", () => {
+		render(<Button label="Run" labelClassName="text-center" />);
+		expect(screen.getByText("Run")).toHaveClass("text-center");
+	});
+
+	it("drops the label for the spinner while loading", () => {
+		render(<Button label="Run" isLoading />);
+		expect(screen.queryByText("Run")).not.toBeInTheDocument();
+	});
+
+	it("sizes the spinner with loaderSize", () => {
+		render(<Button isLoading loaderSize={16} />);
+		expect(screen.getByRole("button").querySelector("svg")).toHaveAttribute("width", "16");
 	});
 });
