@@ -41,6 +41,17 @@ describe("Dialog", () => {
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
+	// A gap would be overridden by a consumer that lays the header out in a row.
+	it("spaces the header rather than gapping it", async () => {
+		renderDialog();
+
+		await userEvent.click(screen.getByRole("button", { name: "Delete graph" }));
+		const header = (await screen.findByText("Delete social-network?")).parentElement;
+
+		expect(header).toHaveClass("space-y-1.5");
+		expect(header).not.toHaveClass("gap-1.5");
+	});
+
 	it("opens with an accessible title and description", async () => {
 		renderDialog();
 

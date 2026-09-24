@@ -40,6 +40,27 @@ describe("Input", () => {
 		expect(ref.current).toBeInstanceOf(HTMLInputElement);
 		expect(screen.getByPlaceholderText("Graph name")).toHaveClass("w-40");
 	});
+
+	it("wears FalkorDB's field design", () => {
+		render(<Input placeholder="Graph name" />);
+
+		expect(screen.getByPlaceholderText("Graph name")).toHaveClass(
+			"rounded-lg",
+			"border",
+			"border-border",
+			"bg-input",
+			"p-1",
+			"text-foreground",
+		);
+	});
+
+	it("lets a consumer override the design", () => {
+		render(<Input className="rounded-none bg-transparent" placeholder="Graph name" />);
+
+		const input = screen.getByPlaceholderText("Graph name");
+		expect(input).toHaveClass("rounded-none", "bg-transparent");
+		expect(input).not.toHaveClass("rounded-lg", "bg-input");
+	});
 });
 
 describe("Textarea", () => {
