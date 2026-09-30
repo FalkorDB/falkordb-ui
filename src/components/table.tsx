@@ -1,13 +1,32 @@
-import { forwardRef, type HTMLAttributes, type TdHTMLAttributes, type ThHTMLAttributes } from "react";
+import {
+	forwardRef,
+	type HTMLAttributes,
+	type Ref,
+	type TdHTMLAttributes,
+	type ThHTMLAttributes,
+} from "react";
 
 import { cn } from "@/lib/cn";
 
-export const Table = forwardRef<HTMLTableElement, HTMLAttributes<HTMLTableElement>>(
-	({ className, ...props }, ref) => (
-		<div className="relative w-full overflow-auto">
-			<table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
-		</div>
-	),
+export interface TableProps extends HTMLAttributes<HTMLTableElement> {
+	/**
+	 * Props for the scrolling wrapper around the `<table>`. A virtualised or
+	 * infinitely scrolling table needs its ref and `onScroll`, since that wrapper,
+	 * not the table, is what scrolls.
+	 */
+	containerProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> };
+}
+
+export const Table = forwardRef<HTMLTableElement, TableProps>(
+	({ className, containerProps, ...props }, ref) => {
+		const { className: containerClassName, ...container } = containerProps ?? {};
+
+		return (
+			<div className={cn("relative w-full overflow-auto", containerClassName)} {...container}>
+				<table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
+			</div>
+		);
+	},
 );
 Table.displayName = "Table";
 

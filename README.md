@@ -94,22 +94,34 @@ export function GraphCard() {
 
 ## Components
 
-| Component | Exports                                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Button    | `Button`, `buttonVariants`                                                                                                    |
-| Input     | `Input`                                                                                                                       |
-| Textarea  | `Textarea`                                                                                                                    |
-| Select    | `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`, `SelectGroup`, `SelectLabel`, `SelectSeparator`      |
-| Checkbox  | `Checkbox`                                                                                                                    |
-| Switch    | `Switch`                                                                                                                      |
-| Badge     | `Badge`, `badgeVariants`                                                                                                      |
-| Card      | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`                                             |
-| Tooltip   | `Tooltip`, `TooltipProvider`, `TooltipTrigger`, `TooltipContent`                                                              |
-| Dialog    | `Dialog`, `DialogTrigger`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogFooter`, `DialogClose` |
-| Toast     | `Toaster`, `toast`, `useToast`, `dismiss`, `ToastAction`                                                                      |
-| Table     | `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableRow`, `TableHead`, `TableCell`, `TableCaption`                      |
-| Tabs      | `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`                                                                              |
-| Theme     | `ThemeProvider`, `useTheme`, `ThemeToggle`                                                                                    |
+| Component    | Exports                                                                                                                                                                                                                                                                                                                           |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Button       | `Button`, `buttonVariants`                                                                                                                                                                                                                                                                                                        |
+| Input        | `Input`                                                                                                                                                                                                                                                                                                                           |
+| Textarea     | `Textarea`                                                                                                                                                                                                                                                                                                                        |
+| Label        | `Label`                                                                                                                                                                                                                                                                                                                           |
+| Select       | `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`, `SelectGroup`, `SelectLabel`, `SelectSeparator`                                                                                                                                                                                                          |
+| Checkbox     | `Checkbox`                                                                                                                                                                                                                                                                                                                        |
+| Switch       | `Switch`                                                                                                                                                                                                                                                                                                                          |
+| RadioGroup   | `RadioGroup`, `RadioGroupItem`                                                                                                                                                                                                                                                                                                    |
+| Slider       | `Slider`                                                                                                                                                                                                                                                                                                                          |
+| Form         | `Form`, `FormField`, `FormLabel`, `FormControl`, `FormDescription`, `FormMessage`, `FormFooter`, `useFormField`                                                                                                                                                                                                                   |
+| Badge        | `Badge`, `badgeVariants`                                                                                                                                                                                                                                                                                                          |
+| Card         | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`                                                                                                                                                                                                                                                 |
+| Progress     | `Progress`                                                                                                                                                                                                                                                                                                                        |
+| Skeleton     | `Skeleton`                                                                                                                                                                                                                                                                                                                        |
+| Tooltip      | `Tooltip`, `TooltipProvider`, `TooltipTrigger`, `TooltipContent`                                                                                                                                                                                                                                                                  |
+| HintTip      | `HintTip`                                                                                                                                                                                                                                                                                                                         |
+| Popover      | `Popover`, `PopoverTrigger`, `PopoverContent`, `PopoverAnchor`, `PopoverClose`                                                                                                                                                                                                                                                    |
+| DropdownMenu | `DropdownMenu`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuCheckboxItem`, `DropdownMenuRadioGroup`, `DropdownMenuRadioItem`, `DropdownMenuLabel`, `DropdownMenuSeparator`, `DropdownMenuShortcut`, `DropdownMenuGroup`, `DropdownMenuSub`, `DropdownMenuSubTrigger`, `DropdownMenuSubContent` |
+| Dialog       | `Dialog`, `DialogTrigger`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogFooter`, `DialogClose`                                                                                                                                                                                                     |
+| AlertDialog  | `AlertDialog`, `AlertDialogTrigger`, `AlertDialogContent`, `AlertDialogHeader`, `AlertDialogTitle`, `AlertDialogDescription`, `AlertDialogFooter`, `AlertDialogAction`, `AlertDialogCancel`                                                                                                                                       |
+| Drawer       | `Drawer`, `DrawerTrigger`, `DrawerContent`, `DrawerHeader`, `DrawerTitle`, `DrawerDescription`, `DrawerFooter`, `DrawerClose`                                                                                                                                                                                                     |
+| Toast        | `Toaster`, `toast`, `useToast`, `dismiss`, `ToastAction`                                                                                                                                                                                                                                                                          |
+| Table        | `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableRow`, `TableHead`, `TableCell`, `TableCaption`                                                                                                                                                                                                                          |
+| Tabs         | `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`                                                                                                                                                                                                                                                                                  |
+| Resizable    | `ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle`                                                                                                                                                                                                                                                                        |
+| Theme        | `ThemeProvider`, `useTheme`, `ThemeToggle`                                                                                                                                                                                                                                                                                        |
 
 Plus the `cn()` class-merging helper.
 
@@ -132,6 +144,145 @@ its own `TooltipProvider`, so it works without any setup in the surrounding tree
 ```
 
 `isLoading` swaps the content for a spinner, and `label` adds truncating trailing text. Both also work with `asChild`, where they render inside your element.
+
+### Forms
+
+`Form` takes a `fields` array and renders the whole stack — labels, info
+hints, descriptions, controls, per-field errors, a form-level error and a
+submit footer. Values stay controlled by you; validation is declared per field
+as `errors`, and each rule's `condition` receives the field's value plus every
+other field's value, so cross-field rules are just a lookup:
+
+```tsx
+<Form
+	fields={[
+		{
+			name: "host",
+			label: "Host",
+			value: host,
+			onChange: setHost,
+			required: true,
+			info: "Defaults to localhost.",
+			errors: [{ message: "Host is required", condition: (value) => value === "" }],
+		},
+		{
+			name: "password",
+			label: "Password",
+			type: "password",
+			value: password,
+			onChange: setPassword,
+			link: { label: "Managing credentials", url: "https://docs.falkordb.com" },
+		},
+		{
+			name: "confirm",
+			label: "Confirm password",
+			type: "password",
+			value: confirm,
+			onChange: setConfirm,
+			// Re-check this field whenever `password` changes, too.
+			revalidateWith: ["password"],
+			errors: [
+				{
+					message: "Passwords do not match",
+					condition: (value, values) => value !== values.password,
+				},
+			],
+		},
+	]}
+	error={connectionError}
+	submitLabel="Connect"
+	onSubmit={connect}
+	actions={
+		<Button variant="cancel" onClick={close}>
+			Cancel
+		</Button>
+	}
+/>
+```
+
+When fields are checked:
+
+- A field is checked as it changes, and so is every field that lists it in
+  `revalidateWith`.
+- Every field is checked on submit. A failing field blocks `onSubmit`, and the
+  submit button shows a spinner while an async `onSubmit` runs.
+- Every field is checked again when the set of fields changes, for example when
+  a login form switches mode. This does not happen on mount, so an untouched
+  form starts clean.
+
+`required` only draws the asterisk. Whether an empty value is an error is up to
+the field's `errors`, so a field can be marked required and still fall back to
+a default. Declaring `errors` also reserves the line the message appears on, so
+the layout does not jump when one shows up.
+
+Field `type` is `text` by default and can be:
+
+- any text-like input type
+- `password`
+- `textarea`
+- `select`, with `options`
+- `tag`, with `tags`, `onAddTag`, `onRemoveTag` and an optional `normalize`
+- `custom`, whose `render({ id, invalid, onValueChange })` draws a control the
+  form does not ship, such as a searchable picker
+
+Set `id` on a field to fix the control's id; otherwise one is generated.
+
+Layout:
+
+- `children` render between the fields and the form-level error. Use them for
+  an optional section.
+- `actions` render in the footer, to the left of the submit button.
+- `submitDisabled` and `submitProps` adjust the default submit button, and
+  `renderSubmit` replaces it.
+- `renderInfo` replaces the default info hint.
+- `classNames` reaches the parts `className` cannot: `field`, `label`,
+  `control`, `description`, `message`, `error`, `footer` and `tag`.
+
+For a layout `fields` cannot express, the parts are exported too:
+
+- `FormField` generates the ids and owns the error state.
+- `FormControl` wires them onto whichever control you put inside it.
+- `FormMessage` renders its children as a form-level error when used outside a
+  `FormField`.
+
+### Hints
+
+`HintTip` is an info glyph that reveals a hint. Radix tooltips never open on
+touch, so pass `mode="popover"` on a touch layout and the hint opens on tap
+instead:
+
+```tsx
+<HintTip mode={isTouch ? "popover" : "tooltip"}>Defaults to localhost.</HintTip>
+```
+
+Where the trigger is a real control, use that control's `tooltip` instead.
+
+### Overlays and menus
+
+- `DropdownMenuContent` and `DropdownMenuSubContent` take `preventOutsideClose`.
+  It keeps a menu open through outside clicks and Escape, for example while a
+  guided walkthrough points at it.
+- `AlertDialogContent` takes `overlayClassName`, like `DialogContent`.
+- `DrawerContent` takes `side` (`bottom`, `left` or `right`), `handleClassName`
+  and `overlayClassName`. It pads itself for safe-area insets.
+
+### Tables
+
+`Table` wraps its `<table>` in a scrolling `<div>`. A virtualised or infinitely
+scrolling table needs that wrapper's ref and scroll events, so `containerProps`
+passes props through to it:
+
+```tsx
+<Table containerProps={{ ref: scrollRef, onScroll: loadMoreNearBottom, className: "h-96" }}>…</Table>
+```
+
+### Sliders and progress
+
+- `Slider` renders one thumb per value.
+- `renderThumb(thumb, index)` wraps each thumb, for example in a tooltip that
+  reads out the value.
+- `thumbClassName` styles the thumbs.
+- `Progress` takes `indicatorClassName` for its filled bar.
 
 ### Toasts
 
