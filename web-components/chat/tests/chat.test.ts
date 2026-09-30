@@ -202,3 +202,20 @@ describe('<falkordb-chat>', () => {
     expect(shadow(chat).querySelector('a')).toBeNull()
   })
 })
+
+describe('parts', () => {
+  it('names the input row and the built-in bubbles', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const chat = mount({ onQuery })
+    for (const part of ['conversation', 'input', 'send-button', 'stop-button', 'new-chat-button']) {
+      expect(shadow(chat).querySelector(`[part~="${part}"]`), part).not.toBeNull()
+    }
+    const { respond } = await ask(chat, onQuery)
+    respond({ answer: 'done' })
+    chat.addMessage({ id: 'e', type: 'error', content: 'bad', timestamp: new Date().toISOString() })
+
+    expect(shadow(chat).querySelectorAll('[part~="message-user"]')).toHaveLength(1)
+    expect(shadow(chat).querySelectorAll('[part~="message-ai"]')).toHaveLength(1)
+    expect(shadow(chat).querySelectorAll('[part~="message-error"]')).toHaveLength(1)
+  })
+})

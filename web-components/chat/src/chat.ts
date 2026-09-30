@@ -198,20 +198,20 @@ export class FalkorDBChat extends HTMLElement {
       <button class="fc-scroll-btn" aria-label="Scroll to bottom">↓ Latest</button>
       <div class="fc-bottom">
         <div class="fc-input-row">
-          <button class="fc-new-chat-btn" title="New chat" style="display:none">
+          <button class="fc-new-chat-btn" part="new-chat-button" title="New chat" style="display:none">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="fc-query-wrap" style="position:relative">
             <div class="fc-popover"></div>
             <div class="fc-query-inner">
-              <textarea class="fc-query-textarea" rows="1"></textarea>
+              <textarea class="fc-query-textarea" part="input" rows="1" aria-label="Message"></textarea>
               <button class="fc-action-btn fc-strategy-btn" title="Query strategy" type="button">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               </button>
-              <button class="fc-action-btn fc-send-btn" type="button" title="Send (Enter)">
+              <button class="fc-action-btn fc-send-btn" part="send-button" type="button" title="Send (Enter)" aria-label="Send">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
               </button>
-              <button class="fc-action-btn fc-stop-btn" type="button" title="Stop" style="display:none">
+              <button class="fc-action-btn fc-stop-btn" part="stop-button" type="button" title="Stop" aria-label="Stop" style="display:none">
                 <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
               </button>
             </div>
@@ -402,6 +402,8 @@ export class FalkorDBChat extends HTMLElement {
     if (msg.type === 'user') {
       const el = document.createElement('div')
       el.className = 'fc-msg-user'
+      el.setAttribute('part', 'message message-user')
+      el.dataset.msgId = msg.id
       el.innerHTML = `<div class="fc-msg-user-bubble">${msg.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>`
       return el
     }
@@ -423,6 +425,7 @@ export class FalkorDBChat extends HTMLElement {
     if (msg.type === 'error') {
       const el = document.createElement('div')
       el.className = 'fc-msg-error'
+      el.setAttribute('part', 'message message-error')
       el.setAttribute('role', 'alert')
       el.dataset.msgId = msg.id
       el.textContent = msg.content
@@ -433,6 +436,7 @@ export class FalkorDBChat extends HTMLElement {
 
     const el = document.createElement('div')
     el.className = 'fc-msg-ai'
+    el.setAttribute('part', 'message message-ai')
     el.dataset.msgId = msg.id
 
     let displayContent = msg.content

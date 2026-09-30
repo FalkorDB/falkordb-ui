@@ -326,7 +326,14 @@ Put host UI inside the component's frame, such as a title bar, a close button, a
 </falkordb-chat>
 ```
 
-The conversation area also has `part="conversation"`, so you can style it with `falkordb-chat::part(conversation)`.
+Key elements have a `part` name, so you can style them from outside with `falkordb-chat::part(<name>)` and find them in end-to-end tests. Playwright's CSS locators reach into open shadow roots, for example `page.locator('falkordb-chat [part~="input"]')`.
+
+| Part | Element |
+|------|---------|
+| `conversation` | Scrolling message list |
+| `input` | Question textarea |
+| `send-button`, `stop-button`, `new-chat-button` | Input-row buttons |
+| `message` plus `message-user`, `message-ai` or `message-error` | Built-in message bubbles |
 
 ---
 
