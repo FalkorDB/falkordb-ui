@@ -25,3 +25,21 @@ jobs:
       - run: npm run coverage
       - run: npm run build
       - run: npm run build-storybook
+
+  web-components:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [canvas, chat, support-widget]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint --if-present -w web-components/${{ matrix.package }}
+      - run: npm run typecheck --if-present -w web-components/${{ matrix.package }}
+      - run: npm run test --if-present -w web-components/${{ matrix.package }}
+      - run: npm run build -w web-components/${{ matrix.package }}

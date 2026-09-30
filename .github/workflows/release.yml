@@ -1,5 +1,9 @@
 name: Publish to npm
 
+# One repository, several packages. The release tag picks the package:
+#   v<version>                -> @falkordb/ui (the repository root)
+#   <dir>-v<version>          -> the package in web-components/<dir>
+#                                e.g. canvas-v0.3.0, chat-v0.2.0, support-widget-v0.2.2
 on:
   release:
     types: [created]
@@ -26,21 +30,37 @@ jobs:
 
       - run: npm ci
 
-      - name: Resolve version from tag
+      - name: Resolve package and version from tag
         id: pkg
         run: |
           TAG="${GITHUB_REF_NAME}"
-          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
-            echo "::error::Tag '$TAG' does not match 'v<version>'"
+          if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+            PKG_PATH="."
+            VERSION="${BASH_REMATCH[1]}"
+          elif [[ "$TAG" =~ ^(.+)-v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+            PKG_PATH="web-components/${BASH_REMATCH[1]}"
+            VERSION="${BASH_REMATCH[2]}"
+          else
+            echo "::error::Tag '$TAG' does not match 'v<version>' or '<web-component-dir>-v<version>'"
             exit 1
           fi
-          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          if [[ ! -f "$PKG_PATH/package.json" ]]; then
+            echo "::error::No package.json at $PKG_PATH"
+            exit 1
+          fi
+          echo "path=$PKG_PATH"   >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing $(node -p "require('./$PKG_PATH/package.json').name")@$VERSION from $PKG_PATH"
 
       # The tag is the source of truth; guard against a stale package.json.
       - name: Set version from Git tag
+        working-directory: ${{ steps.pkg.outputs.path }}
         run: npm version "${{ steps.pkg.outputs.version }}" --no-git-tag-version --allow-same-version
 
-      - run: npm run build
+      - name: Build
+        working-directory: ${{ steps.pkg.outputs.path }}
+        run: npm run build
 
       - name: Publish
+        working-directory: ${{ steps.pkg.outputs.path }}
         run: npm publish --provenance --access public
