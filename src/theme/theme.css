@@ -15,6 +15,7 @@
 
 /* Tailwind v4 dropped the built-in enter/exit utilities the components rely on. */
 @import "tw-animate-css";
+@import "./base.css";
 
 @custom-variant dark (&:is(.dark *));
 

@@ -69,9 +69,57 @@ describe("Button", () => {
 		expect(link).not.toHaveAttribute("type");
 	});
 
+	it("renders the label inside the child element with asChild", () => {
+		render(
+			<Button asChild variant="secondary" label="Open graphs">
+				<a href="/graphs">
+					<svg data-testid="icon" />
+				</a>
+			</Button>,
+		);
+
+		const link = screen.getByRole("link", { name: "Open graphs" });
+		expect(link).toHaveClass("border-primary");
+		expect(link).toContainElement(screen.getByTestId("icon"));
+		expect(link).toContainElement(screen.getByText("Open graphs"));
+	});
+
+	it("shows the spinner inside the child element while loading with asChild", () => {
+		render(
+			<Button asChild isLoading>
+				<a href="/graphs">Graphs</a>
+			</Button>,
+		);
+
+		const link = screen.getByRole("link");
+		expect(link).toHaveAttribute("href", "/graphs");
+		expect(link).toHaveClass("justify-center", "bg-primary");
+		expect(link).toHaveAttribute("aria-busy", "true");
+		expect(link).toHaveAttribute("aria-disabled", "true");
+		expect(link.querySelector(".animate-spin")).not.toBeNull();
+		expect(link).not.toHaveTextContent("Graphs");
+	});
+
+	it("marks a disabled asChild element without stamping a disabled attribute on it", () => {
+		render(
+			<Button asChild disabled>
+				<a href="/graphs">Graphs</a>
+			</Button>,
+		);
+
+		const link = screen.getByRole("link");
+		expect(link).toHaveAttribute("aria-disabled", "true");
+		expect(link).not.toHaveAttribute("disabled");
+	});
+
+	it("reports that it is busy while loading", () => {
+		render(<Button isLoading>Run</Button>);
+		expect(screen.getByRole("button")).toHaveAttribute("aria-busy", "true");
+	});
+
 	it("shows a tooltip on hover without a consumer-mounted provider", async () => {
 		render(
-			<Button size="icon" tooltip="Export graph">
+			<Button size="none" tooltip="Export graph">
 				<svg />
 			</Button>,
 		);
@@ -93,9 +141,8 @@ describe("Button", () => {
 
 	it.each([
 		["default", "bg-primary"],
-		["secondary", "bg-secondary"],
-		["outline", "border-primary"],
-		["ghost", "bg-transparent"],
+		["secondary", "border-primary"],
+		["cancel", "border-border"],
 		["destructive", "border-destructive"],
 		["link", "underline-offset-4"],
 	] as const)("applies the %s variant", (variant, expected) => {
@@ -103,11 +150,65 @@ describe("Button", () => {
 	});
 
 	it.each([
-		["sm", "h-8"],
-		["default", "h-10"],
-		["lg", "h-12"],
-		["icon", "size-10"],
+		["default", "px-4"],
+		["wide", "px-12"],
 	] as const)("applies the %s size", (size, expected) => {
 		expect(buttonVariants({ size })).toContain(expected);
+	});
+
+	it.each(["default", "secondary", "cancel", "destructive", "link", "none"] as const)(
+		"draws no focus ring or outline on the %s variant",
+		(variant) => {
+			const classes = buttonVariants({ variant });
+			expect(classes).toContain("focus-visible:outline-none");
+			expect(classes).not.toMatch(/\bring-/);
+		},
+	);
+
+	it("rounds every look except none", () => {
+		expect(buttonVariants({ variant: "default" })).toContain("rounded-lg");
+		expect(buttonVariants({ variant: "none" })).not.toContain("rounded-lg");
+	});
+
+	it("holds the primary hover back while the button is disabled", () => {
+		expect(buttonVariants({ variant: "default" })).toContain("enabled:hover:bg-primary/80");
+	});
+
+	it("leaves nothing but behaviour when both axes are none", () => {
+		const classes = buttonVariants({ variant: "none", size: "none" });
+		expect(classes).not.toContain("rounded");
+		expect(classes).not.toContain("px-");
+	});
+
+	it("centres its content while loading", () => {
+		render(<Button isLoading>Run</Button>);
+		expect(screen.getByRole("button")).toHaveClass("justify-center");
+	});
+
+	it("renders a truncating label after the children", () => {
+		render(
+			<Button label="Run query">
+				<svg data-testid="icon" />
+			</Button>,
+		);
+
+		const label = screen.getByText("Run query");
+		expect(label).toHaveClass("truncate");
+		expect(screen.getByTestId("icon").nextElementSibling).toBe(label);
+	});
+
+	it("passes labelClassName to the label, which className cannot reach", () => {
+		render(<Button label="Run" labelClassName="text-center" />);
+		expect(screen.getByText("Run")).toHaveClass("text-center");
+	});
+
+	it("drops the label for the spinner while loading", () => {
+		render(<Button label="Run" isLoading />);
+		expect(screen.queryByText("Run")).not.toBeInTheDocument();
+	});
+
+	it("sizes the spinner with loaderSize", () => {
+		render(<Button isLoading loaderSize={16} />);
+		expect(screen.getByRole("button").querySelector("svg")).toHaveAttribute("width", "16");
 	});
 });

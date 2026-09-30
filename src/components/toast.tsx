@@ -62,7 +62,7 @@ export const ToastAction = forwardRef<
 		ref={ref}
 		className={cn(
 			"inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-current/40 bg-transparent px-3 text-sm font-medium transition-colors",
-			"hover:bg-current/10 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+			"hover:bg-current/10 focus:outline-none",
 			"disabled:pointer-events-none disabled:opacity-50",
 			className,
 		)}
@@ -80,7 +80,7 @@ export const ToastClose = forwardRef<
 		toast-close=""
 		className={cn(
 			"absolute right-2 top-2 rounded-md p-1 opacity-0 transition-opacity",
-			"group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring",
+			"group-hover:opacity-100 focus:opacity-100 focus:outline-none",
 			className,
 		)}
 		{...props}

@@ -82,4 +82,11 @@ describe("Switch", () => {
 		render(<Switch aria-label="Read only" className="w-16" />);
 		expect(screen.getByRole("switch")).toHaveClass("w-16");
 	});
+
+	it("passes thumbClassName to the thumb, which className cannot reach", () => {
+		render(<Switch aria-label="Read only" thumbClassName="size-4" />);
+
+		const thumb = screen.getByRole("switch").firstElementChild;
+		expect(thumb).toHaveClass("size-4");
+	});
 });

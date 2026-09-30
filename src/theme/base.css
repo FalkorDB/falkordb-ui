@@ -1,0 +1,14 @@
+/**
+ * FalkorDB base rules, shared by every product.
+ *
+ * Included by `@falkordb/ui/theme.css` and `@falkordb/ui/styles.css`. Import
+ * `@falkordb/ui/base.css` on its own when an app keeps its own design tokens.
+ */
+
+@layer base {
+	/* FalkorDB products draw no focus border or outline on anything. */
+	*:focus,
+	*:focus-visible {
+		outline: none;
+	}
+}

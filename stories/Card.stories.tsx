@@ -30,10 +30,8 @@ export const Default: Story = {
 				Last queried 4 minutes ago. Indexes are up to date.
 			</CardContent>
 			<CardFooter className="gap-2">
-				<Button size="sm">Open</Button>
-				<Button size="sm" variant="destructive">
-					Delete
-				</Button>
+				<Button>Open</Button>
+				<Button variant="destructive">Delete</Button>
 			</CardFooter>
 		</Card>
 	),
