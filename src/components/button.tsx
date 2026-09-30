@@ -1,7 +1,14 @@
-import { Slot } from "@radix-ui/react-slot";
+import { Slot, Slottable } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Loader2 } from "lucide-react";
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import {
+	cloneElement,
+	forwardRef,
+	isValidElement,
+	type ButtonHTMLAttributes,
+	type ReactElement,
+	type ReactNode,
+} from "react";
 
 import { cn } from "@/lib/cn";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/tooltip";
@@ -10,7 +17,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 // `none` pair for a consumer that dictates its own geometry. Padding belongs to
 // the size because the outlined pair is deliberately wider than the filled one.
 export const buttonVariants = cva(
-	"flex items-center gap-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+	[
+		"flex items-center gap-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+		// Every variant, `none` included, keeps a visible keyboard focus indicator.
+		"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+	],
 	{
 		variants: {
 			variant: {
@@ -71,33 +82,51 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 		},
 		ref,
 	) => {
-		const Comp = asChild ? Slot : "button";
+		const spinner = <Loader2 size={loaderSize} className="animate-spin" aria-hidden />;
+		const labelEl =
+			label != null ? (
+				<span key="label" className={cn("truncate", labelClassName)}>
+					{label}
+				</span>
+			) : null;
+		const classes = cn(buttonVariants({ variant, size }), isLoading && "justify-center", className);
 
-		// A lone child, so `asChild` still has exactly one element to graft onto.
-		let content: ReactNode = children;
-		if (isLoading) {
-			content = <Loader2 size={loaderSize} className="animate-spin" aria-hidden />;
-		} else if (label != null) {
-			content = (
-				<>
-					{children}
-					<span className={cn("truncate", labelClassName)}>{label}</span>
-				</>
+		let button: ReactElement;
+		if (asChild) {
+			// Slot grafts the button's props onto one child element, so the spinner
+			// or label has to render inside that element rather than beside it.
+			const loadingChild =
+				isLoading && isValidElement<{ children?: ReactNode }>(children)
+					? cloneElement(children, undefined, spinner)
+					: null;
+			button = (
+				<Slot
+					ref={ref}
+					className={classes}
+					aria-disabled={disabled || isLoading || undefined}
+					aria-busy={isLoading || undefined}
+					{...props}
+				>
+					{/* Slot needs its element as a direct child: a Fragment around the
+					    Slottable, or a second child beside a lone element, loses the graft. */}
+					{loadingChild ?? [<Slottable key="child">{children}</Slottable>, labelEl]}
+				</Slot>
+			);
+		} else {
+			button = (
+				<button
+					ref={ref}
+					className={classes}
+					disabled={disabled ?? isLoading}
+					aria-busy={isLoading || undefined}
+					type={type}
+					{...props}
+				>
+					{isLoading ? spinner : children}
+					{!isLoading && labelEl}
+				</button>
 			);
 		}
-
-		const button = (
-			<Comp
-				ref={ref}
-				className={cn(buttonVariants({ variant, size }), isLoading && "justify-center", className)}
-				disabled={disabled ?? isLoading}
-				// `asChild` hands rendering to the child, which owns its own type.
-				{...(asChild ? {} : { type })}
-				{...props}
-			>
-				{content}
-			</Comp>
-		);
 
 		if (!tooltip) return button;
 

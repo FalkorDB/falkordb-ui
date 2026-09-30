@@ -54,6 +54,15 @@ describe("Input", () => {
 		);
 	});
 
+	it("shows keyboard focus and an invalid state", () => {
+		render(<Input aria-invalid placeholder="Graph name" />);
+
+		expect(screen.getByPlaceholderText("Graph name")).toHaveClass(
+			"focus-visible:ring-2",
+			"aria-invalid:border-destructive",
+		);
+	});
+
 	it("lets a consumer override the design", () => {
 		render(<Input className="rounded-none bg-transparent" placeholder="Graph name" />);
 

@@ -10,9 +10,9 @@ const meta = {
 	argTypes: {
 		variant: {
 			control: "select",
-			options: ["default", "secondary", "outline", "ghost", "destructive", "link"],
+			options: ["default", "secondary", "cancel", "destructive", "link", "none"],
 		},
-		size: { control: "select", options: ["sm", "default", "lg", "icon"] },
+		size: { control: "select", options: ["default", "wide", "none"] },
 	},
 	args: { children: "Run query" },
 } satisfies Meta<typeof Button>;

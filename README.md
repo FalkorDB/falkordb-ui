@@ -106,14 +106,23 @@ Plus the `cn()` class-merging helper.
 
 ### Buttons and tooltips
 
+`Button` comes in FalkorDB's looks:
+
+- **`variant`:** `default` (filled primary), `secondary`, `cancel` and `destructive` (outlined), `link`, and `none`.
+- **`size`:** `default`, `wide` (for the outlined pair) and `none`.
+
+`none` on both axes leaves the geometry to your own classes.
+
 Icon-only buttons need an accessible name. Pass `tooltip` and the button supplies
 its own `TooltipProvider`, so it works without any setup in the surrounding tree:
 
 ```tsx
-<Button size="icon" variant="ghost" tooltip="Export graph as CSV">
+<Button variant="none" size="none" className="rounded-md p-2 hover:bg-accent" tooltip="Export graph as CSV">
 	<Download />
 </Button>
 ```
+
+`isLoading` swaps the content for a spinner, and `label` adds truncating trailing text. Both also work with `asChild`, where they render inside your element.
 
 ### Toasts
 

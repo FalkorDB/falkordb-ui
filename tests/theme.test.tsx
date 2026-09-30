@@ -182,6 +182,28 @@ describe("ThemeToggle", () => {
 		expect(isDark()).toBe(false);
 	});
 
+	it("gives the unstyled default an icon-button hit target", () => {
+		render(
+			<ThemeProvider defaultTheme="light">
+				<ThemeToggle />
+			</ThemeProvider>,
+		);
+
+		expect(screen.getByRole("button")).toHaveClass("size-9", "justify-center", "rounded-md");
+	});
+
+	it("lets a className override the default hit target", () => {
+		render(
+			<ThemeProvider defaultTheme="light">
+				<ThemeToggle className="size-6" />
+			</ThemeProvider>,
+		);
+
+		const toggle = screen.getByRole("button");
+		expect(toggle).toHaveClass("size-6");
+		expect(toggle).not.toHaveClass("size-9");
+	});
+
 	it("accepts variant and size overrides", () => {
 		render(
 			<ThemeProvider defaultTheme="light">
@@ -189,6 +211,9 @@ describe("ThemeToggle", () => {
 			</ThemeProvider>,
 		);
 
-		expect(screen.getByRole("button")).toHaveClass("px-12");
+		const toggle = screen.getByRole("button");
+		expect(toggle).toHaveClass("px-12");
+		// The default hit target is only for the unstyled look.
+		expect(toggle).not.toHaveClass("size-9");
 	});
 });

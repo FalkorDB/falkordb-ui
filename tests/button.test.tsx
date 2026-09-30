@@ -69,6 +69,54 @@ describe("Button", () => {
 		expect(link).not.toHaveAttribute("type");
 	});
 
+	it("renders the label inside the child element with asChild", () => {
+		render(
+			<Button asChild variant="secondary" label="Open graphs">
+				<a href="/graphs">
+					<svg data-testid="icon" />
+				</a>
+			</Button>,
+		);
+
+		const link = screen.getByRole("link", { name: "Open graphs" });
+		expect(link).toHaveClass("border-primary");
+		expect(link).toContainElement(screen.getByTestId("icon"));
+		expect(link).toContainElement(screen.getByText("Open graphs"));
+	});
+
+	it("shows the spinner inside the child element while loading with asChild", () => {
+		render(
+			<Button asChild isLoading>
+				<a href="/graphs">Graphs</a>
+			</Button>,
+		);
+
+		const link = screen.getByRole("link");
+		expect(link).toHaveAttribute("href", "/graphs");
+		expect(link).toHaveClass("justify-center", "bg-primary");
+		expect(link).toHaveAttribute("aria-busy", "true");
+		expect(link).toHaveAttribute("aria-disabled", "true");
+		expect(link.querySelector(".animate-spin")).not.toBeNull();
+		expect(link).not.toHaveTextContent("Graphs");
+	});
+
+	it("marks a disabled asChild element without stamping a disabled attribute on it", () => {
+		render(
+			<Button asChild disabled>
+				<a href="/graphs">Graphs</a>
+			</Button>,
+		);
+
+		const link = screen.getByRole("link");
+		expect(link).toHaveAttribute("aria-disabled", "true");
+		expect(link).not.toHaveAttribute("disabled");
+	});
+
+	it("reports that it is busy while loading", () => {
+		render(<Button isLoading>Run</Button>);
+		expect(screen.getByRole("button")).toHaveAttribute("aria-busy", "true");
+	});
+
 	it("shows a tooltip on hover without a consumer-mounted provider", async () => {
 		render(
 			<Button size="none" tooltip="Export graph">
@@ -107,6 +155,13 @@ describe("Button", () => {
 	] as const)("applies the %s size", (size, expected) => {
 		expect(buttonVariants({ size })).toContain(expected);
 	});
+
+	it.each(["default", "secondary", "cancel", "destructive", "link", "none"] as const)(
+		"keeps a keyboard focus ring on the %s variant",
+		(variant) => {
+			expect(buttonVariants({ variant })).toContain("focus-visible:ring-2");
+		},
+	);
 
 	it("rounds every look except none", () => {
 		expect(buttonVariants({ variant: "default" })).toContain("rounded-lg");
