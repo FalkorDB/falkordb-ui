@@ -25,7 +25,13 @@ const config: StorybookConfig = {
 		},
 	},
 	viteFinal: (viteConfig) => {
-		viteConfig.plugins = [...(viteConfig.plugins ?? []), tailwindcss()];
+		// The library's declaration bundler has no job in a docs build, and run over
+		// the stories it trips on symbols the library entry never reaches.
+		const plugins = (viteConfig.plugins ?? []).flat().filter((plugin) => {
+			const name = plugin && typeof plugin === "object" && "name" in plugin ? plugin.name : "";
+			return name !== "vite:dts";
+		});
+		viteConfig.plugins = [...plugins, tailwindcss()];
 		viteConfig.resolve = {
 			...viteConfig.resolve,
 			alias: {
