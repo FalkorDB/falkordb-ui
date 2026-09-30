@@ -1,43 +1,50 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { Badge } from '../packages/ui/src/components/ui/badge'
+import type { Meta, StoryObj } from "@storybook/react";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 
-const meta: Meta<typeof Badge> = {
-  title: 'UI/Badge',
-  component: Badge,
-  argTypes: {
-    variant: {
-      control: 'select',
-      options: ['default', 'secondary', 'destructive', 'outline'],
-    },
-  },
-}
+import { Badge } from "@/components/badge";
 
-export default meta
-type Story = StoryObj<typeof Badge>
+const meta = {
+	title: "Primitives/Badge",
+	component: Badge,
+	tags: ["autodocs"],
+	argTypes: {
+		variant: {
+			control: "select",
+			options: ["default", "secondary", "outline", "destructive", "success", "warning"],
+		},
+	},
+	args: { children: "Person" },
+} satisfies Meta<typeof Badge>;
 
-export const Default: Story = {
-  args: { children: 'Badge' },
-}
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const Secondary: Story = {
-  args: { children: 'Secondary', variant: 'secondary' },
-}
+export const Default: Story = {};
 
-export const Destructive: Story = {
-  args: { children: 'Destructive', variant: 'destructive' },
-}
+export const Variants: Story = {
+	render: (args) => (
+		<div className="flex flex-wrap items-center gap-2">
+			<Badge {...args} variant="default" />
+			<Badge {...args} variant="secondary" />
+			<Badge {...args} variant="outline" />
+			<Badge {...args} variant="destructive" />
+			<Badge {...args} variant="success" />
+			<Badge {...args} variant="warning" />
+		</div>
+	),
+};
 
-export const Outline: Story = {
-  args: { children: 'Outline', variant: 'outline' },
-}
-
-export const AllVariants: Story = {
-  render: () => (
-    <div className="flex flex-wrap gap-4">
-      <Badge variant="default">Default</Badge>
-      <Badge variant="secondary">Secondary</Badge>
-      <Badge variant="destructive">Destructive</Badge>
-      <Badge variant="outline">Outline</Badge>
-    </div>
-  ),
-}
+export const WithIcon: Story = {
+	render: () => (
+		<div className="flex flex-wrap items-center gap-2">
+			<Badge variant="success">
+				<CircleCheck />
+				Connected
+			</Badge>
+			<Badge variant="warning">
+				<TriangleAlert />
+				Read-only
+			</Badge>
+		</div>
+	),
+};

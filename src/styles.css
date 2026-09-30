@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import "./theme/theme.css";
+
+/* Tailwind only emits the utilities it can see, and at publish time the
+   consumer's source is not available — so scan our own components. */
+@source "./";

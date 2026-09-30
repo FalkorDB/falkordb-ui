@@ -1,78 +1,79 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { Button } from '../packages/ui/src/components/ui/button'
-import { Mail } from 'lucide-react'
+import type { Meta, StoryObj } from "@storybook/react";
+import { Download, Trash2 } from "lucide-react";
 
-const meta: Meta<typeof Button> = {
-  title: 'UI/Button',
-  component: Button,
-  argTypes: {
-    variant: {
-      control: 'select',
-      options: ['default', 'destructive', 'outline', 'secondary', 'ghost', 'link'],
-    },
-    size: {
-      control: 'select',
-      options: ['default', 'sm', 'lg', 'icon'],
-    },
-  },
-}
+import { Button } from "@/components/button";
 
-export default meta
-type Story = StoryObj<typeof Button>
+const meta = {
+	title: "Primitives/Button",
+	component: Button,
+	tags: ["autodocs"],
+	argTypes: {
+		variant: {
+			control: "select",
+			options: ["default", "secondary", "outline", "ghost", "destructive", "link"],
+		},
+		size: { control: "select", options: ["sm", "default", "lg", "icon"] },
+	},
+	args: { children: "Run query" },
+} satisfies Meta<typeof Button>;
 
-export const Default: Story = {
-  args: { children: 'Button' },
-}
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const Destructive: Story = {
-  args: { children: 'Delete', variant: 'destructive' },
-}
+export const Default: Story = {};
 
-export const Outline: Story = {
-  args: { children: 'Outline', variant: 'outline' },
-}
+export const Variants: Story = {
+	render: (args) => (
+		<div className="flex flex-wrap items-center gap-3">
+			<Button {...args} variant="default" />
+			<Button {...args} variant="secondary" />
+			<Button {...args} variant="outline" />
+			<Button {...args} variant="ghost" />
+			<Button {...args} variant="destructive" />
+			<Button {...args} variant="link" />
+		</div>
+	),
+};
 
-export const Secondary: Story = {
-  args: { children: 'Secondary', variant: 'secondary' },
-}
-
-export const Ghost: Story = {
-  args: { children: 'Ghost', variant: 'ghost' },
-}
-
-export const Link: Story = {
-  args: { children: 'Link', variant: 'link' },
-}
-
-export const Small: Story = {
-  args: { children: 'Small', size: 'sm' },
-}
-
-export const Large: Story = {
-  args: { children: 'Large', size: 'lg' },
-}
+export const Sizes: Story = {
+	render: (args) => (
+		<div className="flex flex-wrap items-center gap-3">
+			<Button {...args} size="sm" />
+			<Button {...args} size="default" />
+			<Button {...args} size="lg" />
+			<Button {...args} size="icon" aria-label="Download">
+				<Download />
+			</Button>
+		</div>
+	),
+};
 
 export const WithIcon: Story = {
-  render: () => (
-    <Button>
-      <Mail /> Login with Email
-    </Button>
-  ),
-}
+	args: {
+		variant: "destructive",
+		children: (
+			<>
+				<Trash2 />
+				Delete graph
+			</>
+		),
+	},
+};
+
+export const Loading: Story = {
+	args: { isLoading: true },
+};
 
 export const Disabled: Story = {
-  args: { children: 'Disabled', disabled: true },
-}
+	args: { disabled: true },
+};
 
-export const AllVariants: Story = {
-  render: () => (
-    <div className="flex flex-wrap gap-4">
-      <Button variant="default">Default</Button>
-      <Button variant="destructive">Destructive</Button>
-      <Button variant="outline">Outline</Button>
-      <Button variant="secondary">Secondary</Button>
-      <Button variant="ghost">Ghost</Button>
-      <Button variant="link">Link</Button>
-    </div>
-  ),
-}
+/** Icon-only buttons should always carry a tooltip. */
+export const IconWithTooltip: Story = {
+	args: {
+		size: "icon",
+		variant: "ghost",
+		tooltip: "Export graph as CSV",
+		children: <Download />,
+	},
+};

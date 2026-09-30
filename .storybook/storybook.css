@@ -1,5 +1,4 @@
-@import '../packages/ui/src/theme/tokens.css';
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Storybook-only stylesheet: the published CSS must not carry utilities that
+   only ever appear in stories, so scan them here instead of in src/styles.css. */
+@import "../src/styles.css";
+@source "../stories";

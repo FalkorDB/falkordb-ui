@@ -1,32 +1,38 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { Input } from '../packages/ui/src/components/ui/input'
-import { Label } from '../packages/ui/src/components/ui/label'
+import type { Meta, StoryObj } from "@storybook/react";
 
-const meta: Meta<typeof Input> = {
-  title: 'UI/Input',
-  component: Input,
-}
+import { Input } from "@/components/input";
 
-export default meta
-type Story = StoryObj<typeof Input>
+const meta = {
+	title: "Primitives/Input",
+	component: Input,
+	tags: ["autodocs"],
+	args: { placeholder: "Graph name" },
+	decorators: [
+		(Story) => (
+			<div className="max-w-sm">
+				<Story />
+			</div>
+		),
+	],
+} satisfies Meta<typeof Input>;
 
-export const Default: Story = {
-  args: { placeholder: 'Enter text...' },
-}
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const WithLabel: Story = {
-  render: () => (
-    <div className="grid w-full max-w-sm gap-1.5">
-      <Label htmlFor="email">Email</Label>
-      <Input type="email" id="email" placeholder="Email" />
-    </div>
-  ),
-}
+export const Default: Story = {};
+
+export const WithValue: Story = {
+	args: { defaultValue: "social-network" },
+};
+
+export const Password: Story = {
+	args: { type: "password", defaultValue: "hunter2" },
+};
+
+export const Invalid: Story = {
+	args: { "aria-invalid": true, defaultValue: "not a valid name" },
+};
 
 export const Disabled: Story = {
-  args: { placeholder: 'Disabled', disabled: true },
-}
-
-export const File: Story = {
-  args: { type: 'file' },
-}
+	args: { disabled: true, defaultValue: "read-only" },
+};

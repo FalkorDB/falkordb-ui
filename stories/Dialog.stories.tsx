@@ -1,44 +1,72 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { Button } from '../packages/ui/src/components/ui/button'
+import type { Meta, StoryObj } from "@storybook/react";
+
+import { Button } from "@/components/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '../packages/ui/src/components/ui/dialog'
-import { Input } from '../packages/ui/src/components/ui/input'
-import { Label } from '../packages/ui/src/components/ui/label'
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/dialog";
+import { Input } from "@/components/input";
 
-const meta: Meta = {
-  title: 'UI/Dialog',
-}
+const meta = {
+	title: "Primitives/Dialog",
+	component: Dialog,
+	tags: ["autodocs"],
+} satisfies Meta<typeof Dialog>;
 
-export default meta
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const Default: StoryObj = {
-  render: () => (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="outline">Open Dialog</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit Profile</DialogTitle>
-          <DialogDescription>Make changes to your profile here.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">Name</Label>
-            <Input id="name" defaultValue="FalkorDB" className="col-span-3" />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button type="submit">Save changes</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  ),
-}
+export const Default: Story = {
+	render: (args) => (
+		<Dialog {...args}>
+			<DialogTrigger asChild>
+				<Button>Create graph</Button>
+			</DialogTrigger>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>Create a graph</DialogTitle>
+					<DialogDescription>
+						Names must be unique per connection and cannot be changed later.
+					</DialogDescription>
+				</DialogHeader>
+				<Input placeholder="Graph name" />
+				<DialogFooter>
+					<DialogClose asChild>
+						<Button variant="ghost">Cancel</Button>
+					</DialogClose>
+					<Button>Create</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	),
+};
+
+export const Destructive: Story = {
+	render: (args) => (
+		<Dialog {...args}>
+			<DialogTrigger asChild>
+				<Button variant="destructive">Delete graph</Button>
+			</DialogTrigger>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>Delete social-network?</DialogTitle>
+					<DialogDescription>
+						This permanently removes 114,342 nodes and 291,880 relationships. It cannot be undone.
+					</DialogDescription>
+				</DialogHeader>
+				<DialogFooter>
+					<DialogClose asChild>
+						<Button variant="ghost">Cancel</Button>
+					</DialogClose>
+					<Button variant="destructive">Delete</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	),
+};

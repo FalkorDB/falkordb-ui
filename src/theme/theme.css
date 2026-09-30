@@ -1,0 +1,168 @@
+/**
+ * FalkorDB design tokens.
+ *
+ * Import this directly when you are on Tailwind CSS v4 and want to build your
+ * own utilities from the same palette:
+ *
+ *   @import "tailwindcss";
+ *   @import "@falkordb/ui/theme.css";
+ *
+ * Otherwise import the prebuilt `@falkordb/ui/styles.css`, which already
+ * includes everything below.
+ *
+ * Palette is derived from falkordb-browser so products stay visually aligned.
+ */
+
+/* Tailwind v4 dropped the built-in enter/exit utilities the components rely on. */
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+	--background: hsl(0 0% 100%);
+	--foreground: hsl(0 0% 10%);
+
+	--card: hsl(0 0% 100%);
+	--card-foreground: hsl(0 0% 10%);
+
+	--popover: hsl(0 0% 100%);
+	--popover-foreground: hsl(0 0% 10%);
+
+	--primary: hsl(247 100% 70%);
+	--primary-foreground: hsl(0 0% 100%);
+
+	--secondary: hsl(0 0% 95%);
+	--secondary-foreground: hsl(0 0% 10%);
+
+	--muted: hsl(0 0% 95%);
+	--muted-foreground: hsl(0 0% 40%);
+
+	--accent: hsl(247 100% 96%);
+	--accent-foreground: hsl(247 60% 30%);
+
+	--destructive: hsl(0 100% 66%);
+	--destructive-foreground: hsl(0 0% 100%);
+
+	--success: hsl(142 71% 45%);
+	--success-foreground: hsl(0 0% 100%);
+
+	--warning: hsl(45 93% 40%);
+	--warning-foreground: hsl(0 0% 100%);
+
+	--border: hsl(0 0% 88%);
+	--input: hsl(0 0% 88%);
+	--ring: hsl(247 100% 70%);
+
+	--brand-coral: #ec806c;
+	--brand-orchid: #b66ebd;
+	--brand-violet: #7568f2;
+	--brand-gradient: linear-gradient(
+		90deg,
+		var(--brand-coral) 0%,
+		var(--brand-orchid) 43.41%,
+		var(--brand-violet) 100%
+	);
+
+	--radius: 0.5rem;
+
+	/* Consumers that already load the FalkorDB webfonts pick them up for free;
+	   everyone else falls back to the system stack. */
+	--font-sans: "HyperlegibleSans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dark {
+	--background: hsl(0 0% 10%);
+	--foreground: hsl(0 0% 100%);
+
+	--card: hsl(0 0% 14.1%);
+	--card-foreground: hsl(0 0% 100%);
+
+	--popover: hsl(0 0% 14.1%);
+	--popover-foreground: hsl(0 0% 100%);
+
+	--primary: hsl(247 100% 70%);
+	--primary-foreground: hsl(0 0% 100%);
+
+	--secondary: hsl(0 0% 14.1%);
+	--secondary-foreground: hsl(0 0% 100%);
+
+	--muted: hsl(0 0% 18%);
+	--muted-foreground: hsl(0 0% 65%);
+
+	--accent: hsl(247 30% 20%);
+	--accent-foreground: hsl(247 100% 85%);
+
+	--destructive: hsl(0 100% 66%);
+	--destructive-foreground: hsl(0 0% 100%);
+
+	--success: hsl(144 61% 40%);
+	--success-foreground: hsl(0 0% 100%);
+
+	--warning: hsl(48 96% 53%);
+	--warning-foreground: hsl(0 0% 10%);
+
+	--border: hsl(0 0% 26%);
+	--input: hsl(0 0% 26%);
+	--ring: hsl(247 100% 70%);
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+
+	--color-success: var(--success);
+	--color-success-foreground: var(--success-foreground);
+
+	--color-warning: var(--warning);
+	--color-warning-foreground: var(--warning-foreground);
+
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+
+	--color-brand-coral: var(--brand-coral);
+	--color-brand-orchid: var(--brand-orchid);
+	--color-brand-violet: var(--brand-violet);
+
+	--font-sans: var(--font-sans);
+	--font-mono: var(--font-mono);
+
+	--radius-sm: calc(var(--radius) - 2px);
+	--radius-md: var(--radius);
+	--radius-lg: calc(var(--radius) + 2px);
+	--radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+	* {
+		border-color: var(--border);
+	}
+
+	body {
+		background-color: var(--background);
+		color: var(--foreground);
+		font-family: var(--font-sans);
+	}
+}
