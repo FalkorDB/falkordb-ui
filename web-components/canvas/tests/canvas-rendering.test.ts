@@ -646,7 +646,8 @@ describe("link rendering", () => {
       node.y = i === 2 ? 40 : 0;
     });
 
-    instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+    // Above largeGraph.lowZoomThreshold (1), where arrowheads are skipped.
+    instance.callbacks.onZoom?.({ k: 2, x: 0, y: 0 });
 
     const plainCtx = createCtxSpy();
     instance.callbacks.linkCanvasObject!(graphData.links[0], plainCtx, 1);
