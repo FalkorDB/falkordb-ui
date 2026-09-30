@@ -6,6 +6,12 @@
  * page already loads "Inter", the widget will pick it up automatically.
  */
 
+/* FalkorDB products draw no focus border or outline on anything. */
+*:focus,
+*:focus-visible {
+  outline: none;
+}
+
 :host {
   all: initial;
   color-scheme: light dark;
@@ -362,11 +368,6 @@
   font-size: 14px;
   padding: 10px 12px;
   outline: none;
-  transition: border-color 200ms ease, box-shadow 200ms ease;
-}
-.fdb-input:focus {
-  border-color: var(--fdb-accent);
-  box-shadow: 0 0 0 3px var(--fdb-accent-glow);
 }
 .fdb-input::placeholder { color: var(--fdb-text-muted); }
 .fdb-input--textarea { resize: vertical; min-height: 80px; }
@@ -649,10 +650,7 @@ a.fdb-sources__item--link:hover {
 }
 a.fdb-sources__item--link:focus-visible {
   color: var(--fdb-accent);
-  border-color: var(--fdb-accent);
   background: rgba(116, 102, 255, 0.12);
-  outline: 2px solid var(--fdb-accent);
-  outline-offset: 2px;
 }
 
 /* ── Like/dislike feedback ──────────────────────── */

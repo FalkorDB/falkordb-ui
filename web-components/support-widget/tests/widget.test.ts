@@ -223,3 +223,14 @@ describe("ES module build", () => {
     expect(document.getElementById("fdb-widget-root")).toBeNull();
   });
 });
+
+describe("focus styling", () => {
+  it("draws no focus outline, ring or glow", () => {
+    stubFetch({});
+    unmount = mount({ api: API, graph: "docs" });
+    const css = root()!.querySelector("style")!.textContent!.replace(/\s+/g, " ");
+
+    expect(css).toContain("*:focus, *:focus-visible { outline: none; }");
+    expect(css).not.toMatch(/:focus[^{]*\{[^}]*(box-shadow|outline: \d)/);
+  });
+});

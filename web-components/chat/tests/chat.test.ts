@@ -407,3 +407,13 @@ describe('conversation features', () => {
     await vi.waitFor(() => expect(onQuery).toHaveBeenCalled())
   })
 })
+
+describe('focus styling', () => {
+  it('draws no focus outline inside the shadow root', () => {
+    const chat = mount()
+    const css = shadow(chat).querySelector('style')!.textContent!
+
+    expect(css).toContain('*:focus, *:focus-visible { outline: none; }')
+    expect(css).not.toMatch(/:focus[^{]*\{[^}]*(box-shadow|outline: \d)/)
+  })
+})

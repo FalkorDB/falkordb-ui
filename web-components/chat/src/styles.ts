@@ -33,6 +33,9 @@ export const CHAT_STYLES = `
 
   *, *::before, *::after { box-sizing: inherit; }
 
+  /* FalkorDB products draw no focus border or outline on anything. */
+  *:focus, *:focus-visible { outline: none; }
+
   .fc-msg-error {
     margin: 0 0 1.5rem;
     padding: 0.625rem 0.875rem;
