@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import preact from "@preact/preset-vite";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const pkg = JSON.parse(readFileSync(fileURLToPath(new URL("./package.json", import.meta.url)), "utf8")) as {
 	version: string;
@@ -33,6 +33,14 @@ export default defineConfig(({ mode }) => {
 		define: {
 			"process.env.NODE_ENV": JSON.stringify("production"),
 			__WIDGET_VERSION__: JSON.stringify(pkg.version),
+		},
+		test: {
+			environment: "jsdom",
+			// The widget inlines its stylesheet into the shadow root.
+			css: true,
+			include: ["tests/**/*.test.{ts,tsx}"],
+			restoreMocks: true,
+			unstubGlobals: true,
 		},
 	};
 });
