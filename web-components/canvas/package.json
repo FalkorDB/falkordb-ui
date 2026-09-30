@@ -1,0 +1,77 @@
+{
+  "name": "@falkordb/canvas",
+  "version": "0.2.8",
+  "description": "A standalone web component for visualizing FalkorDB graphs using force-directed layouts",
+  "keywords": [
+    "falkordb",
+    "graph",
+    "visualization",
+    "web-component",
+    "force-directed",
+    "canvas"
+  ],
+  "author": "FalkorDB",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FalkorDB/falkordb-ui.git",
+    "directory": "web-components/canvas"
+  },
+  "bugs": {
+    "url": "https://github.com/FalkorDB/falkordb-ui/issues"
+  },
+  "homepage": "https://github.com/FalkorDB/falkordb-ui/tree/main/web-components/canvas#readme",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint .",
+    "test": "vitest run --environment jsdom",
+    "test:watch": "vitest --environment jsdom",
+    "example": "npm run build && python3 -m http.server 8080",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@types/react": "^18.3.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "d3": "^7.9.0",
+    "force-graph": "^1.44.4"
+  },
+  "devDependencies": {
+    "@types/d3": "^7.4.3",
+    "@types/react": "^19.2.7",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint": "^10.0.2",
+    "jsdom": "^30.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.0"
+  }
+}

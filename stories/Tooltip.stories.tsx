@@ -38,7 +38,7 @@ export const Sides: Story = {
 			{(["top", "right", "bottom", "left"] as const).map((side) => (
 				<Tooltip key={side}>
 					<TooltipTrigger asChild>
-						<Button variant="outline">{side}</Button>
+						<Button variant="secondary">{side}</Button>
 					</TooltipTrigger>
 					<TooltipContent side={side}>Opens on the {side}</TooltipContent>
 				</Tooltip>

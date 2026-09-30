@@ -44,6 +44,15 @@ Use this if you want to build your own utilities from the same tokens.
 @source "../node_modules/@falkordb/ui/dist";
 ```
 
+### Base rules only
+
+Both options include FalkorDB's base rules: nothing draws a focus outline. An
+app that keeps its own design tokens can import only those rules:
+
+```css
+@import "@falkordb/ui/base.css";
+```
+
 ### Dark mode
 
 The theme is driven by a `dark` class on an ancestor element. Either manage it
@@ -106,14 +115,23 @@ Plus the `cn()` class-merging helper.
 
 ### Buttons and tooltips
 
+`Button` comes in FalkorDB's looks:
+
+- **`variant`:** `default` (filled primary), `secondary`, `cancel` and `destructive` (outlined), `link`, and `none`.
+- **`size`:** `default`, `wide` (for the outlined pair) and `none`.
+
+`none` on both axes leaves the geometry to your own classes.
+
 Icon-only buttons need an accessible name. Pass `tooltip` and the button supplies
 its own `TooltipProvider`, so it works without any setup in the surrounding tree:
 
 ```tsx
-<Button size="icon" variant="ghost" tooltip="Export graph as CSV">
+<Button variant="none" size="none" className="rounded-md p-2 hover:bg-accent" tooltip="Export graph as CSV">
 	<Download />
 </Button>
 ```
+
+`isLoading` swaps the content for a spinner, and `label` adds truncating trailing text. Both also work with `asChild`, where they render inside your element.
 
 ### Toasts
 
@@ -147,6 +165,16 @@ component:
 
 Each surface and intent token has a matching `-foreground` pair.
 
+## Web components
+
+Self-contained components for any framework, or none at all. Each one renders in its own shadow DOM and ships as a separate npm package from [`web-components/`](./web-components):
+
+| Package                                                       | Element             | What it is                                                                    |
+| ------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------- |
+| [`@falkordb/canvas`](./web-components/canvas)                 | `<falkordb-canvas>` | Force-directed graph canvas                                                   |
+| [`@falkordb/ui-chat`](./web-components/chat)                  | `<falkordb-chat>`   | Chat panel. The host supplies the backend call.                               |
+| [`@falkordb/support-widget`](./web-components/support-widget) | floating widget     | Support chat answered by a GraphRAG-Server graph, with a Contact Support form |
+
 ## Development
 
 ```bash
@@ -162,10 +190,26 @@ npm run format
 
 Storybook is published from `main` to GitHub Pages.
 
+The repository is an npm workspace. The root is `@falkordb/ui`, and each folder in `web-components/` is its own package with its own build, lint and test scripts:
+
+```bash
+npm run build:web-components
+npm run test:web-components
+npm run build -w web-components/canvas   # a single package
+```
+
 ## Releasing
 
-Publishing runs on GitHub Release creation with a `v<version>` tag, using npm
-OIDC trusted publishing — no tokens in the repo.
+Publishing runs when a GitHub Release is created and uses npm OIDC trusted publishing, so the repository holds no npm tokens. The release tag chooses the package:
+
+| Tag                         | Publishes                  |
+| --------------------------- | -------------------------- |
+| `v<version>`                | `@falkordb/ui`             |
+| `canvas-v<version>`         | `@falkordb/canvas`         |
+| `chat-v<version>`           | `@falkordb/ui-chat`        |
+| `support-widget-v<version>` | `@falkordb/support-widget` |
+
+Each package must list this repository's `release.yml` as a trusted publisher on npmjs.com.
 
 ## License
 
