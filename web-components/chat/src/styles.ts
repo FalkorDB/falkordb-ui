@@ -33,6 +33,17 @@ export const CHAT_STYLES = `
 
   *, *::before, *::after { box-sizing: inherit; }
 
+  .fc-msg-error {
+    margin: 0 0 1.5rem;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--fc-destructive);
+    border-radius: var(--fc-radius);
+    color: var(--fc-destructive);
+    font-size: 0.875rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
   .fc-conversation {
     flex: 1;
     overflow-y: auto;

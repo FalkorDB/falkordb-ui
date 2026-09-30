@@ -1,7 +1,7 @@
 // src/web-components/chat/chat.ts
 
 import { CHAT_STYLES } from './styles.js'
-import type { ChatConfig, ChatMessageData, ConversationData, SuggestionItem, QueryStrategy, MessageRenderHelpers } from './types.js'
+import type { ChatConfig, ChatMessageData, ConversationData, SuggestionItem, QueryStrategy, MessageRenderHelpers, NewChatMessage, QueryResult } from './types.js'
 import {
   getGreeting, formatRelativeTime, annotateEntities, annotateSources, renderMarkdown,
   loadConversations, saveConversations, getActiveId, setActiveId,
@@ -45,7 +45,7 @@ export class FalkorDBChat extends HTMLElement {
       this.render()
       this.bindEvents()
     }
-    this.loadState()
+    if (this.persists()) this.loadState()
     this.refresh()
   }
 
@@ -98,7 +98,7 @@ export class FalkorDBChat extends HTMLElement {
     const currentId = this.conversationId || Date.now().toString()
     if (!this.conversationId) {
       this.conversationId = currentId
-      setActiveId(currentId, this.namespace)
+      if (this.persists()) setActiveId(currentId, this.namespace)
     }
     this.messages = [...this.messages, msg]
     this.persistMessages(currentId, this.messages.filter(m => !m.isStreaming))
@@ -110,10 +110,37 @@ export class FalkorDBChat extends HTMLElement {
     return [...this.messages]
   }
 
+  /**
+   * Replace the conversation, e.g. with one the host loaded from its own
+   * storage. A question still in flight is aborted, so its answer can't land
+   * in the conversation that replaced it. Does not fire `falkordb-chat-change`.
+   */
+  setMessages(messages: readonly ChatMessageData[]) {
+    this.abortController?.abort()
+    this.abortController = null
+    this.isProcessing = false
+    this.isStreaming = false
+    this.messages = messages.map(m => ({ ...m, isStreaming: false }))
+    this.conversationId = this.messages.length > 0 ? this.conversationId || Date.now().toString() : null
+    this.refresh()
+  }
+
   // ── Internal ────────────────────────────────────────────────────────────
 
   private esc(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  }
+
+  private persists(): boolean {
+    return this.config?.persist !== false
+  }
+
+  private toMessage(msg: NewChatMessage, offset: number): ChatMessageData {
+    return {
+      ...msg,
+      id: msg.id ?? `${Date.now()}-${offset}`,
+      timestamp: msg.timestamp ?? new Date().toISOString(),
+    }
   }
 
   private getUserName(): string {
@@ -141,6 +168,10 @@ export class FalkorDBChat extends HTMLElement {
   }
 
   private persistMessages(id: string, msgs: ChatMessageData[]) {
+    this.dispatchEvent(new CustomEvent('falkordb-chat-change', {
+      bubbles: true, composed: true, detail: { messages: [...msgs] }
+    }))
+    if (!this.persists()) return
     const convos = loadConversations(this.namespace)
     const idx = convos.findIndex(c => c.id === id)
     const title = msgs.find(m => m.type === 'user')?.content.slice(0, 50) || 'New Chat'
@@ -162,7 +193,8 @@ export class FalkorDBChat extends HTMLElement {
     wrapper.className = 'fc-wrapper'
     wrapper.style.cssText = 'display:flex;flex-direction:column;height:100%;width:100%;position:relative;'
     wrapper.innerHTML = `
-      <div class="fc-conversation"></div>
+      <slot name="header"></slot>
+      <div class="fc-conversation" part="conversation"></div>
       <button class="fc-scroll-btn" aria-label="Scroll to bottom">↓ Latest</button>
       <div class="fc-bottom">
         <div class="fc-input-row">
@@ -186,6 +218,7 @@ export class FalkorDBChat extends HTMLElement {
           </div>
         </div>
       </div>
+      <slot name="footer"></slot>
     `
     this.shadow.appendChild(wrapper)
 
@@ -374,6 +407,7 @@ export class FalkorDBChat extends HTMLElement {
     }
 
     // ── Custom message type → delegate to registered renderer ────────────
+    // Checked before the built-in error bubble so a product can restyle it.
     if (msg.type !== 'ai' && this.config?.messageRenderers?.[msg.type]) {
       const renderer = this.config.messageRenderers[msg.type]
       const helpers: MessageRenderHelpers = {
@@ -382,6 +416,16 @@ export class FalkorDBChat extends HTMLElement {
       }
       const el = renderer(msg, helpers)
       el.dataset.msgId = msg.id
+      return el
+    }
+
+    // ── Error message (built-in) ─────────────────────────────────────────
+    if (msg.type === 'error') {
+      const el = document.createElement('div')
+      el.className = 'fc-msg-error'
+      el.setAttribute('role', 'alert')
+      el.dataset.msgId = msg.id
+      el.textContent = msg.content
       return el
     }
 
@@ -617,6 +661,18 @@ export class FalkorDBChat extends HTMLElement {
   private async handleSend(text: string) {
     if (this.isProcessing || !this.config) return
 
+    if (this.config.beforeSend) {
+      // Block a second send while the host decides.
+      this.isProcessing = true
+      let allowed = false
+      try {
+        allowed = await this.config.beforeSend(text)
+      } finally {
+        this.isProcessing = false
+      }
+      if (!allowed) return
+    }
+
     this.isProcessing = true
     this.isStreaming = false
     this.abortController = new AbortController()
@@ -624,7 +680,7 @@ export class FalkorDBChat extends HTMLElement {
     const currentId = this.conversationId || Date.now().toString()
     if (!this.conversationId) {
       this.conversationId = currentId
-      setActiveId(currentId, this.namespace)
+      if (this.persists()) setActiveId(currentId, this.namespace)
     }
 
     const userMsg: ChatMessageData = {
@@ -673,7 +729,7 @@ export class FalkorDBChat extends HTMLElement {
 
     const currentAbort = this.abortController
 
-    const respond = (result: import('./types.js').QueryResult) => {
+    const respond = (result: QueryResult) => {
       if (currentAbort?.signal.aborted) return
       const noContextPatterns = [
         /does not provide/i,
@@ -685,10 +741,12 @@ export class FalkorDBChat extends HTMLElement {
       const answerLooksEmpty = noContextPatterns.some(p => p.test(result.answer))
       const effectiveGraph = answerLooksEmpty ? null : (result.explainGraph ?? null)
 
+      const leading = (result.messages ?? []).map((m, i) => this.toMessage(m, i))
       const aiMsg: ChatMessageData = {
         id: aiMsgId,
-        type: 'ai',
+        type: result.type ?? 'ai',
         content: result.answer,
+        data: result.data,
         context: result.context,
         explainGraph: effectiveGraph,
         sourceMap: result.sourceMap,
@@ -699,7 +757,8 @@ export class FalkorDBChat extends HTMLElement {
       }
 
       const withUser = this.messages.filter(m => m.id !== aiMsgId)
-      this.messages = [...withUser, aiMsg]
+      const hasAnswer = result.answer !== '' || leading.length === 0
+      this.messages = [...withUser, ...leading, ...(hasAnswer ? [aiMsg] : [])]
       this.isProcessing = false
       this.isStreaming = false
       this.persistMessages(currentId, this.messages)
@@ -714,15 +773,16 @@ export class FalkorDBChat extends HTMLElement {
     try {
       await this.config.onQuery(text, history, respond, streamToken, this.abortController.signal, this.strategy)
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return
+      if ((err as Error).name === 'AbortError' || currentAbort?.signal.aborted) return
       const errMsg: ChatMessageData = {
-        id: aiMsgId, type: 'ai',
+        id: aiMsgId, type: 'error',
         content: `Failed to process query: ${(err as Error).message}`,
         isStreaming: false, timestamp: new Date().toISOString(),
       }
       this.messages = [...this.messages.filter(m => m.id !== aiMsgId), errMsg]
       this.isProcessing = false
       this.isStreaming = false
+      this.persistMessages(currentId, this.messages)
       this.refresh()
     }
   }
@@ -748,7 +808,10 @@ export class FalkorDBChat extends HTMLElement {
     this.messages = []
     this.isProcessing = false
     this.isStreaming = false
-    setActiveId(null, this.namespace)
+    if (this.persists()) setActiveId(null, this.namespace)
+    this.dispatchEvent(new CustomEvent('falkordb-chat-change', {
+      bubbles: true, composed: true, detail: { messages: [] }
+    }))
     this.config?.onNewChat?.()
     this.refresh()
   }

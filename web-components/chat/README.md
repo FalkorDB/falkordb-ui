@@ -137,7 +137,35 @@ interface QueryResult {
   context?: ContextItem[]                           // enables "Graph retrieval path" sources panel
   explainGraph?: ExplainGraph                       // enables clickable entity annotations in the answer
   sourceMap?: Record<string, SourceMapEntry>        // maps [N] citation markers to sources
+  type?: string                                     // answer bubble type: 'ai' (default), 'error', or a custom renderer type
+  data?: Record<string, unknown>                    // extra payload stored on the answer message
+  messages?: NewChatMessage[]                       // messages added before the answer, e.g. the generated query
 }
+```
+
+An answer can be more than one bubble. Put the extra bubbles in `messages`. They are added before the answer, and each one gets an `id` and a `timestamp` if you leave them out. If `answer` is `''` and `messages` is not empty, no answer bubble is added:
+
+```ts
+respond({
+  answer: data.answer ?? '',
+  data: { confidence: data.confidence },
+  messages: data.query ? [{ type: 'cypher-query', content: data.query }] : [],
+})
+```
+
+If `onQuery` throws, or you respond with `type: 'error'`, the component shows the built-in error bubble (`role="alert"`).
+
+#### Host-owned storage and pre-send checks
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `persist` | `true` | Set to `false` when the host stores conversations itself. The component then never reads or writes localStorage. |
+| `beforeSend` | — | `(question) => boolean \| Promise<boolean>`. Return `false` to keep the question in the input and send nothing, for example when an API key is missing. |
+
+```ts
+chat.setConfig({ persist: false, onQuery })
+chat.setMessages(loadFromMyStore())
+chat.addEventListener('falkordb-chat-change', (e) => saveToMyStore(e.detail.messages))
 ```
 
 ### `chat.setSuggestions(suggestions)`
@@ -205,11 +233,15 @@ const messages = chat.getMessages()
 console.log(messages.length)
 ```
 
+### `chat.setMessages(messages)`
+
+Replaces the conversation, for example with one loaded from host storage. If a question is still waiting for an answer, it is aborted: its `signal` fires and a late `respond()` is ignored. This keeps an answer from landing in the conversation that replaced it. It does not fire `falkordb-chat-change`.
+
 ---
 
 ## Custom Message Renderers
 
-The `messageRenderers` config option lets each product define how to render its unique message types. The chat component handles `'user'` and `'ai'` internally — everything else is delegated.
+The `messageRenderers` config option lets each product define how to render its unique message types. The chat component handles `'user'`, `'ai'` and `'error'` internally. Everything else is delegated, and a registered `'error'` renderer replaces the built-in one.
 
 ```ts
 chat.setConfig({
@@ -271,6 +303,7 @@ The component fires DOM CustomEvents that bubble up through the shadow DOM (`com
 | `falkordb-chat-response` | `{ message, graph }` | AI response is complete |
 | `falkordb-chat-entity-click` | `{ entityId, graph }` | User clicks an annotated entity in the answer |
 | `falkordb-chat-source-click` | `{ entry, graph }` | User clicks a citation or source card |
+| `falkordb-chat-change` | `{ messages }` | The conversation changes: a question is sent, an answer lands, a question is stopped, or a new chat starts. Messages that are still streaming are never included. |
 
 Custom renderers can fire their own events via `host.dispatchEvent(...)`.
 
@@ -279,6 +312,21 @@ chat.addEventListener('falkordb-chat-entity-click', (e) => {
   console.log('Entity clicked:', e.detail.entityId)
 })
 ```
+
+---
+
+## Slots
+
+Put host UI inside the component's frame, such as a title bar, a close button, a mode toggle or a usage footer:
+
+```html
+<falkordb-chat>
+  <div slot="header">…</div>
+  <div slot="footer">…</div>
+</falkordb-chat>
+```
+
+The conversation area also has `part="conversation"`, so you can style it with `falkordb-chat::part(conversation)`.
 
 ---
 

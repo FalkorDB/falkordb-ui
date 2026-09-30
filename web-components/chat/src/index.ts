@@ -19,4 +19,15 @@ export type {
   MessageRenderHelpers,
   MessageAction,
   ChatHistoryMessage,
+  NewChatMessage,
+  ChatChangeDetail,
 } from './types.js'
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'falkordb-chat': import('./chat.js').FalkorDBChat
+  }
+  interface HTMLElementEventMap {
+    'falkordb-chat-change': CustomEvent<import('./types.js').ChatChangeDetail>
+  }
+}

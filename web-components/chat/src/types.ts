@@ -46,12 +46,31 @@ export interface SourceMapEntry {
 // ── Query result ──────────────────────────────────────────────────────────
 
 export interface QueryResult {
+  /**
+   * The answer text. An empty answer adds no answer bubble when `messages`
+   * already carries the reply (e.g. a query-only response).
+   */
   answer: string
   queryId?: string | null
   context?: ContextItem[]
   explainGraph?: ExplainGraph | null
   sourceMap?: Record<string, SourceMapEntry> | null
+  /**
+   * Message type of the answer bubble. Defaults to `'ai'`; use `'error'` for
+   * the built-in error bubble, or any type registered in `messageRenderers`.
+   */
+  type?: string
+  /** Extra payload stored on the answer message (see `ChatMessageData.data`). */
+  data?: Record<string, unknown>
+  /**
+   * Messages added before the answer, in order — e.g. a generated query shown
+   * above the answer it produced. `id` and `timestamp` are filled in.
+   */
+  messages?: NewChatMessage[]
 }
+
+/** A message the host adds; the component assigns `id` and `timestamp` when omitted. */
+export type NewChatMessage = Omit<ChatMessageData, 'id' | 'timestamp'> & Partial<Pick<ChatMessageData, 'id' | 'timestamp'>>
 
 export interface ChatHistoryMessage {
   role: 'user' | 'assistant'
@@ -217,6 +236,21 @@ export interface ChatConfig {
    * Defaults to "Ask questions and explore the knowledge in your data".
    */
   emptyStateSubtitle?: string
+
+  /**
+   * Optional: set to `false` when the host owns the conversation storage.
+   * The component then never reads or writes localStorage; load a
+   * conversation with `setMessages()` and save it from the
+   * `falkordb-chat-change` event. Defaults to `true`.
+   */
+  persist?: boolean
+
+  /**
+   * Optional: called before a question is sent. Return `false` to keep the
+   * question in the input and send nothing (e.g. when the host still needs
+   * an API key).
+   */
+  beforeSend?: (question: string) => boolean | Promise<boolean>
 }
 
 // ── Message data ──────────────────────────────────────────────────────────
@@ -224,7 +258,7 @@ export interface ChatConfig {
 export interface ChatMessageData {
   id: string
   /**
-   * Built-in types: `'user'` and `'ai'`.
+   * Built-in types: `'user'`, `'ai'` and `'error'`.
    *
    * Products can use any string (e.g. `'sql-query'`, `'query-result'`,
    * `'confirmation'`, `'ai-steps'`). The chat component will look up a
@@ -251,6 +285,11 @@ export interface ChatMessageData {
    * ```
    */
   data?: Record<string, unknown>
+}
+
+/** `detail` of the `falkordb-chat-change` event, fired when the conversation changes. */
+export interface ChatChangeDetail {
+  messages: ChatMessageData[]
 }
 
 // ── Conversation & bookmarks ──────────────────────────────────────────────
