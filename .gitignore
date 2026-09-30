@@ -4,3 +4,6 @@ storybook-static/
 coverage/
 *.tsbuildinfo
 .DS_Store
+
+# Local embed test pages (see web-components/support-widget/README.md)
+web-components/support-widget/samples/

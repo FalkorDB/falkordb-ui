@@ -1,0 +1,56 @@
+{
+	"name": "@falkordb/support-widget",
+	"version": "0.2.2",
+	"description": "Embeddable FalkorDB support chat widget, answered by a GraphRAG-Server graph",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/FalkorDB/falkordb-ui.git",
+		"directory": "web-components/support-widget"
+	},
+	"keywords": [
+		"falkordb",
+		"chat",
+		"support",
+		"widget",
+		"graphrag",
+		"web-component"
+	],
+	"type": "module",
+	"main": "./dist/support-widget.js",
+	"module": "./dist/support-widget.js",
+	"types": "./dist/index.d.ts",
+	"unpkg": "./dist/widget-chat.js",
+	"jsdelivr": "./dist/widget-chat.js",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/support-widget.js"
+		},
+		"./widget-chat.js": "./dist/widget-chat.js",
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist"
+	],
+	"sideEffects": true,
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	},
+	"scripts": {
+		"build": "vite build && vite build --mode iife && tsc -p tsconfig.build.json",
+		"dev": "vite",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"markdown-it": "^14.3.0",
+		"preact": "^10.29.7"
+	},
+	"devDependencies": {
+		"@preact/preset-vite": "^2.10.6",
+		"@types/markdown-it": "^14.1.2",
+		"typescript": "^5.7.3",
+		"vite": "^6.2.0"
+	}
+}
