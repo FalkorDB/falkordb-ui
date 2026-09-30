@@ -237,3 +237,173 @@ describe('send button', () => {
     expect(send.disabled).toBe(false)
   })
 })
+
+describe('conversation features', () => {
+  it('sends a suggestion when its card is clicked', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const chat = mount({ onQuery })
+    chat.setSuggestions([{ title: 'Overview', question: 'Summarize the graph', category: 'overview' }])
+
+    shadow(chat).querySelector<HTMLButtonElement>('.fc-suggestion-card')!.click()
+
+    await vi.waitFor(() => expect(onQuery).toHaveBeenCalled())
+    expect(onQuery.mock.calls[0]?.[0]).toBe('Summarize the graph')
+  })
+
+  it('streams tokens into the answer before it completes', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const chat = mount({ onQuery })
+    chat.sendMessage('go')
+    await vi.waitFor(() => expect(onQuery).toHaveBeenCalled())
+    const streamToken = onQuery.mock.calls[0]![3]!
+
+    streamToken('Partial *answer*')
+
+    const content = shadow(chat).querySelector('.fc-msg-ai-content')!
+    expect(content.querySelector('em')?.textContent).toBe('answer')
+    expect(content.querySelector('.fc-cursor')).not.toBeNull()
+  })
+
+  it('stops a question in flight and ignores its late answer', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const chat = mount({ onQuery })
+    const { respond, signal } = await ask(chat, onQuery)
+
+    shadow(chat).querySelector<HTMLButtonElement>('[part~="stop-button"]')!.click()
+    respond({ answer: 'too late' })
+
+    expect(signal.aborted).toBe(true)
+    expect(chat.getMessages().at(-1)?.content).toBe('Generation stopped.')
+  })
+
+  it('passes the chosen strategy to onQuery and reports changes', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const onStrategyChange = vi.fn()
+    const chat = mount({
+      onQuery,
+      onStrategyChange,
+      strategyOptions: [
+        { value: 'fast', label: 'Fast' },
+        { value: 'deep', label: 'Deep' },
+      ],
+    })
+    // setConfig does not re-render; a refresh shows the strategy button.
+    chat.setSuggestions([])
+    const options = shadow(chat).querySelectorAll<HTMLButtonElement>('.fc-strategy-option')
+    expect(options).toHaveLength(2)
+
+    options[1]!.click()
+    await ask(chat, onQuery)
+
+    expect(onStrategyChange).toHaveBeenCalledWith('deep')
+    expect(onQuery.mock.calls[0]?.[5]).toBe('deep')
+  })
+
+  it('hides the strategy button without options', () => {
+    const chat = mount()
+    chat.setSuggestions([])
+    expect(shadow(chat).querySelector<HTMLElement>('.fc-strategy-btn')!.style.display).toBe('none')
+  })
+
+  it('reports feedback on answers that carry a query id', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const onFeedback = vi.fn()
+    const chat = mount({ onQuery, onFeedback })
+    const { respond } = await ask(chat, onQuery)
+    respond({ answer: 'rated', queryId: 'q1' })
+
+    shadow(chat).querySelector<HTMLButtonElement>('.fc-thumb-up')!.click()
+
+    expect(onFeedback).toHaveBeenCalledWith('q1', 'positive')
+    expect(chat.getMessages().at(-1)?.feedback).toBe('positive')
+  })
+
+  it('hides feedback, bookmarks and sources when asked to', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const chat = mount({ onQuery, onFeedback: vi.fn(), hideFeedback: true, hideBookmarks: true, hideSources: true })
+    const { respond } = await ask(chat, onQuery)
+    respond({ answer: 'plain', queryId: 'q1', context: [{ content: 'c', score: 1, metadata: { section: 'entity' } }] })
+
+    expect(shadow(chat).querySelector('.fc-feedback-wrap')).toBeNull()
+    expect(shadow(chat).querySelector('.fc-sources')).toBeNull()
+    expect(bubbles(chat, '.fc-toolbar-btn')).toEqual(['Copy'])
+  })
+
+  it('disables the input in read-only mode', () => {
+    const chat = mount()
+    chat.setAttribute('read-only', '')
+
+    const input = shadow(chat).querySelector<HTMLTextAreaElement>('[part~="input"]')!
+    expect(input.disabled).toBe(true)
+    expect(input.placeholder).toBe('Read only mode')
+  })
+
+  it('uses the placeholder attribute', () => {
+    const chat = document.createElement('falkordb-chat')
+    chat.setAttribute('placeholder', 'Ask the graph')
+    document.body.appendChild(chat)
+
+    expect(shadow(chat).querySelector<HTMLTextAreaElement>('[part~="input"]')!.placeholder).toBe('Ask the graph')
+  })
+
+  it('keeps conversations apart per namespace and restores them', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const first = document.createElement('falkordb-chat')
+    first.setAttribute('namespace', 'a')
+    document.body.appendChild(first)
+    first.setConfig({ onQuery })
+    const { respond } = await ask(first, onQuery)
+    respond({ answer: 'in a' })
+
+    const again = document.createElement('falkordb-chat')
+    again.setAttribute('namespace', 'a')
+    document.body.appendChild(again)
+    const other = document.createElement('falkordb-chat')
+    other.setAttribute('namespace', 'b')
+    document.body.appendChild(other)
+
+    expect(again.getMessages().map(m => m.content)).toEqual(['Who knows who?', 'in a'])
+    expect(other.getMessages()).toHaveLength(0)
+  })
+
+  it('starts a new chat and tells the host', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const onNewChat = vi.fn()
+    const chat = mount({ onQuery, onNewChat })
+    const changes: number[] = []
+    chat.addEventListener('falkordb-chat-change', e => changes.push(e.detail.messages.length))
+    const { respond } = await ask(chat, onQuery)
+    respond({ answer: 'done' })
+
+    shadow(chat).querySelector<HTMLButtonElement>('[part~="new-chat-button"]')!.click()
+
+    expect(chat.getMessages()).toHaveLength(0)
+    expect(onNewChat).toHaveBeenCalled()
+    expect(changes.at(-1)).toBe(0)
+  })
+
+  it('fires falkordb-chat-response when an answer lands', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const chat = mount({ onQuery })
+    const responses: string[] = []
+    document.addEventListener('falkordb-chat-response', e => responses.push((e as CustomEvent).detail.message.content), { once: true })
+    const { respond } = await ask(chat, onQuery)
+
+    respond({ answer: 'bubbled' })
+
+    expect(responses).toEqual(['bubbled'])
+  })
+
+  it('sends on Enter but not on Shift+Enter', async () => {
+    const onQuery = vi.fn<OnQuery>()
+    const chat = mount({ onQuery })
+    const input = shadow(chat).querySelector<HTMLTextAreaElement>('[part~="input"]')!
+    input.value = 'line one'
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true }))
+    expect(onQuery).not.toHaveBeenCalled()
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await vi.waitFor(() => expect(onQuery).toHaveBeenCalled())
+  })
+})
