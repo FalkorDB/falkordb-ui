@@ -12,3 +12,6 @@ declare module "*.css?inline" {
 
 // Replaced at build time by Vite `define` (see vite.config.ts).
 declare const __WIDGET_VERSION__: string;
+
+// True only in the self-mounting <script> (IIFE) build (see vite.config.ts).
+declare const __WIDGET_AUTOMOUNT__: boolean;

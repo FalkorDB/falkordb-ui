@@ -209,3 +209,17 @@ describe("widget", () => {
     expect($(".fdb-panel__title")?.textContent).toBe("Acme AI Assistant");
   });
 });
+
+describe("ES module build", () => {
+  it("does not mount itself when a bundler loads it from a <script> chunk", async () => {
+    stubFetch({});
+    const chunk = document.createElement("script");
+    chunk.src = "https://app.test/_next/static/chunks/widget.js";
+    vi.spyOn(document, "currentScript", "get").mockReturnValue(chunk);
+    vi.resetModules();
+
+    await import("../src/index");
+
+    expect(document.getElementById("fdb-widget-root")).toBeNull();
+  });
+});

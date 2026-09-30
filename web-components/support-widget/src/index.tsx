@@ -297,7 +297,7 @@ function autoMount(): void {
   mount();
 }
 
-if (typeof document !== "undefined" && _hostingScript) {
+if (__WIDGET_AUTOMOUNT__ && typeof document !== "undefined" && _hostingScript) {
   if (document.body) {
     autoMount();
   } else {

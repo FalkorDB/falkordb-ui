@@ -33,6 +33,10 @@ export default defineConfig(({ mode }) => {
 		define: {
 			"process.env.NODE_ENV": JSON.stringify("production"),
 			__WIDGET_VERSION__: JSON.stringify(pkg.version),
+			// Only the <script> bundle mounts itself. A bundler may load the ES
+			// build through a classic <script> chunk, where document.currentScript
+			// is set too, and must not get a second, unconfigured widget.
+			__WIDGET_AUTOMOUNT__: JSON.stringify(iife),
 		},
 		test: {
 			environment: "jsdom",
