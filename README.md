@@ -44,6 +44,15 @@ Use this if you want to build your own utilities from the same tokens.
 @source "../node_modules/@falkordb/ui/dist";
 ```
 
+### Base rules only
+
+Both options include FalkorDB's base rules: nothing draws a focus outline. An
+app that keeps its own design tokens can import only those rules:
+
+```css
+@import "@falkordb/ui/base.css";
+```
+
 ### Dark mode
 
 The theme is driven by a `dark` class on an ancestor element. Either manage it
