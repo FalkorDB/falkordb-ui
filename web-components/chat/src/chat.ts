@@ -245,6 +245,7 @@ export class FalkorDBChat extends HTMLElement {
     this.inputEl.addEventListener('input', () => {
       this.inputEl.style.height = 'auto'
       this.inputEl.style.height = `${Math.min(this.inputEl.scrollHeight, 128)}px`
+      this.updateSendButton()
     })
 
     this.sendBtn.addEventListener('click', () => {
@@ -333,13 +334,18 @@ export class FalkorDBChat extends HTMLElement {
 
     this.sendBtn.style.display = this.isStreaming ? 'none' : 'flex'
     this.stopBtn.style.display = this.isStreaming ? 'flex' : 'none'
-    this.sendBtn.disabled = this.isProcessing || this.isReadOnly()
+    this.updateSendButton()
     this.inputEl.disabled = this.isProcessing || this.isReadOnly()
     this.inputEl.placeholder = this.isReadOnly()
       ? 'Read only mode'
       : this.getPlaceholder()
 
     this.updateStrategyUI()
+  }
+
+  // Nothing to send while the input is blank, a question is in flight, or read-only.
+  private updateSendButton() {
+    this.sendBtn.disabled = this.isProcessing || this.isReadOnly() || this.inputEl.value.trim() === ''
   }
 
   private scrollToBottom() {

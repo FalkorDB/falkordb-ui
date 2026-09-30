@@ -219,3 +219,21 @@ describe('parts', () => {
     expect(shadow(chat).querySelectorAll('[part~="message-error"]')).toHaveLength(1)
   })
 })
+
+describe('send button', () => {
+  it('stays disabled until the input holds more than whitespace', () => {
+    const chat = mount()
+    const input = shadow(chat).querySelector<HTMLTextAreaElement>('[part~="input"]')!
+    const send = shadow(chat).querySelector<HTMLButtonElement>('[part~="send-button"]')!
+    const type = (value: string) => {
+      input.value = value
+      input.dispatchEvent(new Event('input'))
+    }
+
+    expect(send.disabled).toBe(true)
+    type('   ')
+    expect(send.disabled).toBe(true)
+    type('Who knows who?')
+    expect(send.disabled).toBe(false)
+  })
+})
