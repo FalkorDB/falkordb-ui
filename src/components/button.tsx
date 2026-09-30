@@ -19,8 +19,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 export const buttonVariants = cva(
 	[
 		"flex items-center gap-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50",
-		// Every variant, `none` included, keeps a visible keyboard focus indicator.
-		"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+		// No focus ring or outline on any variant: FalkorDB products draw none.
+		"focus-visible:outline-none",
 	],
 	{
 		variants: {

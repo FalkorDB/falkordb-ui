@@ -53,7 +53,7 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
 					<DialogPrimitive.Close
 						className={cn(
 							"absolute right-4 top-4 rounded-sm text-muted-foreground opacity-70 transition-opacity",
-							"hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background",
+							"hover:opacity-100 focus:outline-none",
 							"disabled:pointer-events-none",
 						)}
 					>

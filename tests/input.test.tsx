@@ -54,13 +54,12 @@ describe("Input", () => {
 		);
 	});
 
-	it("shows keyboard focus and an invalid state", () => {
+	it("shows an invalid state but no focus ring", () => {
 		render(<Input aria-invalid placeholder="Graph name" />);
 
-		expect(screen.getByPlaceholderText("Graph name")).toHaveClass(
-			"focus-visible:ring-2",
-			"aria-invalid:border-destructive",
-		);
+		const input = screen.getByPlaceholderText("Graph name");
+		expect(input).toHaveClass("focus-visible:outline-none", "aria-invalid:border-destructive");
+		expect(input.className).not.toMatch(/\bring-/);
 	});
 
 	it("lets a consumer override the design", () => {

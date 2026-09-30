@@ -157,9 +157,11 @@ describe("Button", () => {
 	});
 
 	it.each(["default", "secondary", "cancel", "destructive", "link", "none"] as const)(
-		"keeps a keyboard focus ring on the %s variant",
+		"draws no focus ring or outline on the %s variant",
 		(variant) => {
-			expect(buttonVariants({ variant })).toContain("focus-visible:ring-2");
+			const classes = buttonVariants({ variant });
+			expect(classes).toContain("focus-visible:outline-none");
+			expect(classes).not.toMatch(/\bring-/);
 		},
 	);
 
