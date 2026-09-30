@@ -404,8 +404,10 @@ const [line1, line2] = wrapTextForCircularNode(ctx, text, radius);
 
 ## Development
 
+This package lives in `web-components/canvas` of the [falkordb-ui](https://github.com/FalkorDB/falkordb-ui) repository. It was previously developed in `FalkorDB/falkordb-canvas`, and its history was carried over. Run the commands below from this folder, after running `npm install` once at the repository root:
+
 ```bash
-# Install dependencies
+# Install dependencies (from the repository root)
 npm install
 
 # Build (TypeScript compilation)
@@ -420,6 +422,9 @@ npm run example
 
 # Lint code
 npm run lint
+
+# Run the tests (Vitest + jsdom)
+npm test
 
 # Clean build artifacts
 npm run clean
@@ -612,9 +617,9 @@ See the [examples directory](./examples) for complete working examples including
 
 ## Links
 
-- [GitHub Repository](https://github.com/FalkorDB/falkordb-canvas)
+- [GitHub Repository](https://github.com/FalkorDB/falkordb-ui/tree/main/web-components/canvas)
 - [FalkorDB](https://www.falkordb.com/)
-- [Report Issues](https://github.com/FalkorDB/falkordb-canvas/issues)
+- [Report Issues](https://github.com/FalkorDB/falkordb-ui/issues)
 - [npm Package](https://www.npmjs.com/package/@falkordb/canvas)
 
 ## License

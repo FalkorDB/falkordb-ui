@@ -4,7 +4,7 @@ import storybook from "eslint-plugin-storybook";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-	{ ignores: ["dist", "storybook-static", "coverage", "node_modules"] },
+	{ ignores: ["dist", "storybook-static", "coverage", "node_modules", "web-components"] },
 	js.configs.recommended,
 	...tseslint.configs.recommended,
 	{

@@ -4,3 +4,5 @@ coverage
 node_modules
 package-lock.json
 CHANGELOG.md
+# Each web component keeps its own style and lint config.
+web-components
