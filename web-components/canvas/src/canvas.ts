@@ -34,6 +34,7 @@ import {
   wrapTextForCircularNode,
 } from "./canvas-utils.js";
 import { isForceLayout, pinAllNodes, unpinAllNodes, computeTreePositions, computeRadialPositions } from "./layouts.js";
+import { PointerHitFallback } from "./pointer-hit-fallback.js";
 
 const PADDING = 2;
 
@@ -166,6 +167,13 @@ class FalkorDBCanvas extends HTMLElement {
   private resizeObserver: ResizeObserver | null = null;
 
   private data: GraphData = { nodes: [], links: [] };
+
+  // Keeps hover/click/drag working where canvas fingerprinting protection
+  // scrambles force-graph's colour-picking. Nodes are painted over links.
+  private hitFallback = new PointerHitFallback([
+    { items: () => this.data.nodes, paint: (node, color, ctx) => this.paintNodePointerArea(node as GraphNode, color, ctx), mode: "fill" },
+    { items: () => this.data.links, paint: (link, color, ctx) => this.paintLinkPointerArea(link as GraphLink, color, ctx), mode: "stroke" },
+  ]);
 
   private debugEnabled: boolean = false;
 
@@ -2098,24 +2106,30 @@ class FalkorDBCanvas extends HTMLElement {
         }
       });
 
-    if (this.config.node) {
-      this.graph.nodePointerAreaPaint((node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => {
-        this.config.node!.nodePointerAreaPaint(node, color, ctx);
+    this.graph
+      .nodePointerAreaPaint((node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => {
+        this.hitFallback.track(node, color, ctx);
+        this.paintNodePointerArea(node, color, ctx);
+      })
+      .linkPointerAreaPaint((link: GraphLink, color: string, ctx: CanvasRenderingContext2D) => {
+        this.hitFallback.track(link, color, ctx);
+        this.paintLinkPointerArea(link, color, ctx);
       });
-    } else {
-      this.graph.nodePointerAreaPaint((node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => {
-        this.pointerNode(node, color, ctx);
-      });
-    }
+  }
 
-    if (this.config.link) {
-      this.graph.linkPointerAreaPaint((link: GraphLink, color: string, ctx: CanvasRenderingContext2D) => {
-        this.config.link!.linkPointerAreaPaint(link, color, ctx);
-      });
+  private paintNodePointerArea(node: GraphNode, color: string, ctx: CanvasRenderingContext2D) {
+    if (this.config.node) {
+      this.config.node.nodePointerAreaPaint(node, color, ctx);
     } else {
-      this.graph.linkPointerAreaPaint((link: GraphLink, color: string, ctx: CanvasRenderingContext2D) => {
-        this.pointerLink(link, color, ctx);
-      });
+      this.pointerNode(node, color, ctx);
+    }
+  }
+
+  private paintLinkPointerArea(link: GraphLink, color: string, ctx: CanvasRenderingContext2D) {
+    if (this.config.link) {
+      this.config.link.linkPointerAreaPaint(link, color, ctx);
+    } else {
+      this.pointerLink(link, color, ctx);
     }
   }
 
