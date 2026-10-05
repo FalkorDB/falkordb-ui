@@ -1,5 +1,7 @@
 # FalkorDB Canvas
 
+[![npm](https://img.shields.io/npm/v/@falkordb/canvas)](https://www.npmjs.com/package/@falkordb/canvas)
+
 A standalone web component for visualizing FalkorDB graphs using force-directed layouts.
 
 ## Features

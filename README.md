@@ -12,6 +12,15 @@ Built on [Radix UI](https://www.radix-ui.com) primitives and
 [Tailwind CSS](https://tailwindcss.com) v4, in the shadcn/ui style: unstyled,
 accessible behaviour underneath, FalkorDB's palette on top.
 
+## Packages
+
+This repository publishes two npm packages, each versioned and released on its own. The badges show each package's current `latest` on npm.
+
+| Package                                       | Latest                                                                                                  | What it is                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| [`@falkordb/ui`](#install)                    | [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui)         | React primitives and theme (this page)          |
+| [`@falkordb/canvas`](./web-components/canvas) | [![npm](https://img.shields.io/npm/v/@falkordb/canvas)](https://www.npmjs.com/package/@falkordb/canvas) | `<falkordb-canvas>` force-directed graph canvas |
+
 ## Install
 
 ```bash
@@ -392,6 +401,13 @@ Publishing runs when a GitHub Release is created and uses npm OIDC trusted publi
 The tag is also where the version comes from. Every `package.json` in the repository holds the placeholder `0.0.0-dev`, and the workflow sets the version from the tag before building and publishing. So releasing is only a matter of creating a release with the new tag; there is no version to bump or keep in sync.
 
 Each package must list this repository's `release.yml` as a trusted publisher on npmjs.com.
+
+GitHub shows only one "Latest" release per repository, so it belongs to `@falkordb/ui`:
+
+- **`v<version>` releases:** tick "Set as the latest release".
+- **Web-component releases:** leave it unticked. Each package's own latest is its `latest` tag on npm, shown in the [Packages](#packages) table.
+
+Ticking "pre-release" on GitHub does not change npm: every release becomes that package's `latest` there.
 
 ## License
 
