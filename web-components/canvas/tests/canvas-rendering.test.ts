@@ -798,6 +798,47 @@ describe("nodePointerAreaPaint", () => {
     expect(ctx.arc).toHaveBeenCalled();
     expect(ctx.fill).toHaveBeenCalled();
   });
+
+  it("resolves a scrambled pointer pixel to the node under it", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600 });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
+      links: [],
+    });
+
+    const instance = getLastInstance();
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+
+    // Fingerprinting protection nudges the colour the hidden canvas reads back.
+    const shadowCtx = Object.assign(createCtxSpy(), {
+      getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0xff, 1, 255]) })),
+      // force-graph centres the graph, so graph point (0, 0) is device pixel (400, 300).
+      getTransform: vi.fn(() => ({ a: 1, b: 0, c: 0, d: 1, e: 400, f: 300 }) as DOMMatrix),
+    });
+    const scratch = Object.assign(createCtxSpy(), {
+      setTransform: vi.fn(),
+      isPointInPath: vi.fn(() => true),
+      isPointInStroke: vi.fn(() => false),
+    });
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockReturnValue(scratch as unknown as RenderingContext);
+
+    let pixel: number[];
+    try {
+      instance.callbacks.nodePointerAreaPaint!(node, "#00ff00", shadowCtx);
+      pixel = Array.from(shadowCtx.getImageData(400, 300, 1, 1).data);
+    } finally {
+      // Restore even when the paint or read throws, so later tests get the real getContext.
+      getContext.mockRestore();
+    }
+
+    expect(pixel).toEqual([0, 0xff, 0, 255]);
+    // The scratch canvas re-traced the node's real hit area.
+    expect(scratch.arc).toHaveBeenCalled();
+  });
 });
 
 describe("linkPointerAreaPaint", () => {
