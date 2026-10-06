@@ -34,7 +34,7 @@ import {
   wrapTextForCircularNode,
 } from "./canvas-utils.js";
 import { isForceLayout, pinAllNodes, unpinAllNodes, computeTreePositions, computeRadialPositions } from "./layouts.js";
-import { PointerHitFallback } from "./pointer-hit-fallback.js";
+import { PointerHitFallback, type Bounds } from "./pointer-hit-fallback.js";
 
 const PADDING = 2;
 
@@ -170,9 +170,21 @@ class FalkorDBCanvas extends HTMLElement {
 
   // Keeps hover/click/drag working where canvas fingerprinting protection
   // scrambles force-graph's colour-picking. Nodes are painted over links.
+  // Each layer's bounds let the fallback skip objects far from the pointer;
+  // a custom painter's extent is unknown, so its objects are always traced.
   private hitFallback = new PointerHitFallback([
-    { items: () => this.data.nodes, paint: (node, color, ctx) => this.paintNodePointerArea(node as GraphNode, color, ctx), mode: "fill" },
-    { items: () => this.data.links, paint: (link, color, ctx) => this.paintLinkPointerArea(link as GraphLink, color, ctx), mode: "stroke" },
+    {
+      items: () => this.data.nodes,
+      paint: (node, color, ctx) => this.paintNodePointerArea(node as GraphNode, color, ctx),
+      bounds: (node) => (this.config.node ? null : this.nodeExtent(node as GraphNode)),
+    },
+    {
+      items: () => this.data.links,
+      paint: (link, color, ctx) => this.paintLinkPointerArea(link as GraphLink, color, ctx),
+      bounds: (link) => (this.config.link ? null : this.linkExtent(link as GraphLink)),
+      // The hit stroke is linkHitWidth screen pixels wide.
+      padding: () => this.config.interaction.linkHitWidth,
+    },
   ]);
 
   private debugEnabled: boolean = false;
@@ -1289,11 +1301,19 @@ class FalkorDBCanvas extends HTMLElement {
    */
   private isNodeInCullingBounds(node: GraphNode): boolean {
     if (!this.cullingBounds) return true;
-    const { minX, maxX, minY, maxY } = this.cullingBounds;
+    return FalkorDBCanvas.overlaps(this.nodeExtent(node), this.cullingBounds);
+  }
+
+  /** The box around `node`'s hit area: its shape at `size + PADDING`, circle or square. */
+  private nodeExtent(node: GraphNode): Bounds {
     const r = node.size + PADDING;
     const x = node.x ?? 0;
     const y = node.y ?? 0;
-    return x + r >= minX && x - r <= maxX && y + r >= minY && y - r <= maxY;
+    return { minX: x - r, maxX: x + r, minY: y - r, maxY: y + r };
+  }
+
+  private static overlaps(a: Bounds, b: { minX: number; maxX: number; minY: number; maxY: number }): boolean {
+    return a.maxX >= b.minX && a.minX <= b.maxX && a.maxY >= b.minY && a.minY <= b.maxY;
   }
 
   /**
@@ -1309,8 +1329,15 @@ class FalkorDBCanvas extends HTMLElement {
    */
   private isLinkInCullingBounds(link: GraphLink): boolean {
     if (!this.cullingBounds) return true;
-    const { minX, maxX, minY, maxY } = this.cullingBounds;
+    return FalkorDBCanvas.overlaps(this.linkExtent(link), this.cullingBounds);
+  }
 
+  /**
+   * A conservative box around `link`'s visual extent, in graph coordinates.
+   * Shared by viewport culling and the pointer-hit fallback; see
+   * isLinkInCullingBounds for how it is built.
+   */
+  private linkExtent(link: GraphLink): Bounds {
     const sx = link.source.x ?? 0;
     const sy = link.source.y ?? 0;
     const ex = link.target.x ?? 0;
@@ -1328,10 +1355,7 @@ class FalkorDBCanvas extends HTMLElement {
       // away from the node centre. Use that as a conservative radius.
       const nodeSize = link.source.size;
       const loopRadius = Math.abs(link.curve || 1) * nodeSize * this.config.linkStyle.selfLoopCurveFactor + margin;
-      return (
-        sx + loopRadius >= minX && sx - loopRadius <= maxX &&
-        sy + loopRadius >= minY && sy - loopRadius <= maxY
-      );
+      return { minX: sx - loopRadius, maxX: sx + loopRadius, minY: sy - loopRadius, maxY: sy + loopRadius };
     }
 
     // Compute quadratic-bezier control point (same formula as drawLink).
@@ -1339,8 +1363,8 @@ class FalkorDBCanvas extends HTMLElement {
     const dy = ey - sy;
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance === 0) {
-      // Co-located nodes: just check the point.
-      return sx + margin >= minX && sx - margin <= maxX && sy + margin >= minY && sy - margin <= maxY;
+      // Co-located nodes: just the point.
+      return { minX: sx - margin, maxX: sx + margin, minY: sy - margin, maxY: sy + margin };
     }
 
     const curvature = link.curve ?? 0;
@@ -1350,12 +1374,12 @@ class FalkorDBCanvas extends HTMLElement {
     const cy = (sy + ey) / 2 + perpY * curvature * distance;
 
     // Convex-hull AABB of the three control points, grown by the visual margin.
-    const lMinX = Math.min(sx, ex, cx) - margin;
-    const lMaxX = Math.max(sx, ex, cx) + margin;
-    const lMinY = Math.min(sy, ey, cy) - margin;
-    const lMaxY = Math.max(sy, ey, cy) + margin;
-
-    return lMaxX >= minX && lMinX <= maxX && lMaxY >= minY && lMinY <= maxY;
+    return {
+      minX: Math.min(sx, ex, cx) - margin,
+      maxX: Math.max(sx, ex, cx) + margin,
+      minY: Math.min(sy, ey, cy) - margin,
+      maxY: Math.max(sy, ey, cy) + margin,
+    };
   }
 
   /**
