@@ -5,8 +5,6 @@ Framework-agnostic components published from this repository, next to `@falkordb
 | Package | Element | Docs |
 | --- | --- | --- |
 | `@falkordb/canvas` | `<falkordb-canvas>` | [canvas/README.md](./canvas/README.md) |
-| `@falkordb/ui-chat` | `<falkordb-chat>` | [chat/README.md](./chat/README.md) |
-| `@falkordb/support-widget` | `mount()` or a `<script>` embed | [support-widget/README.md](./support-widget/README.md) |
 
 ## How web components differ from the React components
 

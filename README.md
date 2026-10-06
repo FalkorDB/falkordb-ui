@@ -320,11 +320,9 @@ Each surface and intent token has a matching `-foreground` pair.
 
 Self-contained components for any framework, or none at all. Each one renders in its own shadow DOM and ships as a separate npm package from [`web-components/`](./web-components):
 
-| Package                                                       | Element             | What it is                                                                    |
-| ------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------- |
-| [`@falkordb/canvas`](./web-components/canvas)                 | `<falkordb-canvas>` | Force-directed graph canvas                                                   |
-| [`@falkordb/ui-chat`](./web-components/chat)                  | `<falkordb-chat>`   | Chat panel. The host supplies the backend call.                               |
-| [`@falkordb/support-widget`](./web-components/support-widget) | floating widget     | Support chat answered by a GraphRAG-Server graph, with a Contact Support form |
+| Package                                       | Element             | What it is                  |
+| --------------------------------------------- | ------------------- | --------------------------- |
+| [`@falkordb/canvas`](./web-components/canvas) | `<falkordb-canvas>` | Force-directed graph canvas |
 
 ## Development
 
@@ -353,12 +351,10 @@ npm run build -w web-components/canvas   # a single package
 
 Publishing runs when a GitHub Release is created and uses npm OIDC trusted publishing, so the repository holds no npm tokens. The release tag chooses the package:
 
-| Tag                         | Publishes                  |
-| --------------------------- | -------------------------- |
-| `v<version>`                | `@falkordb/ui`             |
-| `canvas-v<version>`         | `@falkordb/canvas`         |
-| `chat-v<version>`           | `@falkordb/ui-chat`        |
-| `support-widget-v<version>` | `@falkordb/support-widget` |
+| Tag                 | Publishes          |
+| ------------------- | ------------------ |
+| `v<version>`        | `@falkordb/ui`     |
+| `canvas-v<version>` | `@falkordb/canvas` |
 
 Each package must list this repository's `release.yml` as a trusted publisher on npmjs.com.
 

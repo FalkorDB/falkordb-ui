@@ -3,7 +3,7 @@ name: Publish to npm
 # One repository, several packages. The release tag picks the package:
 #   v<version>                -> @falkordb/ui (the repository root)
 #   <dir>-v<version>          -> the package in web-components/<dir>
-#                                e.g. canvas-v0.3.0, chat-v0.2.0, support-widget-v0.2.2
+#                                e.g. canvas-v0.3.0
 on:
   release:
     types: [created]
