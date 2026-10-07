@@ -17,6 +17,21 @@ export {
 export { Badge, badgeVariants, type BadgeProps } from "@/components/badge";
 export { Button, buttonVariants, type ButtonProps } from "@/components/button";
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/card";
+export {
+	Chat,
+	ChatAvatar,
+	ChatFooter,
+	ChatHeader,
+	ChatInput,
+	ChatInputField,
+	ChatMessage,
+	ChatMessages,
+	ChatSendButton,
+	ChatTitle,
+	type ChatMessageFrom,
+	type ChatMessageProps,
+	type ChatSendButtonProps,
+} from "@/components/chat";
 export { Checkbox } from "@/components/checkbox";
 export {
 	Dialog,

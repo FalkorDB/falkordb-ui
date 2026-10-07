@@ -119,6 +119,7 @@ export function GraphCard() {
 | Drawer       | `Drawer`, `DrawerTrigger`, `DrawerContent`, `DrawerHeader`, `DrawerTitle`, `DrawerDescription`, `DrawerFooter`, `DrawerClose`                                                                                                                                                                                                     |
 | Toast        | `Toaster`, `toast`, `useToast`, `dismiss`, `ToastAction`                                                                                                                                                                                                                                                                          |
 | Table        | `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableRow`, `TableHead`, `TableCell`, `TableCaption`                                                                                                                                                                                                                          |
+| Chat         | `Chat`, `ChatHeader`, `ChatTitle`, `ChatMessages`, `ChatMessage`, `ChatAvatar`, `ChatInput`, `ChatInputField`, `ChatSendButton`, `ChatFooter`                                                                                                                                                                                     |
 | Tabs         | `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`                                                                                                                                                                                                                                                                                  |
 | Resizable    | `ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle`                                                                                                                                                                                                                                                                        |
 | Theme        | `ThemeProvider`, `useTheme`, `ThemeToggle`                                                                                                                                                                                                                                                                                        |
@@ -283,6 +284,37 @@ passes props through to it:
   reads out the value.
 - `thumbClassName` styles the thumbs.
 - `Progress` takes `indicatorClassName` for its filled bar.
+
+### Chat
+
+The chat parts lay the conversation out, and the host supplies what each message says, markdown included:
+
+- **Order:** `ChatMessages` lists messages oldest first. It stays on the newest one as messages arrive, unless the reader has scrolled up to read an earlier one.
+- **Sides:** `ChatMessage` puts `from="user"` on the right and `from="assistant"` on the left, with its `avatar` on the outer side of the bubble. `variant="error"` outlines the bubble.
+- **Input row:** `ChatInput` is a `<form>`, so Enter in `ChatInputField` submits it. `ChatSendButton` is disabled while `canSend` is false or `isLoading` is true.
+
+```tsx
+<Chat>
+	<ChatHeader>
+		<ChatTitle>Chat</ChatTitle>
+	</ChatHeader>
+	<ChatMessages>
+		{messages.map((m) => (
+			<ChatMessage key={m.id} from={m.role} avatar={<ChatAvatar>{m.role === "user" ? "U" : "F"}</ChatAvatar>}>
+				<Markdown text={m.content} />
+			</ChatMessage>
+		))}
+	</ChatMessages>
+	<ChatInput onSubmit={send}>
+		<ChatInputField
+			value={text}
+			onChange={(e) => setText(e.target.value)}
+			placeholder="Ask about your graph"
+		/>
+		<ChatSendButton canSend={text.trim() !== ""} isLoading={sending} />
+	</ChatInput>
+</Chat>
+```
 
 ### Toasts
 
