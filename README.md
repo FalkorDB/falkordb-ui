@@ -389,6 +389,8 @@ Publishing runs when a GitHub Release is created and uses npm OIDC trusted publi
 | `v<version>`        | `@falkordb/ui`     |
 | `canvas-v<version>` | `@falkordb/canvas` |
 
+The tag is also where the version comes from. Every `package.json` in the repository holds the placeholder `0.0.0-dev`, and the workflow sets the version from the tag before building and publishing. So releasing is only a matter of creating a release with the new tag; there is no version to bump or keep in sync.
+
 Each package must list this repository's `release.yml` as a trusted publisher on npmjs.com.
 
 ## License
