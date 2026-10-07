@@ -52,7 +52,8 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing $(node -p "require('./$PKG_PATH/package.json').name")@$VERSION from $PKG_PATH"
 
-      # The tag is the source of truth; guard against a stale package.json.
+      # The tag is the only source of the version: every package.json in this
+      # repository holds the 0.0.0-dev placeholder, replaced here before the build.
       - name: Set version from Git tag
         working-directory: ${{ steps.pkg.outputs.path }}
         run: npm version "${{ steps.pkg.outputs.version }}" --no-git-tag-version --allow-same-version

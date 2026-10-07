@@ -1,6 +1,6 @@
 {
   "name": "@falkordb/canvas",
-  "version": "0.2.9",
+  "version": "0.0.0-dev",
   "description": "A standalone web component for visualizing FalkorDB graphs using force-directed layouts",
   "keywords": [
     "falkordb",
