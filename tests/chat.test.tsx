@@ -334,3 +334,26 @@ describe("ChatSendButton", () => {
 		expect(send).not.toHaveClass("p-1");
 	});
 });
+
+describe("ChatMessages on the server", () => {
+	it("renders where there is no window, without the browser-only layout effect", async () => {
+		vi.resetModules();
+		vi.stubGlobal("window", undefined);
+		let html = "";
+		try {
+			// Loaded with no window, the module picks useEffect, which React 18 does not
+			// warn about during server rendering.
+			const { createElement } = await import("react");
+			const { renderToString } = await import("react-dom/server");
+			const server = await import("@/components/chat");
+			html = renderToString(
+				createElement(server.ChatMessages, null, createElement(server.ChatMessage, { from: "user" }, "Hi")),
+			);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+
+		expect(html).toContain('role="log"');
+		expect(html).toContain("Hi");
+	});
+});

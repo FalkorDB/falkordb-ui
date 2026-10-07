@@ -2,6 +2,7 @@ import { Send } from "lucide-react";
 import {
 	forwardRef,
 	useCallback,
+	useEffect,
 	useLayoutEffect,
 	useRef,
 	type ForwardedRef,
@@ -44,6 +45,10 @@ export const ChatTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadi
 );
 ChatTitle.displayName = "ChatTitle";
 
+// The scroll fix-up must run before paint in the browser, but React 18 warns
+// about useLayoutEffect during server rendering, where there is nothing to do.
+const useClientLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 /** How close to the end, in pixels, still counts as reading the latest message. */
 const STICK_THRESHOLD = 24;
 
@@ -69,7 +74,7 @@ export const ChatMessages = forwardRef<HTMLUListElement, HTMLAttributes<HTMLULis
 			[ref],
 		);
 
-		useLayoutEffect(() => {
+		useClientLayoutEffect(() => {
 			const node = list.current;
 			if (node && atEnd.current) node.scrollTop = node.scrollHeight;
 		}, [children]);

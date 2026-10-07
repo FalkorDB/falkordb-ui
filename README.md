@@ -307,6 +307,7 @@ The chat parts lay the conversation out, and the host supplies what each message
 	</ChatMessages>
 	<ChatInput onSubmit={send}>
 		<ChatInputField
+			aria-label="Message"
 			value={text}
 			onChange={(e) => setText(e.target.value)}
 			placeholder="Ask about your graph"
