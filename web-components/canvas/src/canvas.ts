@@ -33,6 +33,7 @@ import {
   LINK_WIDTH,
   normalizeCaptionsKeys,
   wrapTextForCircularNode,
+  wrapVisibleLinks,
 } from "./canvas-utils.js";
 import { isForceLayout, pinAllNodes, unpinAllNodes, computeTreePositions, computeRadialPositions } from "./layouts.js";
 import { PointerHitFallback, type Bounds } from "./pointer-hit-fallback.js";
@@ -249,9 +250,6 @@ class FalkorDBCanvas extends HTMLElement {
   // Pending glow repaints, keyed by node, so a glowing node queues one timer
   // rather than one per frame.
   private glowRenderScheduled: Map<number, ReturnType<typeof setTimeout>> = new Map();
-
-  // Link forces whose `links` binder has been wrapped to drop hidden links.
-  private visibilityFilteredLinkForces = new WeakSet<object>();
 
   private relationshipsTextCache: Map<
     string,
@@ -1452,14 +1450,8 @@ class FalkorDBCanvas extends HTMLElement {
    * through `getGraph().d3Force("link", ...)`, so every caller goes through here.
    * Binding runs d3's initialize(), which re-derives link strengths and distances.
    */
-  private bindVisibleLinks(linkForce: NonNullable<Parameters<NonNullable<ForceGraphInstance>["d3Force"]>[1]>) {
-    if (!this.visibilityFilteredLinkForces.has(linkForce)) {
-      const bind = linkForce.links.bind(linkForce);
-      linkForce.links = (links?: GraphLink[]) =>
-        (links === undefined ? bind() : bind(links.filter((link) => link.visible !== false)));
-      this.visibilityFilteredLinkForces.add(linkForce);
-    }
-    linkForce.links(this.data.links);
+  private bindVisibleLinks(linkForce: object) {
+    wrapVisibleLinks(linkForce).links(this.data.links);
   }
 
   private setupForces() {
@@ -1472,14 +1464,7 @@ class FalkorDBCanvas extends HTMLElement {
     const linkDist = this.config.layoutOptions.force?.linkDistance ?? LINK_DISTANCE;
     const collisionPad = this.config.layoutOptions.force?.collisionPadding ?? 25;
 
-    // force-graph's linkVisibility only filters drawing, and it re-binds the
-    // full link array to this force inside every graphData digest — then runs
-    // the warmup ticks that produce the layout in that same digest, so a set
-    // filtered from the outside is overwritten before it ever does any work.
-    // Patch the force's own binder so every bind is filtered, whoever makes it.
-    // Hidden links have to stay out of d3 rather than merely be zeroed: d3 also
-    // derives each link's `bias` — how it splits a correction between its two
-    // endpoints — from degree counts in initialize(), and bias has no setter.
+    // force-graph's linkVisibility only filters drawing; see wrapVisibleLinks.
     this.bindVisibleLinks(linkForce);
 
     // distance based on node size + constant

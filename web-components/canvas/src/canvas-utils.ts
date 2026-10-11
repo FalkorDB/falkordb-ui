@@ -7,6 +7,32 @@ import {
   GraphLink,
 } from "./canvas-types.js";
 
+type LinkBinder = { links: (links?: GraphLink[]) => unknown };
+
+/** Link forces whose `links` binder already drops hidden links. */
+const visibilityFilteredLinkForces = new WeakSet<object>();
+
+/**
+ * Makes a d3 link force drop hidden links whenever links are bound to it, and
+ * returns it. force-graph and 3d-force-graph both treat `linkVisibility` as
+ * drawing-only and bind the full link array to the force on every data update,
+ * so a link filtered from the outside is overwritten before it does any work;
+ * patching the force's own binder filters every bind, whoever makes it. Hidden
+ * links have to stay out of d3 rather than merely be zeroed: d3 also derives
+ * each link's `bias` from degree counts in initialize(), and bias has no setter.
+ * Wraps a force once, so it is safe to call on every setup.
+ */
+export function wrapVisibleLinks(force: object): LinkBinder {
+  const linkForce = force as LinkBinder;
+  if (!visibilityFilteredLinkForces.has(force)) {
+    const bind = linkForce.links.bind(linkForce);
+    linkForce.links = (links?: GraphLink[]) =>
+      (links === undefined ? bind() : bind(links.filter((link) => link.visible !== false)));
+    visibilityFilteredLinkForces.add(force);
+  }
+  return linkForce;
+}
+
 /** Default canvas background color */
 export const DEFAULT_CANVAS_BACKGROUND = '#FFFFFF';
 

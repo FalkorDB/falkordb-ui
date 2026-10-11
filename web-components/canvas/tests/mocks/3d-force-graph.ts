@@ -21,9 +21,16 @@ export class MockForceGraph3DInstance {
 
   public linkForce = {
     distanceAccessor: undefined as unknown,
+    /** The links last bound to the force, as d3 would simulate them. */
+    linkSet: undefined as { id: number }[] | undefined,
     distance: (accessor: unknown) => {
       this.linkForce.distanceAccessor = accessor;
       return this.linkForce;
+    },
+    links(links?: { id: number }[]) {
+      if (links === undefined) return this.linkSet;
+      this.linkSet = links;
+      return this;
     },
   };
 
@@ -73,6 +80,8 @@ export class MockForceGraph3DInstance {
     if (value === undefined) return this.data;
     this.calls.push(["graphData", [value]]);
     this.data = value;
+    // The real library binds every link to the link force on each data update.
+    this.linkForce.links(value.links as { id: number }[]);
     return this;
   }
 
