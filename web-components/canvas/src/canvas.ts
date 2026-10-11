@@ -172,6 +172,13 @@ class FalkorDBCanvas extends HTMLElement {
   /** The 3D renderer, set while the graph is shown in 3D (when `graph` is unset). */
   private graph3d: Graph3D | null = null;
 
+  /**
+   * The 2D viewport as it was when the element was disconnected. Hosts read it
+   * while unmounting, after the element has left the page and its renderer has
+   * been dropped, to restore the view where the user left it.
+   */
+  private detachedViewport: ViewportState = undefined;
+
   /** Bumped by each setDimension call, so a 3D load that was overtaken is dropped. */
   private dimensionRequest = 0;
 
@@ -347,6 +354,7 @@ class FalkorDBCanvas extends HTMLElement {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
+    this.detachedViewport = this.getViewport();
     // Everything is dropped, so a reconnect renders afresh rather than next
     // to the old, full-height container.
     this.unmountRenderer();
@@ -908,11 +916,13 @@ class FalkorDBCanvas extends HTMLElement {
 
   /**
    * Get the current viewport state (zoom level and center position).
-   * Returns undefined if the graph hasn't been initialized yet.
+   * Returns undefined if the graph hasn't been initialized yet, or is shown in
+   * 3D. Once the element is disconnected, returns the viewport it was left at.
    */
   getViewport(): ViewportState {
-    // A 2D zoom-and-centre does not describe a 3D camera.
-    if (!this.graph) return undefined;
+    // Disconnected: the view as it was left. Otherwise, a 2D zoom-and-centre
+    // does not describe a 3D camera.
+    if (!this.graph) return this.container ? undefined : this.detachedViewport;
 
     const { x: centerX, y: centerY } = this.graph.centerAt();
     const zoom = this.graph.zoom();
