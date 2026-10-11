@@ -1,6 +1,7 @@
 import ForceGraph from "force-graph";
 import * as d3 from "d3";
 import {
+  CanvasDimension,
   Data,
   ForceGraphInstance,
   GraphData,
@@ -35,6 +36,8 @@ import {
 } from "./canvas-utils.js";
 import { isForceLayout, pinAllNodes, unpinAllNodes, computeTreePositions, computeRadialPositions } from "./layouts.js";
 import { PointerHitFallback, type Bounds } from "./pointer-hit-fallback.js";
+// Type-only: the 3D renderer and three.js are loaded on demand by setDimension.
+import type { Graph3D } from "./canvas-3d.js";
 
 const PADDING = 2;
 
@@ -101,6 +104,9 @@ const DEFAULT_LARGE_GRAPH: Required<LargeGraphConfig> = {
   skipLinkLabelsAtLowZoom: true,
 };
 
+/** A node as the 3D renderer leaves it: positioned, moving and pinned in depth too. */
+type Node3D = GraphNode & { z?: number; vz?: number; fz?: number };
+
 /** Axis-aligned bounding box in world-space coordinates. */
 export type WorldBounds = {
   minX: number;
@@ -162,6 +168,12 @@ function createStyles(backgroundColor: string, foregroundColor: string, interact
 class FalkorDBCanvas extends HTMLElement {
   private graph: ForceGraphInstance;
 
+  /** The 3D renderer, set while the graph is shown in 3D (when `graph` is unset). */
+  private graph3d: Graph3D | null = null;
+
+  /** Bumped by each setDimension call, so a 3D load that was overtaken is dropped. */
+  private dimensionRequest = 0;
+
   private container: HTMLDivElement | null = null;
 
   private resizeObserver: ResizeObserver | null = null;
@@ -195,6 +207,7 @@ class FalkorDBCanvas extends HTMLElement {
     foregroundColor: DEFAULT_CANVAS_FOREGROUND,
 
     // ─── Layout ──────────────────────────────────────────────────────────────
+    dimension: "2d",
     layoutMode: "force",
     layoutOptions: {},
 
@@ -270,6 +283,8 @@ class FalkorDBCanvas extends HTMLElement {
     for (const node of this.data.nodes) {
       node.displayName = ["" , ""];
     }
+    // 3D captions are textures drawn once, with whatever font was loaded then.
+    this.graph3d?.rebuild();
     this.triggerRender();
   };
 
@@ -334,9 +349,11 @@ class FalkorDBCanvas extends HTMLElement {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
-    if (this.graph) {
-      this.graph._destructor();
-    }
+    // Everything is dropped, so a reconnect renders afresh rather than next
+    // to the old, full-height container.
+    this.unmountRenderer();
+    this.shadowRoot?.replaceChildren();
+    this.container = null;
   }
 
   /**
@@ -383,7 +400,8 @@ class FalkorDBCanvas extends HTMLElement {
 
     // Shallow-assign top-level scalar/function fields (after deep-merge to avoid clobbering nested objects).
     // `captionsKeys` is excluded so only the normalized tuples are ever written to the internal config.
-    const { largeGraph, nodeStyle, linkStyle, simulation, interaction, eventHandlers, layoutOptions, captionsKeys: _captionsKeys, ...scalarConfig } = config;
+    // `dimension` is applied last, through setDimension, which needs to see the change.
+    const { largeGraph, nodeStyle, linkStyle, simulation, interaction, eventHandlers, layoutOptions, captionsKeys: _captionsKeys, dimension, ...scalarConfig } = config;
     Object.assign(this.config, scalarConfig);
 
     if (captionsKeys) {
@@ -418,6 +436,9 @@ class FalkorDBCanvas extends HTMLElement {
     if (config.simulation && this.graph) {
       this.setupForces();
     }
+    if ((config.simulation || config.layoutOptions) && this.graph3d) {
+      this.graph3d.setupForces();
+    }
 
     // Recompute or clear culling bounds when largeGraph config changes.
     if ('largeGraph' in config) {
@@ -439,12 +460,139 @@ class FalkorDBCanvas extends HTMLElement {
     if (config.backgroundColor && this.graph) {
       this.graph.backgroundColor(this.config.backgroundColor);
     }
+    if (config.backgroundColor && this.graph3d) {
+      this.graph3d.setBackgroundColor(this.config.backgroundColor);
+    } else if ((config.nodeStyle || config.linkStyle || config.interaction) && this.graph3d) {
+      // 3D captions are textures, drawn with these fonts and contrast settings.
+      this.graph3d.rebuild();
+    }
     if (config.backgroundColor || config.foregroundColor || config.interaction) {
       this.updateTooltipStyles();
     }
 
     // Always trigger a re-render so visual changes apply immediately
     this.triggerRender();
+
+    if (dimension) {
+      this.setDimension(dimension).catch((error) => console.error('[FalkorDBCanvas]', error));
+    }
+  }
+
+  /** The dimension the graph is shown in, or is being switched to. */
+  getDimension(): CanvasDimension {
+    return this.config.dimension;
+  }
+
+  /**
+   * Show the graph flat in 2D or in 3D. Switching lays the graph out afresh
+   * in the new dimension and fits it to the view.
+   *
+   * The 3D renderer (three.js) is downloaded the first time it is needed, so
+   * the switch can take a moment; the returned promise settles once it is done,
+   * and `onDimensionChange` fires. Until then the current view stays up. A
+   * later call overtakes one still loading.
+   *
+   * Before the element is connected, the dimension is only recorded and the
+   * promise settles at once; the graph is shown in it when the element
+   * renders. For `'3d'`, `onDimensionChange` fires then; `'2d'` is how the
+   * canvas starts anyway, so nothing changes and no event fires.
+   *
+   * If 3D cannot be shown (the bundle will not load, or WebGL will not
+   * start), the promise rejects, the canvas stays or falls back to 2D, and
+   * `onDimensionChange('2d')` fires.
+   *
+   * @param dimension - `'2d'` (default) or `'3d'`
+   */
+  async setDimension(dimension: CanvasDimension): Promise<void> {
+    const request = ++this.dimensionRequest;
+    this.config.dimension = dimension;
+    this.log('Setting dimension to:', dimension);
+
+    // Not rendered yet: render() mounts whichever dimension is configured.
+    if (!this.container) return;
+
+    const shown: CanvasDimension | undefined = this.graph3d ? '3d' : this.graph ? '2d' : undefined;
+    if (shown === dimension) return;
+
+    if (dimension === '3d') {
+      try {
+        const { Graph3D: Graph3DRenderer } = await import("./canvas-3d.js");
+        if (request !== this.dimensionRequest || !this.container) return;
+        this.mount3D(Graph3DRenderer);
+      } catch (error) {
+        // The bundle would not load, or WebGL would not start: stay usable in
+        // 2D, mounting it again if the failed switch had already taken it down.
+        if (request === this.dimensionRequest) {
+          this.config.dimension = '2d';
+          if (!this.graph) this.mount2D();
+          this.config.eventHandlers?.onDimensionChange?.('2d');
+        }
+        throw error;
+      }
+    } else {
+      this.mount2D();
+    }
+
+    this.config.eventHandlers?.onDimensionChange?.(dimension);
+  }
+
+  /** Drop whichever renderer is mounted, leaving the container empty. */
+  private unmountRenderer() {
+    if (this.graph) {
+      this.graph._destructor();
+      this.graph = undefined;
+    }
+    if (this.graph3d) {
+      this.graph3d.destroy();
+      this.graph3d = null;
+    }
+    // force-graph leaves its canvas behind when destroyed.
+    this.container?.replaceChildren();
+    this.lastTransform = null;
+    this.cullingBounds = null;
+    this.cullingZoom = 1;
+  }
+
+  private mount3D(Graph3DRenderer: typeof Graph3D) {
+    if (!this.container) return;
+    this.unmountRenderer();
+
+    // Lay out from scratch: 2D positions and pins would flatten the 3D layout.
+    for (const node of this.data.nodes as Node3D[]) {
+      delete node.x; delete node.y; delete node.z;
+      delete node.vx; delete node.vy; delete node.vz;
+      delete node.fx; delete node.fy; delete node.fz;
+    }
+
+    const getConfig = () => this.config;
+    const getData = () => this.data;
+    this.graph3d = new Graph3DRenderer(this.container, {
+      get config() { return getConfig(); },
+      get data() { return getData(); },
+      log: (...args: unknown[]) => this.log(...args),
+      setEngineStatus: (isRunning: boolean) => this.updateCanvasSimulationAttribute(isRunning),
+    });
+
+    const { width, height } = this.container.getBoundingClientRect();
+    if (width > 0 && height > 0) this.graph3d.setSize(width, height);
+
+    this.graph3d.applyLayout(true);
+  }
+
+  private mount2D() {
+    if (!this.container) return;
+    this.unmountRenderer();
+
+    // The x/y the 3D layout left behind seed the 2D one; depth is dropped.
+    for (const node of this.data.nodes as Node3D[]) {
+      delete node.z; delete node.vz; delete node.fz;
+    }
+
+    this.initGraph();
+    const { width, height } = this.container.getBoundingClientRect();
+    if (this.graph && width > 0 && height > 0) this.graph.width(width).height(height);
+
+    this.applyLayout();
   }
 
   /**
@@ -459,6 +607,7 @@ class FalkorDBCanvas extends HTMLElement {
       this.graph.width(width);
       this.recomputeCullingBoundsIfNeeded();
     }
+    this.graph3d?.setSize(width, this.graph3d.graph.height());
   }
 
   /**
@@ -473,6 +622,7 @@ class FalkorDBCanvas extends HTMLElement {
       this.graph.height(height);
       this.recomputeCullingBoundsIfNeeded();
     }
+    this.graph3d?.setSize(this.graph3d.graph.width(), height);
   }
 
   /**
@@ -486,6 +636,7 @@ class FalkorDBCanvas extends HTMLElement {
     if (this.graph) {
       this.graph.backgroundColor(color);
     }
+    this.graph3d?.setBackgroundColor(color);
     this.updateTooltipStyles();
   }
 
@@ -509,6 +660,10 @@ class FalkorDBCanvas extends HTMLElement {
   setAnimation(enabled: boolean) {
     if (this.config.animation === enabled) return;
     this.config.animation = enabled;
+    if (this.graph3d) {
+      this.graph3d.setAnimation(enabled);
+      return;
+    }
     if (!this.graph) return;
 
     if (enabled && isForceLayout(this.config.layoutMode) && !this.config.pinOnDragEnd) {
@@ -554,6 +709,11 @@ class FalkorDBCanvas extends HTMLElement {
   setPinOnDragEnd(pin: boolean) {
     if (this.config.pinOnDragEnd === pin) return;
     this.config.pinOnDragEnd = pin;
+    if (this.graph3d) {
+      this.graph3d.setPinned(pin);
+      this.config.eventHandlers?.onPinChange?.(pin);
+      return;
+    }
     if (pin) {
       pinAllNodes(this.data.nodes);
       if (this.graph) {
@@ -604,6 +764,11 @@ class FalkorDBCanvas extends HTMLElement {
   }
 
   private applyLayout(zoomToFit = true) {
+    if (this.graph3d) {
+      // Fits once the new layout has landed rather than after a fixed delay.
+      this.graph3d.applyLayout(zoomToFit);
+      return;
+    }
     if (!this.graph) return;
 
     const layoutMode = this.config.layoutMode;
@@ -681,9 +846,14 @@ class FalkorDBCanvas extends HTMLElement {
     this.clearGlowTimers();
 
     // Initialize graph if it hasn't been initialized yet
-    if (!this.graph && this.container) {
+    if (!this.graph && !this.graph3d && this.container && this.config.dimension === '2d') {
       this.log('Initializing graph');
       this.initGraph();
+    }
+
+    if (this.graph3d) {
+      this.applyLayout();
+      return;
     }
 
     if (!this.graph) return;
@@ -743,6 +913,7 @@ class FalkorDBCanvas extends HTMLElement {
    * Returns undefined if the graph hasn't been initialized yet.
    */
   getViewport(): ViewportState {
+    // A 2D zoom-and-centre does not describe a 3D camera.
     if (!this.graph) return undefined;
 
     const { x: centerX, y: centerY } = this.graph.centerAt();
@@ -758,6 +929,7 @@ class FalkorDBCanvas extends HTMLElement {
 
   /**
    * Restore a previously saved viewport state (zoom and center).
+   * Ignored while the graph is shown in 3D.
    * @param viewport - The viewport state to restore
    */
   setViewport(viewport: ViewportState) {
@@ -769,7 +941,8 @@ class FalkorDBCanvas extends HTMLElement {
 
   /**
    * Get the internal graph data with resolved references (GraphNode/GraphLink objects).
-   * Useful for reading current positions and runtime state.
+   * Useful for reading current positions and runtime state. In 3D, nodes
+   * also carry `z`.
    */
   getGraphData(): GraphData {
     return this.data;
@@ -793,6 +966,12 @@ class FalkorDBCanvas extends HTMLElement {
     }
     // Clear link label cache in case link colors/properties changed
     this.relationshipsTextCache.clear();
+
+    if (this.graph3d) {
+      // Sizes and shapes are built into the 3D objects.
+      this.graph3d.rebuild();
+      return;
+    }
 
     const layoutMode = this.config.layoutMode;
     if (layoutMode === 'tree' || layoutMode === 'radial') {
@@ -846,6 +1025,12 @@ class FalkorDBCanvas extends HTMLElement {
     // The update repaints, which re-schedules any node that is still glowing.
     this.clearGlowTimers();
 
+    if (this.graph3d) {
+      // Existing nodes keep their place; the simulation places new ones.
+      this.graph3d.updateData();
+      return;
+    }
+
     if (!this.graph) return;
 
     this.calculateNodeDegree();
@@ -891,7 +1076,7 @@ class FalkorDBCanvas extends HTMLElement {
 
   /**
    * Get the underlying force-graph library instance for advanced customization.
-   * Returns undefined if the graph hasn't been initialized.
+   * Returns undefined if the graph hasn't been initialized, or is shown in 3D.
    */
   getGraph(): ForceGraphInstance | undefined {
     return this.graph;
@@ -899,6 +1084,7 @@ class FalkorDBCanvas extends HTMLElement {
 
   /** Get the current zoom level */
   public getZoom(): number {
+    if (this.graph3d) return this.graph3d.getZoom();
     return this.graph?.zoom() || 0;
   }
 
@@ -932,6 +1118,10 @@ class FalkorDBCanvas extends HTMLElement {
    * @param zoomLevel - The desired zoom scale (1 = 100%)
    */
   public zoom(zoomLevel: number): ForceGraphInstance | undefined {
+    if (this.graph3d) {
+      this.graph3d.zoom(zoomLevel);
+      return;
+    }
     if (!this.graph) return;
 
     this.log('Setting zoom level to:', zoomLevel);
@@ -945,6 +1135,10 @@ class FalkorDBCanvas extends HTMLElement {
    * @param duration - Transition duration in ms (default 0 = instant)
    */
   public centerAt(x: number, y: number, duration = 0): void {
+    if (this.graph3d) {
+      this.graph3d.centerAt(x, y, duration);
+      return;
+    }
     this.graph?.centerAt(x, y, duration);
   }
 
@@ -969,6 +1163,10 @@ class FalkorDBCanvas extends HTMLElement {
    * @param filter - Optional predicate to zoom only to a subset of nodes.
    */
   public zoomToFit(zoomMultiplier = 1, filter?: (node: GraphNode) => boolean) {
+    if (this.graph3d) {
+      this.graph3d.zoomToFit(filter, zoomMultiplier);
+      return;
+    }
     if (!this.graph || !this.shadowRoot) return;
 
     // Get canvas from shadow DOM
@@ -1062,6 +1260,11 @@ class FalkorDBCanvas extends HTMLElement {
   }
 
   private triggerRender() {
+    // three.js redraws every frame; the objects only need to follow the config.
+    if (this.graph3d) {
+      this.graph3d.restyle();
+      return;
+    }
     if (!this.graph) return;
 
     // Temporarily disable auto-pause so force-graph renders a frame even though
@@ -1122,7 +1325,11 @@ class FalkorDBCanvas extends HTMLElement {
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(this.container);
 
-    this.initGraph();
+    if (this.config.dimension === '3d') {
+      this.setDimension('3d').catch((error) => console.error('[FalkorDBCanvas]', error));
+    } else {
+      this.initGraph();
+    }
     this.setupResizeObserver();
   }
 
@@ -1133,6 +1340,9 @@ class FalkorDBCanvas extends HTMLElement {
     this.resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          this.graph3d?.setSize(width, height);
+        }
         if (this.graph && width > 0 && height > 0) {
           this.log('Container resized to:', width, 'x', height);
           this.graph.width(width).height(height);

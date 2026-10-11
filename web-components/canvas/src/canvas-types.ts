@@ -190,6 +190,8 @@ export interface EventHandlers {
   onEngineStop?: () => void;
   /** Fired when the layout mode changes */
   onLayoutChange?: (layout: LayoutMode) => void;
+  /** Fired once the canvas is showing the graph in a new dimension (after the 3D renderer has loaded) */
+  onDimensionChange?: (dimension: CanvasDimension) => void;
 }
 
 /**
@@ -208,6 +210,11 @@ export interface ForceGraphConfig {
   foregroundColor?: string;
 
   // ─── Layout ──────────────────────────────────────────────────────────────────
+  /**
+   * Render the graph flat on a 2D canvas or in 3D with WebGL. Default: '2d'.
+   * The 3D renderer (three.js) is loaded on first use.
+   */
+  dimension?: CanvasDimension;
   /** Active layout algorithm: 'force' (physics), 'tree' (hierarchical), or 'radial' (circular rings). Default: 'force' */
   layoutMode?: LayoutMode;
   /** Per-layout-mode options (tree direction/spacing, radial direction/spacing, force link distance). */
@@ -289,12 +296,13 @@ export interface ForceGraphConfig {
   eventHandlers?: EventHandlers;
 }
 
-export interface InternalForceGraphConfig extends Omit<ForceGraphConfig, 'backgroundColor' | 'foregroundColor' | 'captionsKeys' | 'showPropertyKeyPrefix' | 'layoutMode' | 'layoutOptions' | 'pinOnDragEnd' | 'nodeStyle' | 'linkStyle' | 'simulation' | 'interaction' | 'largeGraph'> {
+export interface InternalForceGraphConfig extends Omit<ForceGraphConfig, 'backgroundColor' | 'foregroundColor' | 'captionsKeys' | 'showPropertyKeyPrefix' | 'dimension' | 'layoutMode' | 'layoutOptions' | 'pinOnDragEnd' | 'nodeStyle' | 'linkStyle' | 'simulation' | 'interaction' | 'largeGraph'> {
   backgroundColor: string;
   foregroundColor: string;
   /** Normalized from `ForceGraphConfig.captionsKeys` — bare strings become `[key, false]`. */
   captionsKeys: [string, boolean][];
   showPropertyKeyPrefix: boolean;
+  dimension: CanvasDimension;
   layoutMode: LayoutMode;
   layoutOptions: LayoutOptions;
   pinOnDragEnd: boolean;
@@ -304,6 +312,9 @@ export interface InternalForceGraphConfig extends Omit<ForceGraphConfig, 'backgr
   interaction: Required<InteractionConfig>;
   largeGraph: Required<LargeGraphConfig>;
 }
+
+/** How the graph is drawn: flat on a 2D canvas, or in 3D with WebGL */
+export type CanvasDimension = '2d' | '3d';
 
 /** Layout algorithm mode: 'force' (physics-based), 'tree' (hierarchical DAG), or 'radial' (concentric rings) */
 export type LayoutMode = 'force' | 'tree' | 'radial';

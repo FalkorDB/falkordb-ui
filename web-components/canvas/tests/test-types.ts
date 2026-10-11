@@ -2,7 +2,7 @@
  * Shared test type definitions that use the actual source types
  * so TypeScript catches type mismatches at compile time.
  */
-import type { ForceGraphConfig, Data, GraphData, GraphNode, GraphLink, ViewportState, LayoutMode, LayoutOptions } from "../src/canvas-types";
+import type { ForceGraphConfig, Data, GraphData, GraphNode, GraphLink, ViewportState, LayoutMode, LayoutOptions, CanvasDimension } from "../src/canvas-types";
 import type { WorldBounds } from "../src/canvas";
 
 /**
@@ -23,6 +23,8 @@ export type CanvasTestElement = HTMLElement & {
   setPinOnDragEnd: (pin: boolean) => void;
   setLayout: (mode: LayoutMode) => void;
   setLayoutOptions: (options: Partial<LayoutOptions>) => void;
+  setDimension: (dimension: CanvasDimension) => Promise<void>;
+  getDimension: () => CanvasDimension;
   setDebug: (enabled: boolean) => void;
   refresh: () => void;
   getGraph: () => unknown;
@@ -32,6 +34,7 @@ export type CanvasTestElement = HTMLElement & {
   getViewport: () => ViewportState;
   setViewport: (viewport: ViewportState) => void;
   getCullingStats: () => CullingStats;
+  centerAt: (x: number, y: number, duration?: number) => void;
 };
 
 export interface CullingStats {
@@ -45,4 +48,4 @@ export interface CullingStats {
 }
 
 // Re-export source types for convenience
-export type { ForceGraphConfig, Data, GraphData, GraphNode, GraphLink, ViewportState, LayoutMode, LayoutOptions, WorldBounds };
+export type { ForceGraphConfig, Data, GraphData, GraphNode, GraphLink, ViewportState, LayoutMode, LayoutOptions, CanvasDimension, WorldBounds };
