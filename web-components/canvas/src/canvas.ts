@@ -33,6 +33,7 @@ import {
   LINK_WIDTH,
   normalizeCaptionsKeys,
   wrapTextForCircularNode,
+  wrapVisibleLinks,
 } from "./canvas-utils.js";
 import { isForceLayout, pinAllNodes, unpinAllNodes, computeTreePositions, computeRadialPositions } from "./layouts.js";
 import { PointerHitFallback, type Bounds } from "./pointer-hit-fallback.js";
@@ -234,6 +235,22 @@ class FalkorDBCanvas extends HTMLElement {
   // Per-node font size cache: computed once per node, read every frame.
   private nodeDisplayFontSize: Map<number, number> = new Map();
 
+  // Baseline offsets for a node's caption, which cost a `measureText` to derive.
+  // Keyed by node, revalidated against the font and text they were measured for.
+  private nodeTextLayout: Map<
+    number,
+    {
+      font: string;
+      line1: string;
+      halfTextHeight: number;
+      yCorrection: number;
+    }
+  > = new Map();
+
+  // Pending glow repaints, keyed by node, so a glowing node queues one timer
+  // rather than one per frame.
+  private glowRenderScheduled: Map<number, ReturnType<typeof setTimeout>> = new Map();
+
   private relationshipsTextCache: Map<
     string,
     {
@@ -258,6 +275,9 @@ class FalkorDBCanvas extends HTMLElement {
   private onFontsLoadingDone = () => {
     this.relationshipsTextCache.clear();
     this.nodeDisplayFontSize.clear();
+    // The font string is unchanged, so only an explicit clear picks up the
+    // metrics of the face that just replaced the fallback.
+    this.nodeTextLayout.clear();
     for (const node of this.data.nodes) {
       node.displayName = ["" , ""];
     }
@@ -322,6 +342,7 @@ class FalkorDBCanvas extends HTMLElement {
   disconnectedCallback() {
     this.log('Component disconnected from DOM');
     document.fonts.removeEventListener("loadingdone", this.onFontsLoadingDone);
+    this.clearGlowTimers();
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
@@ -353,6 +374,7 @@ class FalkorDBCanvas extends HTMLElement {
     if ((captionsKeys && JSON.stringify(captionsKeys) !== JSON.stringify(this.config.captionsKeys))
       || (config.showPropertyKeyPrefix !== undefined && config.showPropertyKeyPrefix !== this.config.showPropertyKeyPrefix)) {
       this.nodeDisplayFontSize.clear();
+      this.nodeTextLayout.clear();
       for (const node of this.data.nodes) {
         node.displayName = ["", ""];
       }
@@ -394,9 +416,13 @@ class FalkorDBCanvas extends HTMLElement {
     // Clear cached font sizes and display names when node style changes so text gets recalculated
     if (config.nodeStyle) {
       this.nodeDisplayFontSize.clear();
+      this.nodeTextLayout.clear();
       for (const node of this.data.nodes) {
         node.displayName = ["", ""];
       }
+      // Pending glow repaints hold the old glowDuration's deadline. Drop them so
+      // the repaint below re-schedules a still-glowing node against the new one.
+      this.clearGlowTimers();
     }
 
     // Clear cached link label metrics when link style changes
@@ -811,6 +837,12 @@ class FalkorDBCanvas extends HTMLElement {
     // Convert data and apply circular layout to new nodes only
     this.data = dataToGraphData(data, undefined, undefined, this.config.linkStyle.parallelEdgeCurveMultiplier);
 
+    // A full replacement can reuse node ids for different nodes, so drop
+    // everything cached per id; pending glow repaints belong to the old graph.
+    this.nodeDisplayFontSize.clear();
+    this.nodeTextLayout.clear();
+    this.clearGlowTimers();
+
     // Initialize graph if it hasn't been initialized yet
     if (!this.graph && !this.graph3d && this.container && this.config.dimension === '2d') {
       this.log('Initializing graph');
@@ -923,6 +955,9 @@ class FalkorDBCanvas extends HTMLElement {
   refresh() {
     // Clear font size cache so text re-fits updated node sizes
     this.nodeDisplayFontSize.clear();
+    this.nodeTextLayout.clear();
+    // The repaint below re-schedules any node that is still glowing.
+    this.clearGlowTimers();
     // Clear display names so text re-wraps for the new node sizes
     for (const node of this.data.nodes) {
       node.displayName = ["", ""];
@@ -941,6 +976,12 @@ class FalkorDBCanvas extends HTMLElement {
       // Recompute layout to handle node size changes
       this.applyLayout(false);
     } else {
+      // Callers mutate the live links from getGraphData(), and d3 caches link
+      // strengths and distances at initialise time. Re-binding the links
+      // re-derives both (through the visibility filter) without re-applying the
+      // rest of setupForces(), which would overwrite any forces the host tuned.
+      const linkForce = this.graph?.d3Force("link");
+      if (linkForce) this.bindVisibleLinks(linkForce);
       this.triggerRender();
     }
   }
@@ -974,10 +1015,13 @@ class FalkorDBCanvas extends HTMLElement {
     // Invalidate display caches — reused nodes may have new color/size/data
     // that affects text wrapping or font sizing.
     this.nodeDisplayFontSize.clear();
+    this.nodeTextLayout.clear();
     for (const node of this.data.nodes) {
       node.displayName = ["", ""];
     }
     this.relationshipsTextCache.clear();
+    // The update repaints, which re-schedules any node that is still glowing.
+    this.clearGlowTimers();
 
     if (this.graph3d) {
       // Existing nodes keep their place; the simulation places new ones.
@@ -1192,6 +1236,27 @@ class FalkorDBCanvas extends HTMLElement {
     this.graph.zoom(zoom);
   }
 
+  /**
+   * Queues the repaint that ends `nodeId`'s glow. Called from the draw loop, so
+   * it collapses the one-timer-per-frame a glowing node would otherwise queue.
+   */
+  private clearGlowTimers() {
+    this.glowRenderScheduled.forEach(clearTimeout);
+    this.glowRenderScheduled.clear();
+  }
+
+  private scheduleGlowRender(nodeId: number, delay: number) {
+    if (this.glowRenderScheduled.has(nodeId)) return;
+
+    this.glowRenderScheduled.set(
+      nodeId,
+      setTimeout(() => {
+        this.glowRenderScheduled.delete(nodeId);
+        this.triggerRender();
+      }, delay),
+    );
+  }
+
   private triggerRender() {
     // three.js redraws every frame; the objects only need to follow the config.
     if (this.graph3d) {
@@ -1379,6 +1444,16 @@ class FalkorDBCanvas extends HTMLElement {
     }
   }
 
+  /**
+   * Binds the current links to `linkForce`, first wrapping its `links` binder so
+   * hidden links are dropped (once per force). The force may be one a host set
+   * through `getGraph().d3Force("link", ...)`, so every caller goes through here.
+   * Binding runs d3's initialize(), which re-derives link strengths and distances.
+   */
+  private bindVisibleLinks(linkForce: object) {
+    wrapVisibleLinks(linkForce).links(this.data.links);
+  }
+
   private setupForces() {
     this.log('Setting up force simulation');
     const linkForce = this.graph?.d3Force("link");
@@ -1388,6 +1463,9 @@ class FalkorDBCanvas extends HTMLElement {
 
     const linkDist = this.config.layoutOptions.force?.linkDistance ?? LINK_DISTANCE;
     const collisionPad = this.config.layoutOptions.force?.collisionPadding ?? 25;
+
+    // force-graph's linkVisibility only filters drawing; see wrapVisibleLinks.
+    this.bindVisibleLinks(linkForce);
 
     // distance based on node size + constant
     linkForce
@@ -1702,9 +1780,7 @@ class FalkorDBCanvas extends HTMLElement {
         ctx.stroke();
       }
       ctx.restore();
-      setTimeout(() => {
-        this.triggerRender();
-      }, glowDuration - expandAge);
+      this.scheduleGlowRender(node.id, glowDuration - expandAge);
     }
 
     this.traceNodeShape(node, ctx, radius);
@@ -1731,11 +1807,11 @@ class FalkorDBCanvas extends HTMLElement {
 
     let [line1, line2] = node.displayName;
     const textRadius = node.size - PADDING / 2;
+    const nodeFontWeight = this.config.isNodeSelected?.(node) ? this.config.nodeStyle.fontWeightSelected : this.config.nodeStyle.fontWeightUnselected;
 
     if (!line1 && !line2) {
       const text = getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
 
-      const nodeFontWeight = this.config.isNodeSelected?.(node) ? this.config.nodeStyle.fontWeightSelected : this.config.nodeStyle.fontWeightUnselected;
       const baseFontSize = this.config.nodeStyle.fontSize;
 
       // Measure at the base size for line-wrapping decisions.
@@ -1768,33 +1844,40 @@ class FalkorDBCanvas extends HTMLElement {
       }
       // else: fixed fontSize mode — chosenSize stays as baseFontSize.
 
-      ctx.font = `${nodeFontWeight} ${chosenSize}px ${this.config.nodeStyle.fontFamily}`;
       node.displayName = [line1, line2];
       this.nodeDisplayFontSize.set(node.id, chosenSize);
-    } else {
-      // Cache hit: the font size was stored when displayName was first computed.
-      const nodeFontWeight = this.config.isNodeSelected?.(node) ? this.config.nodeStyle.fontWeightSelected : this.config.nodeStyle.fontWeightUnselected;
-      const chosenSize = this.nodeDisplayFontSize.get(node.id) ?? this.config.nodeStyle.fontSize;
-      ctx.font = `${nodeFontWeight} ${chosenSize}px ${this.config.nodeStyle.fontFamily}`;
     }
 
-    const textMetrics = ctx.measureText(line1);
-    const textHeight =
-      textMetrics.actualBoundingBoxAscent +
-      textMetrics.actualBoundingBoxDescent;
-    const halfTextHeight = (textHeight / 2) * 1.5;
+    // The font size was stored when displayName was first computed.
+    const chosenSize = this.nodeDisplayFontSize.get(node.id) ?? this.config.nodeStyle.fontSize;
+    const font = `${nodeFontWeight} ${chosenSize}px ${this.config.nodeStyle.fontFamily}`;
+    ctx.font = font;
+
+    let layout = this.nodeTextLayout.get(node.id);
+    if (!layout || layout.font !== font || layout.line1 !== line1) {
+      const textMetrics = ctx.measureText(line1);
+      const textHeight =
+        textMetrics.actualBoundingBoxAscent +
+        textMetrics.actualBoundingBoxDescent;
+
+      layout = {
+        font,
+        line1,
+        halfTextHeight: (textHeight / 2) * 1.5,
+        // textBaseline="middle" centers on the em-box midpoint, but for glyphs
+        // without descenders (e.g. digits) the visual center sits above that.
+        // Nudge down by (ascent − descent) / 2 to true-center the rendered pixels.
+        yCorrection:
+          (textMetrics.actualBoundingBoxAscent - textMetrics.actualBoundingBoxDescent) / 2,
+      };
+      this.nodeTextLayout.set(node.id, layout);
+    }
 
     if (line1) {
-      // textBaseline="middle" centers on the em-box midpoint, but for glyphs
-      // without descenders (e.g. digits) the visual center sits above that.
-      // Nudge down by (ascent − descent) / 2 to true-center the rendered pixels.
-      const yCorrection = line2
-        ? 0
-        : (textMetrics.actualBoundingBoxAscent - textMetrics.actualBoundingBoxDescent) / 2;
-      ctx.fillText(line1, node.x, line2 ? node.y - halfTextHeight : node.y + yCorrection);
+      ctx.fillText(line1, node.x, line2 ? node.y - layout.halfTextHeight : node.y + layout.yCorrection);
     }
     if (line2) {
-      ctx.fillText(line2, node.x, node.y + halfTextHeight);
+      ctx.fillText(line2, node.x, node.y + layout.halfTextHeight);
     }
 
     // Restore opacity after dimmed draw.
@@ -2324,9 +2407,7 @@ class FalkorDBCanvas extends HTMLElement {
           const expandAge = Date.now() - expandTime.getTime();
           const glowDuration = this.config.nodeStyle.glowDuration;
           if (expandAge < glowDuration) {
-            setTimeout(() => {
-              this.triggerRender();
-            }, Math.min(100, glowDuration - expandAge));
+            this.scheduleGlowRender(node.id, Math.min(100, glowDuration - expandAge));
           }
         } else {
           this.drawNode(node, ctx);

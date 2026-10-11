@@ -34,12 +34,9 @@ function subscribe(listener: () => void) {
 
 const getSnapshot = () => toasts;
 
+/** Runs from the toast's own removal timer, which has fired by then. */
 function remove(id: string) {
-	const timer = removeTimers.get(id);
-	if (timer) {
-		clearTimeout(timer);
-		removeTimers.delete(id);
-	}
+	removeTimers.delete(id);
 	emit(toasts.filter((item) => item.id !== id));
 }
 

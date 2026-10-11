@@ -271,3 +271,95 @@ describe("setPinOnDragEnd", () => {
     expect(onPinChange).toHaveBeenCalledWith(false);
   });
 });
+
+describe("link force visibility", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    resetForceGraphMockState();
+  });
+
+  function simulationLinkIds(data: typeof TREE_DATA) {
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600 });
+    canvas.setData(data);
+
+    const linkForce = getLastInstance().d3Force("link") as { linkSet?: { id: number }[] };
+
+    return linkForce.linkSet!.map((link) => link.id);
+  }
+
+  it("keeps a hidden link out of the simulation entirely", () => {
+    const hidden = {
+      ...TREE_DATA,
+      links: TREE_DATA.links.map((l) => (l.id === 3 ? { ...l, visible: false } : l)),
+    };
+
+    // Not merely zero-strength: d3 derives each link's bias from degree counts
+    // in initialize(), and bias has no setter, so a hidden link left in the set
+    // would go on skewing how every surviving link splits its pull.
+    expect(simulationLinkIds(TREE_DATA)).toEqual([1, 2, 3]);
+    document.body.innerHTML = "";
+    resetForceGraphMockState();
+    expect(simulationLinkIds(hidden)).toEqual([1, 2]);
+  });
+
+  it("keeps the hidden link out even though graphData re-binds the full array", () => {
+    // setData calls setupForces() and only then runForceWarmup(), whose
+    // graphData() re-binds every link to the force — and force-graph runs its
+    // warmup ticks inside that same digest. The filter therefore has to live in
+    // the force's own binder; a set filtered beforehand would be overwritten.
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600 });
+    canvas.setData({
+      ...TREE_DATA,
+      links: TREE_DATA.links.map((l) => (l.id === 3 ? { ...l, visible: false } : l)),
+    });
+
+    const instance = getLastInstance();
+    const linkForce = instance.d3Force("link") as { linkSet?: { id: number }[] };
+
+    // Re-binding the full array by hand, as a later digest would.
+    instance.graphData(canvas.getGraphData());
+
+    expect(linkForce.linkSet!.map((l) => l.id)).toEqual([1, 2]);
+  });
+
+  it("re-derives the simulation link set when a live link is hidden and refresh() is called", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600 });
+    canvas.setData(TREE_DATA);
+
+    const instance = getLastInstance();
+    const linkIds = () => (instance.d3Force("link") as { linkSet?: { id: number }[] }).linkSet!.map((l) => l.id);
+
+    expect(linkIds()).toEqual([1, 2, 3]);
+
+    // getGraphData() hands back the live links, so this is an in-place mutation.
+    // d3 caches the set at initialise time, so only re-binding it takes effect.
+    canvas.getGraphData().links[2].visible = false;
+    canvas.refresh();
+
+    expect(linkIds()).toEqual([1, 2]);
+  });
+
+  it("filters hidden links out of a link force the host swapped in before refresh()", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600 });
+    canvas.setData(TREE_DATA);
+
+    // A host replacing the force through getGraph() gets an unwrapped binder.
+    const hostForce = {
+      linkSet: undefined as { id: number }[] | undefined,
+      links(links: { id: number }[]) {
+        this.linkSet = links;
+        return this;
+      },
+    };
+    (canvas.getGraph() as any).d3Force("link", hostForce);
+
+    canvas.getGraphData().links[2].visible = false;
+    canvas.refresh();
+
+    expect(hostForce.linkSet!.map((l) => l.id)).toEqual([1, 2]);
+  });
+});

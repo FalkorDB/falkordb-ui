@@ -14,6 +14,7 @@ import {
   LINK_WIDTH,
   getContrastTextColor,
   getNodeDisplayText,
+  wrapVisibleLinks,
 } from "./canvas-utils.js";
 import { computeRadialPositions } from "./layouts.js";
 
@@ -167,6 +168,10 @@ export class Graph3D {
 
   /** Recreate every object, for changes restyle() does not cover (sizes, shapes, captions' colours). */
   rebuild() {
+    // Visibility may have changed in place, and the force caches the links it
+    // was given, so hand it the live ones again; the wrapper drops hidden ones.
+    const linkForce = this.graph.d3Force("link");
+    if (linkForce) wrapVisibleLinks(linkForce).links(this.host.data.links);
     this.graph.refresh();
     this.restyle();
   }
@@ -282,7 +287,13 @@ export class Graph3D {
     const { layoutOptions, simulation } = this.host.config;
     const linkDist = layoutOptions.force?.linkDistance ?? LINK_DISTANCE;
 
-    this.graph.d3Force("link")?.distance?.((link: GraphLink) => link.source.size + link.target.size + linkDist * 2);
+    const linkForce = this.graph.d3Force("link");
+    if (linkForce) {
+      // linkVisibility only filters drawing here too: the library binds every
+      // link to this force on each data update. See wrapVisibleLinks.
+      wrapVisibleLinks(linkForce);
+      linkForce.distance?.((link: GraphLink) => link.source.size + link.target.size + linkDist * 2);
+    }
     this.graph.d3Force("charge")?.strength?.(simulation.chargeStrength);
     this.graph.d3VelocityDecay(simulation.velocityDecay);
     this.graph.d3AlphaMin(simulation.alphaMin);

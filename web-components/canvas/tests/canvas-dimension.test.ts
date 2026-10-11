@@ -639,3 +639,40 @@ describe("3D scene objects", () => {
     expect(last3D().callsTo("refresh")).toHaveLength(refreshes + 1);
   });
 });
+
+describe("3D hidden links", () => {
+  const THREE_NODES = {
+    nodes: [
+      { id: 1, labels: ["A"], visible: true, color: "#ff0000", data: {} },
+      { id: 2, labels: ["B"], visible: true, color: "#00ff00", data: {} },
+      { id: 3, labels: ["C"], visible: true, color: "#0000ff", data: {} },
+    ],
+    links: [
+      { id: 10, relationship: "REL", source: 1, target: 2, visible: true, color: "#888888", data: {} },
+      { id: 11, relationship: "REL", source: 2, target: 3, visible: false, color: "#888888", data: {} },
+    ],
+  };
+
+  const boundIds = () => last3D().linkForce.linkSet!.map((link) => link.id);
+
+  it("keeps a hidden link out of the simulation", async () => {
+    const canvas = createCanvas();
+    canvas.setData(THREE_NODES);
+    await canvas.setDimension("3d");
+
+    expect(boundIds()).toEqual([10]);
+  });
+
+  it("drops a link hidden in place when refresh() is called", async () => {
+    const canvas = createCanvas();
+    canvas.setData({ ...THREE_NODES, links: THREE_NODES.links.map((link) => ({ ...link, visible: true })) });
+    await canvas.setDimension("3d");
+    expect(boundIds()).toEqual([10, 11]);
+
+    // getGraphData() hands back the live links, so this is an in-place change.
+    canvas.getGraphData().links[1].visible = false;
+    canvas.refresh();
+
+    expect(boundIds()).toEqual([10]);
+  });
+});

@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
 import { fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -157,6 +157,23 @@ describe("toast store", () => {
 
 		expect(onOpenChange).toHaveBeenCalledWith(false);
 		expect(screen.queryByText("Query finished")).not.toBeInTheDocument();
+	});
+
+	it("keeps a toast that reports it opened, and forwards that too", () => {
+		const onOpenChange = vi.fn();
+		render(<Toaster />);
+
+		act(() => {
+			toast({ title: "Query finished", onOpenChange });
+		});
+		const { result } = renderHook(() => useToast());
+		act(() => {
+			result.current.toasts[0]?.onOpenChange?.(true);
+			vi.advanceTimersByTime(300);
+		});
+
+		expect(onOpenChange).toHaveBeenCalledWith(true);
+		expect(screen.getByText("Query finished")).toBeInTheDocument();
 	});
 
 	it("closes through its close button when no onOpenChange was supplied", () => {

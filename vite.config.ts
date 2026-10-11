@@ -27,7 +27,7 @@ export default defineConfig({
 		react(),
 		dts({
 			tsconfigPath: "./tsconfig.build.json",
-			rollupTypes: true,
+			bundleTypes: true,
 		}),
 	],
 	resolve: {

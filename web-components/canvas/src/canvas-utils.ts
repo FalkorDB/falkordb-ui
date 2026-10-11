@@ -7,6 +7,32 @@ import {
   GraphLink,
 } from "./canvas-types.js";
 
+type LinkBinder = { links: (links?: GraphLink[]) => unknown };
+
+/** Link forces whose `links` binder already drops hidden links. */
+const visibilityFilteredLinkForces = new WeakSet<object>();
+
+/**
+ * Makes a d3 link force drop hidden links whenever links are bound to it, and
+ * returns it. force-graph and 3d-force-graph both treat `linkVisibility` as
+ * drawing-only and bind the full link array to the force on every data update,
+ * so a link filtered from the outside is overwritten before it does any work;
+ * patching the force's own binder filters every bind, whoever makes it. Hidden
+ * links have to stay out of d3 rather than merely be zeroed: d3 also derives
+ * each link's `bias` from degree counts in initialize(), and bias has no setter.
+ * Wraps a force once, so it is safe to call on every setup.
+ */
+export function wrapVisibleLinks(force: object): LinkBinder {
+  const linkForce = force as LinkBinder;
+  if (!visibilityFilteredLinkForces.has(force)) {
+    const bind = linkForce.links.bind(linkForce);
+    linkForce.links = (links?: GraphLink[]) =>
+      (links === undefined ? bind() : bind(links.filter((link) => link.visible !== false)));
+    visibilityFilteredLinkForces.add(force);
+  }
+  return linkForce;
+}
+
 /** Default canvas background color */
 export const DEFAULT_CANVAS_BACKGROUND = '#FFFFFF';
 
@@ -236,13 +262,11 @@ const resolveNodeCaption = (
   return null;
 };
 
-/**
- * Calculates the appropriate text color (black or white) based on background color brightness
- * Uses the relative luminance formula from WCAG guidelines
- * @param bgColor Background color in hex format (e.g., "#ff5733")
- * @returns "white" for dark backgrounds, "black" for light backgrounds
- */
-export const getContrastTextColor = (bgColor: string, threshold = 0.5): string => {
+const contrastTextColorCache = new Map<string, string>();
+/** Palettes are small; the bound only stops an unbounded run of generated colors. */
+const CONTRAST_CACHE_LIMIT = 512;
+
+const computeContrastTextColor = (bgColor: string, threshold: number): string => {
   let r: number;
   let g: number;
   let b: number;
@@ -299,6 +323,33 @@ export const getContrastTextColor = (bgColor: string, threshold = 0.5): string =
 
   // Return white for dark backgrounds, black for light backgrounds
   return luminance > threshold ? 'black' : 'white';
+};
+
+/**
+ * Calculates the appropriate text color (black or white) based on background color brightness
+ * Uses the relative luminance formula from WCAG guidelines
+ *
+ * Memoized: this runs once per node per frame, and the result depends only on
+ * the arguments.
+ *
+ * @param bgColor Background color in hex format (e.g., "#ff5733")
+ * @returns "white" for dark backgrounds, "black" for light backgrounds
+ */
+export const getContrastTextColor = (bgColor: string, threshold = 0.5): string => {
+  const key = `${bgColor}|${threshold}`;
+  const hit = contrastTextColorCache.get(key);
+  if (hit !== undefined) return hit;
+
+  const color = computeContrastTextColor(bgColor, threshold);
+  if (contrastTextColorCache.size >= CONTRAST_CACHE_LIMIT) {
+    // Evict the oldest entry (Maps iterate in insertion order) rather than
+    // clearing, so one extra colour doesn't throw away every cached result.
+    const oldest = contrastTextColorCache.keys().next().value;
+    if (oldest !== undefined) contrastTextColorCache.delete(oldest);
+  }
+  contrastTextColorCache.set(key, color);
+
+  return color;
 };
 
 /**
