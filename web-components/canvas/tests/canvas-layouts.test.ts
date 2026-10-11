@@ -341,4 +341,25 @@ describe("link force visibility", () => {
 
     expect(linkIds()).toEqual([1, 2]);
   });
+
+  it("filters hidden links out of a link force the host swapped in before refresh()", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600 });
+    canvas.setData(TREE_DATA);
+
+    // A host replacing the force through getGraph() gets an unwrapped binder.
+    const hostForce = {
+      linkSet: undefined as { id: number }[] | undefined,
+      links(links: { id: number }[]) {
+        this.linkSet = links;
+        return this;
+      },
+    };
+    (canvas.getGraph() as any).d3Force("link", hostForce);
+
+    canvas.getGraphData().links[2].visible = false;
+    canvas.refresh();
+
+    expect(hostForce.linkSet!.map((l) => l.id)).toEqual([1, 2]);
+  });
 });

@@ -803,7 +803,8 @@ class FalkorDBCanvas extends HTMLElement {
       // strengths and distances at initialise time. Re-binding the links
       // re-derives both (through the visibility filter) without re-applying the
       // rest of setupForces(), which would overwrite any forces the host tuned.
-      this.graph?.d3Force("link")?.links(this.data.links);
+      const linkForce = this.graph?.d3Force("link");
+      if (linkForce) this.bindVisibleLinks(linkForce);
       this.triggerRender();
     }
   }
@@ -1235,6 +1236,22 @@ class FalkorDBCanvas extends HTMLElement {
     }
   }
 
+  /**
+   * Binds the current links to `linkForce`, first wrapping its `links` binder so
+   * hidden links are dropped (once per force). The force may be one a host set
+   * through `getGraph().d3Force("link", ...)`, so every caller goes through here.
+   * Binding runs d3's initialize(), which re-derives link strengths and distances.
+   */
+  private bindVisibleLinks(linkForce: NonNullable<Parameters<NonNullable<ForceGraphInstance>["d3Force"]>[1]>) {
+    if (!this.visibilityFilteredLinkForces.has(linkForce)) {
+      const bind = linkForce.links.bind(linkForce);
+      linkForce.links = (links?: GraphLink[]) =>
+        (links === undefined ? bind() : bind(links.filter((link) => link.visible !== false)));
+      this.visibilityFilteredLinkForces.add(linkForce);
+    }
+    linkForce.links(this.data.links);
+  }
+
   private setupForces() {
     this.log('Setting up force simulation');
     const linkForce = this.graph?.d3Force("link");
@@ -1253,13 +1270,7 @@ class FalkorDBCanvas extends HTMLElement {
     // Hidden links have to stay out of d3 rather than merely be zeroed: d3 also
     // derives each link's `bias` — how it splits a correction between its two
     // endpoints — from degree counts in initialize(), and bias has no setter.
-    if (!this.visibilityFilteredLinkForces.has(linkForce)) {
-      const bind = linkForce.links.bind(linkForce);
-      linkForce.links = (links?: GraphLink[]) =>
-        (links === undefined ? bind() : bind(links.filter((link) => link.visible !== false)));
-      this.visibilityFilteredLinkForces.add(linkForce);
-    }
-    linkForce.links(this.data.links);
+    this.bindVisibleLinks(linkForce);
 
     // distance based on node size + constant
     linkForce
