@@ -8,6 +8,7 @@ A standalone web component for visualizing FalkorDB graphs using force-directed 
 
 - 🎨 **Force-directed graph layout** - Automatic positioning using D3 force simulation with smart collision detection
 - 🧭 **Multiple layout modes** - Switch between `force`, `tree`, and `radial` graph views
+- 🧊 **2D or 3D** - Show the graph flat on a canvas or in 3D with WebGL; three.js is only loaded when 3D is first used
 - 🎯 **Interactive** - Click, hover, right-click interactions on nodes, links, and background
 - 🌓 **Theme support** - Light and dark mode compatible with customizable colors
 - ⚡ **Performance** - Optimized rendering with HTML5 canvas, including viewport culling and low-zoom draw skipping for large graphs
@@ -130,6 +131,8 @@ function GraphVisualization() {
 | **setPinOnDragEnd**(*pin*) | | Enable or disable pinning nodes after dragging. |
 | **setLayout**(*layoutMode*) | `'force'` | Switch layout mode: `'force'` \| `'tree'` \| `'radial'`. |
 | **setLayoutOptions**(*options*) | | Update per-layout options (tree, radial, force). Triggers re-layout. |
+| **setDimension**(*dimension*) | `'2d'` | Show the graph in `'2d'` or `'3d'`. Returns a promise that settles once the switch is done (see [2D and 3D](#2d-and-3d)). |
+| **getDimension**() | | The dimension the graph is shown in, or is being switched to. |
 | **setDebug**(*enabled*) | `false` | Enable or disable debug logging to console. All log messages are prefixed with `[FalkorDBCanvas]`. |
 | **refresh**() | | Trigger a repaint after in-place property mutations (visibility, color, size). Recomputes positions for deterministic layouts. |
 | **getViewport**() | | Get current zoom and center position as `ViewportState`. |
@@ -152,6 +155,7 @@ Configuration is passed to `setConfig()` as a `ForceGraphConfig` object. It is o
 | `height` | `<window height>` | Canvas height in pixels |
 | `backgroundColor` | `'#FFFFFF'` | Background color (hex or CSS color) |
 | `foregroundColor` | `'#1A1A1A'` | Foreground color for borders and text |
+| `dimension` | `'2d'` | Render in `'2d'` or `'3d'` (see [2D and 3D](#2d-and-3d)) |
 | `layoutMode` | `'force'` | Layout algorithm: `'force'` \| `'tree'` \| `'radial'` |
 | `layoutOptions` | `{}` | Per-layout options (see [Layout Modes](#layout-modes)) |
 | `animation` | | Enable/disable layout animation |
@@ -236,6 +240,7 @@ Configuration is passed to `setConfig()` as a `ForceGraphConfig` object. It is o
 | `onZoom` | `(transform: Transform) => void` |
 | `onEngineStop` | `() => void` |
 | `onLayoutChange` | `(layout: LayoutMode) => void` |
+| `onDimensionChange` | `(dimension: CanvasDimension) => void` — fires once the canvas shows the new dimension |
 
 ### Layout Modes
 
@@ -272,6 +277,26 @@ Notes:
 - `force` keeps simulation enabled with configurable physics (see `simulation` config).
 - `tree`: `direction` (`'td'` | `'bu'` | `'lr'` | `'rl'`), `levelDistance`, `nodeSpacing`.
 - `radial`: `direction` (`'out'` | `'in'`), `levelDistance`, `nodeSpacing`.
+
+### 2D and 3D
+
+The graph is drawn flat on an HTML5 canvas by default. Switch to 3D to explore it in space, rendered with WebGL by [3d-force-graph](https://github.com/vasturiano/3d-force-graph):
+
+```typescript
+await canvas.setDimension('3d'); // or canvas.setConfig({ dimension: '3d' })
+await canvas.setDimension('2d');
+```
+
+The 3D renderer and three.js are loaded the first time 3D is used, so pages that stay in 2D never download them. Until the switch completes the current view stays up; `onDimensionChange` fires when it is done.
+
+Switching lays the graph out afresh in the new dimension and fits it to the view. The data, selection, dimming, colors, captions and event handlers carry over. In 3D:
+
+- Drag to rotate, scroll to zoom, right-drag to pan. `zoom()` and `getZoom()` express the camera's distance as a zoom factor, so `zoom(getZoom() * 1.1)` zooms in as it does in 2D.
+- `tree` stacks each level as a layer along its `direction`'s axis, `levelDistance` apart. `radial` keeps the 2D rings and lays them out along a cone: the root at the tip, each level a wider ring further back, so the rings read face-on and rotating shows the levels in depth.
+- Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Captions are left to the hover tooltip above 1,000 nodes or links.
+- Pausing the animation or pinning stops the simulation; a dragged node stays where it is dropped when `pinOnDragEnd` is on.
+- `getViewport()` returns `undefined` and `setViewport()` does nothing, since a 2D zoom and center do not describe a 3D camera. `getGraph()` returns `undefined`.
+- Custom `node` / `link` canvas renderers, `linkLineDash`, the expand glow and the `largeGraph` culling apply to 2D only.
 
 ### Data Types
 
