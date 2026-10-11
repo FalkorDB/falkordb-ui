@@ -433,6 +433,9 @@ class FalkorDBCanvas extends HTMLElement {
     }
     if (config.backgroundColor && this.graph3d) {
       this.graph3d.setBackgroundColor(this.config.backgroundColor);
+    } else if ((config.nodeStyle || config.linkStyle || config.interaction) && this.graph3d) {
+      // 3D captions are textures, drawn with these fonts and contrast settings.
+      this.graph3d.rebuild();
     }
     if (config.backgroundColor || config.foregroundColor || config.interaction) {
       this.updateTooltipStyles();
@@ -1101,8 +1104,7 @@ class FalkorDBCanvas extends HTMLElement {
    */
   public zoomToFit(zoomMultiplier = 1, filter?: (node: GraphNode) => boolean) {
     if (this.graph3d) {
-      this.graph3d.zoomToFit(filter);
-      if (zoomMultiplier !== 1) this.graph3d.zoom(this.graph3d.getZoom() * zoomMultiplier, 0);
+      this.graph3d.zoomToFit(filter, zoomMultiplier);
       return;
     }
     if (!this.graph || !this.shadowRoot) return;

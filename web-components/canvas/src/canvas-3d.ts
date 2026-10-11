@@ -100,7 +100,7 @@ export class Graph3D {
    */
   private layoutPending = false;
 
-  private pendingFit: { filter?: (node: GraphNode) => boolean } | null = null;
+  private pendingFit: { filter?: (node: GraphNode) => boolean; zoomMultiplier?: number } | null = null;
 
   constructor(container: HTMLElement, private readonly host: Graph3DHost) {
     const { config } = host;
@@ -189,7 +189,7 @@ export class Graph3D {
     const { layoutMode, layoutOptions, simulation, animation, pinOnDragEnd } = this.host.config;
     this.layoutPending = true;
     if (fit) this.pendingFit = {};
-    const running = !!animation && !pinOnDragEnd;
+    const running = !!animation && !pinOnDragEnd && layoutMode !== "radial";
 
     this.setupForces();
     for (const node of this.host.data.nodes) unpin3D(node);
@@ -247,8 +247,13 @@ export class Graph3D {
     }
   }
 
+  /** The radial cone is its pinned positions: forces would only pull it apart. */
+  private get holdsLayout(): boolean {
+    return this.host.config.layoutMode === "radial";
+  }
+
   setAnimation(enabled: boolean) {
-    if (enabled && !this.host.config.pinOnDragEnd) {
+    if (enabled && !this.host.config.pinOnDragEnd && !this.holdsLayout) {
       this.graph.cooldownTicks(Infinity).d3ReheatSimulation();
       this.host.setEngineStatus(true);
     } else if (!enabled) {
@@ -264,6 +269,8 @@ export class Graph3D {
       return;
     }
 
+    // As in 2D, only a force layout comes loose and starts moving again.
+    if (this.holdsLayout) return;
     for (const node of this.host.data.nodes) unpin3D(node);
     if (this.host.config.animation) {
       this.graph.cooldownTicks(Infinity).d3ReheatSimulation();
@@ -289,9 +296,9 @@ export class Graph3D {
    * which reads the scene objects — and those only catch up with a new layout
    * a frame or more after it has landed.
    */
-  zoomToFit(filter?: (node: GraphNode) => boolean, durationMs = 0) {
+  zoomToFit(filter?: (node: GraphNode) => boolean, zoomMultiplier = 1, durationMs = 0) {
     if (this.layoutPending) {
-      this.pendingFit = { filter };
+      this.pendingFit = { filter, zoomMultiplier };
       return;
     }
 
@@ -315,7 +322,10 @@ export class Graph3D {
     const padding = Math.min(this.graph.width(), height) * this.host.config.interaction.zoomToFitPadding;
     const halfFov = THREE.MathUtils.degToRad(camera.fov / 2) * Math.max(1 - (2 * padding) / height, 0.1);
     const halfView = Math.min(Math.tan(halfFov), Math.tan(halfFov) * camera.aspect);
-    const distance = radius / Math.sin(Math.atan(halfView));
+    // As in 2D: the multiplier scales the fit, which never zooms in past zoomToFitMaxZoom.
+    const fitZoom = ZOOM_REFERENCE_DISTANCE / (radius / Math.sin(Math.atan(halfView)));
+    const zoom = Math.min(fitZoom * zoomMultiplier, this.host.config.interaction.zoomToFitMaxZoom);
+    const distance = ZOOM_REFERENCE_DISTANCE / Math.max(zoom, 0.01);
 
     const direction = this.cameraOffset();
     if (direction.lengthSq() === 0) direction.set(0, 0, 1);
@@ -406,7 +416,7 @@ export class Graph3D {
     this.layoutPending = false;
     const fit = this.pendingFit;
     this.pendingFit = null;
-    if (fit) this.zoomToFit(fit.filter);
+    if (fit) this.zoomToFit(fit.filter, fit.zoomMultiplier);
   }
 
   /**

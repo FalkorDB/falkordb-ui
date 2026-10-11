@@ -366,6 +366,63 @@ describe("3D rendering", () => {
     expect(fits()).toBe(before + 1);
   });
 
+  it("keeps a deferred fit's zoom multiplier, capped at zoomToFitMaxZoom", async () => {
+    const canvas = await canvasIn3D();
+    last3D().width(900);
+    last3D().height(600);
+    const place = () => canvas.getGraphData().nodes.forEach((node, i) => Object.assign(node, { x: i * 200, y: 0, z: 0 }));
+    const distance = () => {
+      const { cameraPos: c, controlsState: { target: t } } = last3D();
+      return Math.hypot(c.x - t.x, c.y - t.y, c.z - t.z);
+    };
+
+    canvas.setLayout("force");
+    place();
+    canvas.zoomToFit();
+    last3D().callback("onEngineStop")();
+    const plain = distance();
+
+    // Asked for while the layout is still landing: the multiplier waits with it.
+    canvas.setLayout("force");
+    place();
+    canvas.zoomToFit(2);
+    last3D().callback("onEngineStop")();
+    expect(distance()).toBeCloseTo(plain / 2);
+
+    // Never closer than zoomToFitMaxZoom allows (zoom k = 500 / distance).
+    canvas.setConfig({ interaction: { zoomToFitMaxZoom: 1 } });
+    canvas.zoomToFit(100);
+    expect(distance()).toBeCloseTo(500);
+  });
+
+  it("keeps the radial cone pinned when pinning is turned off", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setAnimation(true);
+    canvas.setLayout("radial");
+    canvas.setPinOnDragEnd(true);
+
+    canvas.setPinOnDragEnd(false);
+
+    const nodes = canvas.getGraphData().nodes as Array<GraphNode & { z?: number; fz?: number }>;
+    for (const n of nodes) expect([n.fx, n.fy, n.fz]).toEqual([n.x, n.y, n.z]);
+    // Nor does turning animation on set forces loose on it.
+    canvas.setAnimation(false);
+    canvas.setAnimation(true);
+    expect(last3D().props.get("cooldownTicks")).toBe(0);
+  });
+
+  it("redraws 3D captions when their fonts or contrast change", async () => {
+    const canvas = await canvasIn3D();
+    const refreshes = () => last3D().callsTo("refresh").length;
+    const before = refreshes();
+
+    canvas.setConfig({ nodeStyle: { fontFamily: "Inter" } });
+    canvas.setConfig({ linkStyle: { fontWeightUnselected: 500 } });
+    canvas.setConfig({ interaction: { contrastThreshold: 0.6 } });
+
+    expect(refreshes()).toBe(before + 3);
+  });
+
   it("has no 2D viewport to report or restore", async () => {
     const canvas = await canvasIn3D();
 
