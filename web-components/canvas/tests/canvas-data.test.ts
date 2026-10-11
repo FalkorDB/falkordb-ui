@@ -38,6 +38,25 @@ describe("setData and getData", () => {
     resetForceGraphMockState();
   });
 
+  it("a full replacement drops per-node caches and pending glow repaints", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600 });
+    const internalCanvas = canvas as any;
+    internalCanvas.nodeDisplayFontSize.set(1, 12);
+    internalCanvas.nodeTextLayout.set(1, { font: "12px Arial", line1: "old", halfTextHeight: 6, yCorrection: 0 });
+    internalCanvas.glowRenderScheduled.set(1, setTimeout(() => {}, 10_000));
+
+    // Same id, different node: nothing cached for the old node 1 may survive.
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["B"], visible: true, color: "#0f0", data: { name: "new" } }],
+      links: [],
+    });
+
+    expect(internalCanvas.nodeDisplayFontSize.size).toBe(0);
+    expect(internalCanvas.nodeTextLayout.size).toBe(0);
+    expect(internalCanvas.glowRenderScheduled.size).toBe(0);
+  });
+
   it("roundtrip: setData then getData returns same structure", () => {
     const canvas = createCanvas();
     canvas.setConfig({ width: 800, height: 600 });

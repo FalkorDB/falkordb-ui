@@ -329,8 +329,7 @@ class FalkorDBCanvas extends HTMLElement {
   disconnectedCallback() {
     this.log('Component disconnected from DOM');
     document.fonts.removeEventListener("loadingdone", this.onFontsLoadingDone);
-    this.glowRenderScheduled.forEach(clearTimeout);
-    this.glowRenderScheduled.clear();
+    this.clearGlowTimers();
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
@@ -407,8 +406,7 @@ class FalkorDBCanvas extends HTMLElement {
       }
       // Pending glow repaints hold the old glowDuration's deadline. Drop them so
       // the repaint below re-schedules a still-glowing node against the new one.
-      this.glowRenderScheduled.forEach(clearTimeout);
-      this.glowRenderScheduled.clear();
+      this.clearGlowTimers();
     }
 
     // Clear cached link label metrics when link style changes
@@ -676,6 +674,12 @@ class FalkorDBCanvas extends HTMLElement {
     // Convert data and apply circular layout to new nodes only
     this.data = dataToGraphData(data, undefined, undefined, this.config.linkStyle.parallelEdgeCurveMultiplier);
 
+    // A full replacement can reuse node ids for different nodes, so drop
+    // everything cached per id; pending glow repaints belong to the old graph.
+    this.nodeDisplayFontSize.clear();
+    this.nodeTextLayout.clear();
+    this.clearGlowTimers();
+
     // Initialize graph if it hasn't been initialized yet
     if (!this.graph && this.container) {
       this.log('Initializing graph');
@@ -781,6 +785,8 @@ class FalkorDBCanvas extends HTMLElement {
     // Clear font size cache so text re-fits updated node sizes
     this.nodeDisplayFontSize.clear();
     this.nodeTextLayout.clear();
+    // The repaint below re-schedules any node that is still glowing.
+    this.clearGlowTimers();
     // Clear display names so text re-wraps for the new node sizes
     for (const node of this.data.nodes) {
       node.displayName = ["", ""];
@@ -794,8 +800,10 @@ class FalkorDBCanvas extends HTMLElement {
       this.applyLayout(false);
     } else {
       // Callers mutate the live links from getGraphData(), and d3 caches link
-      // strengths and distances at initialise time, so re-derive them here.
-      this.setupForces();
+      // strengths and distances at initialise time. Re-binding the links
+      // re-derives both (through the visibility filter) without re-applying the
+      // rest of setupForces(), which would overwrite any forces the host tuned.
+      this.graph?.d3Force("link")?.links(this.data.links);
       this.triggerRender();
     }
   }
@@ -834,6 +842,8 @@ class FalkorDBCanvas extends HTMLElement {
       node.displayName = ["", ""];
     }
     this.relationshipsTextCache.clear();
+    // The update repaints, which re-schedules any node that is still glowing.
+    this.clearGlowTimers();
 
     if (!this.graph) return;
 
@@ -1033,6 +1043,11 @@ class FalkorDBCanvas extends HTMLElement {
    * Queues the repaint that ends `nodeId`'s glow. Called from the draw loop, so
    * it collapses the one-timer-per-frame a glowing node would otherwise queue.
    */
+  private clearGlowTimers() {
+    this.glowRenderScheduled.forEach(clearTimeout);
+    this.glowRenderScheduled.clear();
+  }
+
   private scheduleGlowRender(nodeId: number, delay: number) {
     if (this.glowRenderScheduled.has(nodeId)) return;
 

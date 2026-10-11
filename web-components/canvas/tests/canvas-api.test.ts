@@ -148,6 +148,23 @@ describe("refresh", () => {
     expect(data.nodes[0].displayName).toEqual(["", ""]);
   });
 
+  it("keeps forces the host tuned and clears pending glow repaints", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600 });
+    canvas.setData(SIMPLE_DATA);
+
+    const graph = canvas.getGraph() as any;
+    const tunedCollide = { tuned: true };
+    graph.d3Force("collide", tunedCollide);
+    const internalCanvas = canvas as any;
+    internalCanvas.glowRenderScheduled.set(1, setTimeout(() => {}, 10_000));
+
+    canvas.refresh();
+
+    expect(graph.d3Force("collide")).toBe(tunedCollide);
+    expect(internalCanvas.glowRenderScheduled.size).toBe(0);
+  });
+
   it("recomputes layout for tree mode", () => {
     const canvas = createCanvas();
     canvas.setConfig({ width: 800, height: 600, layoutMode: "tree" });

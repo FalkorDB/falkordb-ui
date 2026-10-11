@@ -315,7 +315,12 @@ export const getContrastTextColor = (bgColor: string, threshold = 0.5): string =
   if (hit !== undefined) return hit;
 
   const color = computeContrastTextColor(bgColor, threshold);
-  if (contrastTextColorCache.size >= CONTRAST_CACHE_LIMIT) contrastTextColorCache.clear();
+  if (contrastTextColorCache.size >= CONTRAST_CACHE_LIMIT) {
+    // Evict the oldest entry (Maps iterate in insertion order) rather than
+    // clearing, so one extra colour doesn't throw away every cached result.
+    const oldest = contrastTextColorCache.keys().next().value;
+    if (oldest !== undefined) contrastTextColorCache.delete(oldest);
+  }
   contrastTextColorCache.set(key, color);
 
   return color;
