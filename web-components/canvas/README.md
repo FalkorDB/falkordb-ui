@@ -287,7 +287,7 @@ await canvas.setDimension('3d'); // or canvas.setConfig({ dimension: '3d' })
 await canvas.setDimension('2d');
 ```
 
-The 3D renderer and three.js are loaded the first time 3D is used, so pages that stay in 2D never download them. Until the switch completes the current view stays up; `onDimensionChange` fires when it is done. Called before the element is connected, `setDimension` only records the dimension and its promise settles at once: the graph is shown in it when the element renders, and `onDimensionChange` fires then.
+The 3D renderer and three.js are loaded the first time 3D is used, so pages that stay in 2D never download them. Until the switch completes the current view stays up; `onDimensionChange` fires when it is done. Called before the element is connected, `setDimension` only records the dimension and its promise settles at once: the graph is shown in it when the element renders. For `'3d'`, `onDimensionChange` fires then; `'2d'` is how the canvas starts anyway, so no event fires. If 3D cannot be shown (the bundle will not load, or WebGL will not start), the promise rejects, the canvas stays in or falls back to 2D, and `onDimensionChange('2d')` fires.
 
 Switching lays the graph out afresh in the new dimension and fits it to the view. The data, selection, dimming, colors, captions and event handlers carry over. In 3D:
 

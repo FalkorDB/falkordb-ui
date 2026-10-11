@@ -158,7 +158,11 @@ describe("dimension", () => {
     canvas.setData(DATA);
     forceGraph3DMockState.failNext = true;
 
+    const onDimensionChange = vi.fn();
+    canvas.setConfig({ eventHandlers: { onDimensionChange } });
+
     await expect(canvas.setDimension("3d")).rejects.toThrow("WebGL");
+    expect(onDimensionChange).toHaveBeenCalledWith("2d");
 
     // The 2D view was already taken down; a fresh one is put back.
     expect(canvas.getDimension()).toBe("2d");
@@ -188,6 +192,22 @@ describe("dimension", () => {
     await vi.waitFor(() => expect(forceGraph3DMockState.instances).toHaveLength(2));
     expect(first.destroyed).toBe(true);
     expect(last3D()).not.toBe(first);
+    // The old full-height container is gone, so the new view is not pushed below it.
+    expect(canvas.shadowRoot!.children).toHaveLength(2);
+    expect(canvas.shadowRoot!.querySelectorAll("canvas")).toHaveLength(1);
+  });
+
+  it("renders a 2D canvas moved in the page afresh, in one container", () => {
+    const canvas = createCanvas();
+    canvas.setData(DATA);
+    const first = forceGraphMockState.lastInstance!;
+
+    canvas.remove();
+    document.body.appendChild(canvas);
+
+    expect(first.destroyed).toBe(true);
+    expect(canvas.getGraph()).not.toBe(first);
+    expect(canvas.shadowRoot!.children).toHaveLength(2);
   });
 
   it("mounts in 3D when chosen before the element is connected", async () => {
@@ -440,6 +460,11 @@ describe("3D rendering", () => {
     canvas.setConfig({ interaction: { zoomToFitMaxZoom: 1 } });
     canvas.zoomToFit(100);
     expect(distance()).toBeCloseTo(500);
+
+    // Unset, it falls back to the 2D default of 8.
+    canvas.setConfig({ interaction: { zoomToFitMaxZoom: undefined } });
+    canvas.zoomToFit(100);
+    expect(distance()).toBeCloseTo(500 / 8);
   });
 
   it("keeps the radial cone pinned when pinning is turned off", async () => {

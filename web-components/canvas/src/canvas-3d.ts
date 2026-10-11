@@ -324,7 +324,7 @@ export class Graph3D {
     const halfView = Math.min(Math.tan(halfFov), Math.tan(halfFov) * camera.aspect);
     // As in 2D: the multiplier scales the fit, which never zooms in past zoomToFitMaxZoom.
     const fitZoom = ZOOM_REFERENCE_DISTANCE / (radius / Math.sin(Math.atan(halfView)));
-    const zoom = Math.min(fitZoom * zoomMultiplier, this.host.config.interaction.zoomToFitMaxZoom);
+    const zoom = Math.min(fitZoom * zoomMultiplier, this.host.config.interaction.zoomToFitMaxZoom ?? 8);
     const distance = ZOOM_REFERENCE_DISTANCE / Math.max(zoom, 0.01);
 
     const direction = this.cameraOffset();

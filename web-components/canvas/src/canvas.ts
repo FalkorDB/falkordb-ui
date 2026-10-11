@@ -326,12 +326,11 @@ class FalkorDBCanvas extends HTMLElement {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
-    if (this.graph) {
-      this.graph._destructor();
-    }
-    // Dropped, so a reconnect mounts a fresh one into its new container.
-    this.graph3d?.destroy();
-    this.graph3d = null;
+    // Everything is dropped, so a reconnect renders afresh rather than next
+    // to the old, full-height container.
+    this.unmountRenderer();
+    this.shadowRoot?.replaceChildren();
+    this.container = null;
   }
 
   /**
@@ -467,7 +466,12 @@ class FalkorDBCanvas extends HTMLElement {
    *
    * Before the element is connected, the dimension is only recorded and the
    * promise settles at once; the graph is shown in it when the element
-   * renders, and `onDimensionChange` fires then.
+   * renders. For `'3d'`, `onDimensionChange` fires then; `'2d'` is how the
+   * canvas starts anyway, so nothing changes and no event fires.
+   *
+   * If 3D cannot be shown (the bundle will not load, or WebGL will not
+   * start), the promise rejects, the canvas stays or falls back to 2D, and
+   * `onDimensionChange('2d')` fires.
    *
    * @param dimension - `'2d'` (default) or `'3d'`
    */
@@ -493,6 +497,7 @@ class FalkorDBCanvas extends HTMLElement {
         if (request === this.dimensionRequest) {
           this.config.dimension = '2d';
           if (!this.graph) this.mount2D();
+          this.config.eventHandlers?.onDimensionChange?.('2d');
         }
         throw error;
       }
