@@ -329,7 +329,9 @@ class FalkorDBCanvas extends HTMLElement {
     if (this.graph) {
       this.graph._destructor();
     }
+    // Dropped, so a reconnect mounts a fresh one into its new container.
     this.graph3d?.destroy();
+    this.graph3d = null;
   }
 
   /**
@@ -463,6 +465,10 @@ class FalkorDBCanvas extends HTMLElement {
    * and `onDimensionChange` fires. Until then the current view stays up. A
    * later call overtakes one still loading.
    *
+   * Before the element is connected, the dimension is only recorded and the
+   * promise settles at once; the graph is shown in it when the element
+   * renders, and `onDimensionChange` fires then.
+   *
    * @param dimension - `'2d'` (default) or `'3d'`
    */
   async setDimension(dimension: CanvasDimension): Promise<void> {
@@ -477,16 +483,19 @@ class FalkorDBCanvas extends HTMLElement {
     if (shown === dimension) return;
 
     if (dimension === '3d') {
-      let Graph3DRenderer: typeof Graph3D;
       try {
-        ({ Graph3D: Graph3DRenderer } = await import("./canvas-3d.js"));
+        const { Graph3D: Graph3DRenderer } = await import("./canvas-3d.js");
+        if (request !== this.dimensionRequest || !this.container) return;
+        this.mount3D(Graph3DRenderer);
       } catch (error) {
-        // Stay usable in 2D when the 3D bundle cannot be loaded.
-        if (request === this.dimensionRequest) this.config.dimension = shown ?? '2d';
+        // The bundle would not load, or WebGL would not start: stay usable in
+        // 2D, mounting it again if the failed switch had already taken it down.
+        if (request === this.dimensionRequest) {
+          this.config.dimension = '2d';
+          if (!this.graph) this.mount2D();
+        }
         throw error;
       }
-      if (request !== this.dimensionRequest || !this.container) return;
-      this.mount3D(Graph3DRenderer);
     } else {
       this.mount2D();
     }

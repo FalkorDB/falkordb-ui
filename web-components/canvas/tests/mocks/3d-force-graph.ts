@@ -19,7 +19,13 @@ export class MockForceGraph3DInstance {
 
   public destroyed = false;
 
-  public linkForce = { distance: (_accessor: unknown) => this.linkForce, distanceAccessor: undefined as unknown };
+  public linkForce = {
+    distanceAccessor: undefined as unknown,
+    distance: (accessor: unknown) => {
+      this.linkForce.distanceAccessor = accessor;
+      return this.linkForce;
+    },
+  };
 
   public chargeForce = { strength: (_value: number) => this.chargeForce };
 
@@ -100,18 +106,26 @@ export class MockForceGraph3DInstance {
 export const forceGraph3DMockState: {
   instances: MockForceGraph3DInstance[];
   lastInstance: MockForceGraph3DInstance | undefined;
+  /** Makes the next construction throw, as the real one does without WebGL. */
+  failNext: boolean;
 } = {
   instances: [],
   lastInstance: undefined,
+  failNext: false,
 };
 
 export function resetForceGraph3DMockState() {
   forceGraph3DMockState.instances = [];
   forceGraph3DMockState.lastInstance = undefined;
+  forceGraph3DMockState.failNext = false;
 }
 
 // Constructed with `new`, like the real Kapsule component.
 function ForceGraph3DMock(this: unknown, container: HTMLElement) {
+  if (forceGraph3DMockState.failNext) {
+    forceGraph3DMockState.failNext = false;
+    throw new Error("Error creating WebGL context.");
+  }
   const instance = new MockForceGraph3DInstance(container);
   forceGraph3DMockState.instances.push(instance);
   forceGraph3DMockState.lastInstance = instance;

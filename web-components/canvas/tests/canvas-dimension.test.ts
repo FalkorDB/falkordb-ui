@@ -153,6 +153,43 @@ describe("dimension", () => {
     expect(forceGraph3DMockState.instances).toHaveLength(1);
   });
 
+  it("falls back to 2D when the 3D view cannot start", async () => {
+    const canvas = createCanvas();
+    canvas.setData(DATA);
+    forceGraph3DMockState.failNext = true;
+
+    await expect(canvas.setDimension("3d")).rejects.toThrow("WebGL");
+
+    // The 2D view was already taken down; a fresh one is put back.
+    expect(canvas.getDimension()).toBe("2d");
+    expect(canvas.getGraph()).toBe(forceGraphMockState.lastInstance);
+    expect(forceGraphMockState.instances).toHaveLength(2);
+  });
+
+  it("falls back to a 2D view when a first render into 3D cannot start", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    forceGraph3DMockState.failNext = true;
+    const canvas = document.createElement("falkordb-canvas") as CanvasTestElement;
+    await canvas.setDimension("3d");
+
+    document.body.appendChild(canvas);
+
+    await vi.waitFor(() => expect(canvas.getGraph()).toBeDefined());
+    expect(canvas.getDimension()).toBe("2d");
+  });
+
+  it("mounts a fresh 3D view when a 3D canvas is moved in the page", async () => {
+    const canvas = await canvasIn3D();
+    const first = last3D();
+
+    canvas.remove();
+    document.body.appendChild(canvas);
+
+    await vi.waitFor(() => expect(forceGraph3DMockState.instances).toHaveLength(2));
+    expect(first.destroyed).toBe(true);
+    expect(last3D()).not.toBe(first);
+  });
+
   it("mounts in 3D when chosen before the element is connected", async () => {
     const canvas = document.createElement("falkordb-canvas") as CanvasTestElement;
     await canvas.setDimension("3d");
@@ -165,6 +202,16 @@ describe("dimension", () => {
 });
 
 describe("3D rendering", () => {
+  it("spaces linked nodes by their sizes plus the configured link distance", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ layoutOptions: { force: { linkDistance: 30 } } });
+
+    const distance = last3D().linkForce.distanceAccessor as (link: GraphLink) => number;
+    const link = canvas.getGraphData().links[0];
+
+    expect(distance(link)).toBe(link.source.size + link.target.size + 60);
+  });
+
   it("hands new data to the 3D renderer instead of creating a 2D one", async () => {
     const canvas = await canvasIn3D();
 
