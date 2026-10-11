@@ -1,6 +1,7 @@
 import FalkorDBCanvas from "./canvas.js";
 import type React from "react";
 import type {
+  CanvasDimension,
   CanvasRenderMode,
   LayoutMode,
   LayoutDirection,
@@ -40,6 +41,7 @@ export { FalkorDBCanvas as default, FalkorDBCanvas };
 
 // Types
 export type {
+  CanvasDimension,
   CanvasRenderMode,
   LayoutMode,
   LayoutDirection,
