@@ -292,9 +292,10 @@ The 3D renderer and three.js are loaded the first time 3D is used, so pages that
 Switching lays the graph out afresh in the new dimension and fits it to the view. The data, selection, dimming, colors, captions and event handlers carry over. In 3D:
 
 - Drag to rotate, scroll to zoom, right-drag to pan. `zoom()` and `getZoom()` express the camera's distance as a zoom factor, so `zoom(getZoom() * 1.1)` zooms in as it does in 2D.
-- `tree` stacks each level as a layer along its `direction`'s axis, `levelDistance` apart. `radial` keeps the 2D rings and lays them out along a cone: the root at the tip, each level a wider ring further back, so the rings read face-on and rotating shows the levels in depth.
+- `tree` and `radial` keep their 2D positions, so face-on they read exactly as in 2D with no node over another, and each level sits one level distance further back than the one above it, the root nearest. Seen side-on the levels step back like stairs: a tree's levels each line up as one point, and a radial ring as one line. Both are pinned, so they hold still; picking a layout turns the view face-on again.
+- Pausing the animation or pinning stops a `force` layout's simulation.
 - Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Captions are left to the hover tooltip above 1,000 nodes or links.
-- Pausing the animation or pinning stops the simulation; a dragged node stays where it is dropped when `pinOnDragEnd` is on.
+- A dragged node stays where it is dropped when `pinOnDragEnd` is on.
 - `getViewport()` returns `undefined` and `setViewport()` does nothing, since a 2D zoom and center do not describe a 3D camera. `getGraph()` returns `undefined`.
 - Custom `node` / `link` canvas renderers, `linkLineDash`, the expand glow and the `largeGraph` culling apply to 2D only.
 
