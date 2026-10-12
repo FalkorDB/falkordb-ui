@@ -493,6 +493,32 @@ describe("3D rendering", () => {
     expect(distance()).toBeCloseTo(500 / 8);
   });
 
+  it("does not carry a layout's face-on reset over to a later fit when there was nothing to frame", async () => {
+    const canvas = await canvasIn3D();
+    last3D().width(900);
+    last3D().height(600);
+    const viewDirection = () => {
+      const { cameraPos: c, controlsState: { target: t } } = last3D();
+      const d = Math.hypot(c.x - t.x, c.y - t.y, c.z - t.z);
+      return [(c.x - t.x) / d, (c.y - t.y) / d, (c.z - t.z) / d].map((v) => Math.round(v * 100) / 100);
+    };
+
+    // A layout lands with every node hidden: its fit has nothing to frame.
+    canvas.setLayout("tree");
+    for (const node of canvas.getGraphData().nodes) Object.assign(node, { x: 0, y: 0, z: 0, visible: false });
+    last3D().callback("onEngineStop")();
+
+    // The user turns the view and fits once nodes are visible again.
+    canvas.getGraphData().nodes.forEach((node, i) => Object.assign(node, { x: i * 100, y: 0, z: 0, visible: true }));
+    last3D().simulateDrag({ x: 300, y: 0, z: 0 }, { x: 50, y: 0, z: 0 });
+    last3D().cameraObject.up.set(0, 0, 1);
+    canvas.zoomToFit();
+
+    // The angle and roll the user chose are kept.
+    expect(viewDirection()).toEqual([1, 0, 0]);
+    expect(last3D().cameraObject.up).toMatchObject({ x: 0, y: 0, z: 1 });
+  });
+
   it("keeps the radial cone when switching to it from a tree layout", async () => {
     const canvas = await canvasIn3D();
     canvas.setLayout("tree");
