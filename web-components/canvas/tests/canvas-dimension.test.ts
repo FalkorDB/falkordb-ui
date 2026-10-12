@@ -282,46 +282,103 @@ describe("3D rendering", () => {
     expect(shown.find((n) => n.id === 1)).toMatchObject({ x: 1, y: 2, z: 3 });
   });
 
-  it("levels a tree along its direction's axis", async () => {
-    const canvas = await canvasIn3D();
+  /** A root (1) with two children (2, 3); 2 has a child (4) and 3 has two (5, 6). */
+  async function hierarchyIn3D(): Promise<CanvasTestElement> {
+    const canvas = createCanvas();
+    const link = (id: number, source: number, target: number) =>
+      ({ id, relationship: "R", source, target, visible: true, color: "#888888", data: {} });
+    canvas.setData({
+      nodes: [1, 2, 3, 4, 5, 6].map((id) => ({ id, labels: ["A"], visible: true, color: "#ff0000", data: {} })),
+      links: [link(10, 1, 2), link(11, 1, 3), link(12, 2, 4), link(13, 3, 5), link(14, 3, 6)],
+    });
+    await canvas.setDimension("3d");
+    return canvas;
+  }
+
+  const LEVELS = [[1], [2, 3], [4, 5, 6]];
+
+  function positions(canvas: CanvasTestElement) {
+    const nodes = canvas.getGraphData().nodes as Array<GraphNode & { z?: number; fz?: number }>;
+    return (id: number) => nodes.find((n) => n.id === id)!;
+  }
+
+  /** No two nodes closer, face-on, than the sum of their radii. */
+  function expectNoOverlapFaceOn(canvas: CanvasTestElement) {
+    const nodes = canvas.getGraphData().nodes;
+    for (const a of nodes) {
+      for (const b of nodes) {
+        if (a.id >= b.id) continue;
+        expect(Math.hypot(a.x! - b.x!, a.y! - b.y!)).toBeGreaterThanOrEqual(a.size + b.size);
+      }
+    }
+  }
+
+  it("places a tree as in 2D, a level further back per step down", async () => {
+    const canvas = await hierarchyIn3D();
+
+    canvas.setLayout("tree");
+
+    // Not the library's DAG mode, which spreads each level with forces.
+    expect(last3D().props.get("dagMode")).toBeUndefined();
+    const node = positions(canvas);
+    expectNoOverlapFaceOn(canvas);
+    // Top-down: the root on top, then each level lower — and further back.
+    LEVELS.forEach((level, depth) => {
+      for (const id of level) {
+        expect(node(id).y).toBeCloseTo(node(1).y! - depth * (node(1).y! - node(2).y!));
+        expect(node(id).z).toBeCloseTo(node(1).z! - depth * (node(1).z! - node(2).z!));
+      }
+    });
+    expect(node(2).z).toBeLessThan(node(1).z!);
+    expect(node(4).z).toBeLessThan(node(2).z!);
+    // Side-on, each level is one point: its nodes share height and depth.
+    for (const level of LEVELS) {
+      const points = new Set(level.map((id) => `${node(id).y!.toFixed(3)},${node(id).z!.toFixed(3)}`));
+      expect(points.size).toBe(1);
+    }
+    // Pinned, so the simulation leaves the layout alone, and nothing to warm up.
+    for (const n of canvas.getGraphData().nodes as Array<GraphNode & { z?: number; fz?: number }>) {
+      expect([n.fx, n.fy, n.fz]).toEqual([n.x, n.y, n.z]);
+    }
+    expect(last3D().props.get("warmupTicks")).toBe(0);
+  });
+
+  it("steps a left-to-right tree back by level too", async () => {
+    const canvas = await hierarchyIn3D();
 
     canvas.setLayoutOptions({ tree: { direction: "lr" } });
     canvas.setLayout("tree");
-    expect(last3D().props.get("dagMode")).toBe("lr");
 
-    canvas.setLayout("force");
-    expect(last3D().props.get("dagMode")).toBeNull();
+    const node = positions(canvas);
+    expect(node(2).x).toBeGreaterThan(node(1).x!);
+    expect(node(2).z).toBeLessThan(node(1).z!);
+    expect(node(4).z).toBeLessThan(node(2).z!);
+    expect(node(4).z).toBeCloseTo(node(5).z!);
   });
 
-  it("lays the radial rings out along a cone, pinned", async () => {
-    const canvas = createCanvas();
-    canvas.setData({
-      nodes: [1, 2, 3, 4].map((id) => ({ id, labels: ["A"], visible: true, color: "#ff0000", data: {} })),
-      links: [
-        { id: 10, relationship: "R", source: 1, target: 2, visible: true, color: "#888888", data: {} },
-        { id: 11, relationship: "R", source: 1, target: 3, visible: true, color: "#888888", data: {} },
-        { id: 12, relationship: "R", source: 2, target: 4, visible: true, color: "#888888", data: {} },
-      ],
-    });
-    await canvas.setDimension("3d");
+  it("places radial rings as in 2D, a level further back per ring from the root", async () => {
+    const canvas = await hierarchyIn3D();
 
     canvas.setLayout("radial");
 
-    expect(last3D().props.get("dagMode")).toBeNull();
-    const nodes = canvas.getGraphData().nodes as Array<GraphNode & { z?: number; fz?: number }>;
-    const ring = (id: number) => Math.hypot(nodes.find((n) => n.id === id)!.x!, nodes.find((n) => n.id === id)!.y!);
-    const depth = (id: number) => nodes.find((n) => n.id === id)!.z!;
-
-    // The root is the cone's tip; each level is a wider ring further back.
+    const node = positions(canvas);
+    const ring = (id: number) => Math.hypot(node(id).x!, node(id).y!);
+    expectNoOverlapFaceOn(canvas);
+    // Outward: the root in the middle and nearest; each ring wider and a level back.
     expect(ring(1)).toBeCloseTo(0);
-    expect(depth(1)).toBeCloseTo(0);
+    expect(node(1).z).toBeCloseTo(0);
+    LEVELS.forEach((level, depth) => {
+      for (const id of level) expect(node(id).z).toBeCloseTo(-depth * 80);
+    });
     expect(ring(4)).toBeGreaterThan(ring(2));
-    expect(depth(4)).toBeLessThan(depth(2));
-    expect(depth(2)).toBeLessThan(0);
-    // Every node sits on the same cone.
-    for (const id of [2, 3, 4]) expect(-depth(id) / ring(id)).toBeCloseTo(0.6);
-    // Pinned, so the simulation leaves the cone alone.
-    for (const n of nodes) expect([n.fx, n.fy, n.fz]).toEqual([n.x, n.y, n.z]);
+
+    // Inward: the root is the outer ring, and still the nearest level.
+    canvas.setLayoutOptions({ radial: { direction: "in" } });
+    canvas.setLayout("radial");
+    expect(ring(1)).toBeGreaterThan(ring(4));
+    LEVELS.forEach((level, depth) => {
+      for (const id of level) expect(node(id).z).toBeCloseTo(-depth * 80);
+    });
   });
 
   it("settles the layout up front unless animation is on", async () => {

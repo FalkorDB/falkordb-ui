@@ -16,7 +16,7 @@ import {
   getNodeDisplayText,
   wrapVisibleLinks,
 } from "./canvas-utils.js";
-import { computeRadialPositions } from "./layouts.js";
+import { DEFAULT_LEVEL_DISTANCE, computeRadialPositions, computeTreePositions } from "./layouts.js";
 
 /** Selected nodes get an outline shell this much larger than the node. */
 const SELECTED_OUTLINE_SCALE = 1.2;
@@ -48,12 +48,15 @@ const MAX_LABELED_ELEMENTS = 1000;
 const ZOOM_REFERENCE_DISTANCE = 500;
 
 /**
- * The radial layout is a cone in 3D: each ring keeps its 2D radius and sits
- * this far back per unit of it, so rings stay readable face-on and rotating
- * the view shows the levels in depth. (Nested spheres, the library's own
- * radial mode, collapse into one ball on screen.)
+ * Tree and radial layouts keep their 2D positions in 3D, so face-on they read
+ * exactly as in 2D with no node over another, and each level sits this many
+ * level distances further back than the one above it. Seen side-on, every
+ * level is then a single point and the levels step back like stairs.
+ * (The library's own DAG modes leave the spread across a level to the force
+ * simulation, which lets nodes overlap; its radial mode nests spheres that
+ * collapse into one ball on screen.)
  */
-const RADIAL_CONE_SLOPE = 0.6;
+const DEPTH_PER_LEVEL = 1;
 
 type Instance = ForceGraph3DInstance<GraphNode, GraphLink>;
 
@@ -197,36 +200,29 @@ export class Graph3D {
 
   /**
    * Lay the host's data out again under `config.layoutMode`. Force runs
-   * freely; tree and radial constrain each node to its DAG level.
+   * freely; tree and radial are placed from their 2D layouts, a level deeper
+   * per step down the hierarchy.
    */
   applyLayout(fit = false) {
-    const { layoutMode, layoutOptions, simulation, animation, pinOnDragEnd } = this.host.config;
+    const { layoutMode, simulation, animation, pinOnDragEnd } = this.host.config;
     this.layoutPending = true;
     if (fit) {
       this.pendingFit = {};
       this.resetViewPending = true;
     }
-    const running = !!animation && !pinOnDragEnd && layoutMode !== "radial";
+    const placed = layoutMode === "tree" || layoutMode === "radial";
+    const running = !!animation && !pinOnDragEnd && !placed;
 
     this.setupForces();
     for (const node of this.host.data.nodes) unpin3D(node);
 
-    if (layoutMode === "tree") {
-      this.graph.dagMode(layoutOptions.tree?.direction ?? "td");
-      this.graph.dagLevelDistance(layoutOptions.tree?.levelDistance ?? 80);
-    } else if (layoutMode === "radial") {
-      // Cleared first: turning DAG mode off unpins every node.
-      this.graph.dagMode(null as never);
-      this.placeOnCone();
-    } else {
-      this.graph.dagMode(null as never);
-    }
+    if (layoutMode === "tree") this.placeTree();
+    else if (layoutMode === "radial") this.placeRadial();
 
-    // As in 2D: the layout is settled up front, then either keeps running with
-    // animation on or is held still.
-    // The cone is placed, not simulated: warming up would only pull nodes off
-    // it while the library clears the previous tree layout's pins (below).
-    this.graph.warmupTicks(layoutMode === "radial" ? 0 : simulation.warmupTicks);
+    // As in 2D: a force layout is settled up front, then either keeps running
+    // with animation on or is held still. Tree and radial are placed, not
+    // simulated, so there is nothing to warm up.
+    this.graph.warmupTicks(placed ? 0 : simulation.warmupTicks);
     this.graph.cooldownTicks(running ? Infinity : 0);
     this.host.setEngineStatus(running);
 
@@ -250,25 +246,49 @@ export class Graph3D {
    * right after a layout change would be frozen where the old layout left them.
    */
 
-  /** Pin every node to the 2D radial layout's rings, laid out along a cone; see RADIAL_CONE_SLOPE. */
-  private placeOnCone() {
-    computeRadialPositions(this.host.data, this.host.config.layoutOptions);
+  /**
+   * Pin every node to the 2D tree layout, each level a step further back; see
+   * DEPTH_PER_LEVEL. The 2D layout puts the root level at 0 and each level
+   * one level distance further along its direction's axis.
+   */
+  private placeTree() {
+    const direction = this.host.config.layoutOptions.tree?.direction ?? "td";
+    computeTreePositions(this.host.data, this.host.config.layoutOptions);
 
     for (const node of this.host.data.nodes as Node3D[]) {
       const x = node.x ?? 0;
-      // The 2D canvas's y axis points down, three.js's up.
-      const y = -(node.y ?? 0);
-      const z = -Math.hypot(x, y) * RADIAL_CONE_SLOPE;
-      node.x = node.fx = x;
-      node.y = node.fy = y;
-      node.z = node.fz = z;
-      node.vx = node.vy = node.vz = 0;
+      const y = node.y ?? 0;
+      const levelOffset = direction === "lr" || direction === "rl" ? Math.abs(x) : Math.abs(y);
+      place3D(node, x, y, -levelOffset * DEPTH_PER_LEVEL);
     }
   }
 
-  /** The radial cone is its pinned positions: forces would only pull it apart. */
+  /**
+   * Pin every node to the 2D radial layout's rings, each level a step further
+   * back; see DEPTH_PER_LEVEL. The levels are the rings, ordered from the root:
+   * outward from the centre, or inward from the outermost ring.
+   */
+  private placeRadial() {
+    const radial = this.host.config.layoutOptions.radial;
+    computeRadialPositions(this.host.data, this.host.config.layoutOptions);
+
+    const nodes = this.host.data.nodes as Node3D[];
+    const ringOf = (node: Node3D) => Math.round(Math.hypot(node.x ?? 0, node.y ?? 0) * 1000) / 1000;
+    const rings = [...new Set(nodes.map(ringOf))].sort((a, b) => a - b);
+    if (radial?.direction === "in") rings.reverse();
+    // Looked up once per node, so a deep graph stays linear in its size.
+    const levelOf = new Map(rings.map((ring, level) => [ring, level]));
+    const step = (radial?.levelDistance ?? DEFAULT_LEVEL_DISTANCE) * DEPTH_PER_LEVEL;
+
+    for (const node of nodes) {
+      place3D(node, node.x ?? 0, node.y ?? 0, -levelOf.get(ringOf(node))! * step);
+    }
+  }
+
+  /** Tree and radial are their pinned positions: forces would only pull them apart. */
   private get holdsLayout(): boolean {
-    return this.host.config.layoutMode === "radial";
+    const { layoutMode } = this.host.config;
+    return layoutMode === "tree" || layoutMode === "radial";
   }
 
   setAnimation(enabled: boolean) {
@@ -447,9 +467,9 @@ export class Graph3D {
   private layoutLanded() {
     if (!this.layoutPending) return;
     this.layoutPending = false;
-    // Leaving a tree layout, the library deletes its level pin (fx, fy or fz)
-    // from every node as it applies the update — the cone's pins included.
-    if (this.host.config.layoutMode === "radial") {
+    // Placed layouts are pinned again once the library has applied them, so
+    // nothing it does while applying the update can leave a node loose.
+    if (this.holdsLayout) {
       for (const node of this.host.data.nodes) pin3D(node);
     }
     const fit = this.pendingFit;
@@ -569,6 +589,17 @@ export class Graph3D {
     this.linkLabels.set(link, sprite);
     return sprite;
   }
+}
+
+/**
+ * Pin `node` at a 2D layout position, given in the 2D canvas's coordinates,
+ * and `z`. The 2D canvas's y axis points down, three.js's up.
+ */
+function place3D(node: Node3D, x: number, y: number, z: number) {
+  node.x = node.fx = x;
+  node.y = node.fy = -y;
+  node.z = node.fz = z;
+  node.vx = node.vy = node.vz = 0;
 }
 
 /** Fix `node` where it is, in all three axes. */

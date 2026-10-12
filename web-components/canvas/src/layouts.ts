@@ -32,12 +32,15 @@ export function isForceLayout(layoutMode: LayoutMode): boolean {
   return layoutMode === 'force';
 }
 
+/** Distance between levels in the tree and radial layouts, unless set in their options. */
+export const DEFAULT_LEVEL_DISTANCE = 80;
+
 /**
  * Returns the dagLevelDistance for the layout.
  */
 export function getDagLevelDistance(layoutMode: LayoutMode, options?: LayoutOptions): number | undefined {
   if (isForceLayout(layoutMode)) return undefined;
-  if (layoutMode === 'radial') return options?.radial?.levelDistance ?? 80;
+  if (layoutMode === 'radial') return options?.radial?.levelDistance ?? DEFAULT_LEVEL_DISTANCE;
   return undefined; // tree uses computeTreePositions
 }
 
@@ -87,7 +90,7 @@ export function computeTreePositions(
   // Read from the tree layout options
   const treeOpts = options?.tree;
   const direction = treeOpts?.direction ?? 'td';
-  const baseLevelDistance = treeOpts?.levelDistance ?? 80;
+  const baseLevelDistance = treeOpts?.levelDistance ?? DEFAULT_LEVEL_DISTANCE;
   const baseNodeSpacing = treeOpts?.nodeSpacing ?? 60;
 
   // Ensure spacing accounts for actual node sizes
@@ -408,7 +411,7 @@ export function computeRadialPositions(
   // Compute dynamic radius for each depth level:
   // Each ring must be large enough to fit all its nodes with minimum spacing
   const nodeSpacing = options?.radial?.nodeSpacing ?? 10;
-  const levelDistance = options?.radial?.levelDistance ?? 80;
+  const levelDistance = options?.radial?.levelDistance ?? DEFAULT_LEVEL_DISTANCE;
 
   // Count nodes per depth and track max node size per depth
   const nodesPerDepth = new Map<number, number>();
