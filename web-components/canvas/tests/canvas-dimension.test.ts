@@ -197,6 +197,32 @@ describe("dimension", () => {
     expect(canvas.shadowRoot!.querySelectorAll("canvas")).toHaveLength(1);
   });
 
+  it("still reports the viewport it was left at once disconnected", () => {
+    const canvas = createCanvas();
+    canvas.setData(DATA);
+    canvas.setViewport({ zoom: 2.5, centerX: 10, centerY: -4 });
+
+    // Hosts save the view while unmounting, after the element has left the page.
+    canvas.remove();
+
+    expect(canvas.getViewport()).toEqual({ zoom: 2.5, centerX: 10, centerY: -4 });
+    // Each read is its own snapshot.
+    canvas.getViewport()!.zoom = 99;
+    expect(canvas.getViewport()!.zoom).toBe(2.5);
+
+    // Back on the page, it reports the live view again.
+    document.body.appendChild(canvas);
+    expect(canvas.getViewport()).toEqual({ zoom: forceGraphMockState.lastInstance!.zoomValue, centerX: 0, centerY: 0 });
+  });
+
+  it("reports no viewport once disconnected from 3D", async () => {
+    const canvas = await canvasIn3D();
+
+    canvas.remove();
+
+    expect(canvas.getViewport()).toBeUndefined();
+  });
+
   it("renders a 2D canvas moved in the page afresh, in one container", () => {
     const canvas = createCanvas();
     canvas.setData(DATA);
