@@ -493,6 +493,26 @@ describe("3D rendering", () => {
     expect(distance()).toBeCloseTo(500 / 8);
   });
 
+  it("keeps the radial cone when switching to it from a tree layout", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setLayout("tree");
+    last3D().callback("onEngineStop")();
+
+    canvas.setLayout("radial");
+    // Nothing to simulate: the cone is placed.
+    expect(last3D().props.get("warmupTicks")).toBe(0);
+
+    // As the library applies the update, it drops the tree's level pins.
+    const nodes = canvas.getGraphData().nodes as Array<GraphNode & { z?: number; fz?: number }>;
+    const cone = nodes.map((n) => [n.x, n.y, n.z]);
+    for (const n of nodes) delete n.fy;
+    last3D().callback("onEngineStop")();
+
+    // The cone is pinned again on all three axes, where it was placed.
+    expect(nodes.map((n) => [n.x, n.y, n.z])).toEqual(cone);
+    for (const n of nodes) expect([n.fx, n.fy, n.fz]).toEqual([n.x, n.y, n.z]);
+  });
+
   it("keeps the radial cone pinned when pinning is turned off", async () => {
     const canvas = await canvasIn3D();
     canvas.setAnimation(true);
@@ -519,6 +539,34 @@ describe("3D rendering", () => {
     canvas.setConfig({ interaction: { contrastThreshold: 0.6 } });
 
     expect(refreshes()).toBe(before + 3);
+  });
+
+  it("looks at a newly applied layout face-on and upright, wherever it was dragged", async () => {
+    const canvas = await canvasIn3D();
+    last3D().width(900);
+    last3D().height(600);
+    const place = () => canvas.getGraphData().nodes.forEach((node, i) => Object.assign(node, { x: i * 100, y: 0, z: 0 }));
+    const viewDirection = () => {
+      const { cameraPos: c, controlsState: { target: t } } = last3D();
+      const d = Math.hypot(c.x - t.x, c.y - t.y, c.z - t.z);
+      return [(c.x - t.x) / d, (c.y - t.y) / d, (c.z - t.z) / d].map((v) => Math.round(v * 100) / 100);
+    };
+
+    // The user drags the view round and rolls it.
+    last3D().simulateDrag({ x: 300, y: 200, z: -100 }, { x: 0, y: 0, z: 0 });
+    last3D().cameraObject.up.set(0.8, 0.4, -0.3);
+
+    canvas.setLayout("tree");
+    place();
+    last3D().callback("onEngineStop")();
+
+    expect(viewDirection()).toEqual([0, 0, 1]);
+    expect(last3D().cameraObject.up).toMatchObject({ x: 0, y: 1, z: 0 });
+
+    // Fitting on its own keeps whatever angle the user has chosen since.
+    last3D().simulateDrag({ x: 300, y: 0, z: 0 }, { x: 50, y: 0, z: 0 });
+    canvas.zoomToFit();
+    expect(viewDirection()).toEqual([1, 0, 0]);
   });
 
   it("has no 2D viewport to report or restore", async () => {

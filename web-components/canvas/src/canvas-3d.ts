@@ -103,6 +103,15 @@ export class Graph3D {
 
   private pendingFit: { filter?: (node: GraphNode) => boolean; zoomMultiplier?: number } | null = null;
 
+  /**
+   * Set when a layout is applied: the next fit looks at the graph face-on and
+   * upright again. Tree levels and the radial cone are laid out to be read
+   * from the front, so the angle and roll the user dragged the camera to would
+   * show them edge-on. A flag rather than part of `pendingFit`, so a fit asked
+   * for meanwhile cannot drop it.
+   */
+  private resetViewPending = false;
+
   constructor(container: HTMLElement, private readonly host: Graph3DHost) {
     const { config } = host;
 
@@ -193,7 +202,10 @@ export class Graph3D {
   applyLayout(fit = false) {
     const { layoutMode, layoutOptions, simulation, animation, pinOnDragEnd } = this.host.config;
     this.layoutPending = true;
-    if (fit) this.pendingFit = {};
+    if (fit) {
+      this.pendingFit = {};
+      this.resetViewPending = true;
+    }
     const running = !!animation && !pinOnDragEnd && layoutMode !== "radial";
 
     this.setupForces();
@@ -212,7 +224,9 @@ export class Graph3D {
 
     // As in 2D: the layout is settled up front, then either keeps running with
     // animation on or is held still.
-    this.graph.warmupTicks(simulation.warmupTicks);
+    // The cone is placed, not simulated: warming up would only pull nodes off
+    // it while the library clears the previous tree layout's pins (below).
+    this.graph.warmupTicks(layoutMode === "radial" ? 0 : simulation.warmupTicks);
     this.graph.cooldownTicks(running ? Infinity : 0);
     this.host.setEngineStatus(running);
 
@@ -301,7 +315,8 @@ export class Graph3D {
 
   /**
    * Frame the visible nodes, or those `filter` keeps, once any layout in
-   * progress has landed. Keeps the camera's viewing angle.
+   * progress has landed. Keeps the camera's viewing angle, except right after
+   * a layout is applied, when it looks at the graph face-on again.
    *
    * Measured from the node data rather than with the library's own zoomToFit,
    * which reads the scene objects — and those only catch up with a new layout
@@ -338,9 +353,14 @@ export class Graph3D {
     const zoom = Math.min(fitZoom * zoomMultiplier, this.host.config.interaction.zoomToFitMaxZoom ?? 8);
     const distance = ZOOM_REFERENCE_DISTANCE / Math.max(zoom, 0.01);
 
-    const direction = this.cameraOffset();
+    const direction = this.resetViewPending ? new THREE.Vector3(0, 0, 1) : this.cameraOffset();
     if (direction.lengthSq() === 0) direction.set(0, 0, 1);
     direction.setLength(distance);
+    if (this.resetViewPending) {
+      // Dragging rolls the camera too; lookAt below re-aims it with this up.
+      camera.up.set(0, 1, 0);
+      this.resetViewPending = false;
+    }
 
     this.graph.cameraPosition(
       { x: center.x + direction.x, y: center.y + direction.y, z: center.z + direction.z },
@@ -425,6 +445,11 @@ export class Graph3D {
   private layoutLanded() {
     if (!this.layoutPending) return;
     this.layoutPending = false;
+    // Leaving a tree layout, the library deletes its level pin (fx, fy or fz)
+    // from every node as it applies the update — the cone's pins included.
+    if (this.host.config.layoutMode === "radial") {
+      for (const node of this.host.data.nodes) pin3D(node);
+    }
     const fit = this.pendingFit;
     this.pendingFit = null;
     if (fit) this.zoomToFit(fit.filter, fit.zoomMultiplier);

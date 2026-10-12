@@ -95,8 +95,24 @@ export class MockForceGraph3DInstance {
     return this.controlsState;
   }
 
+  /** The perspective camera: field of view, aspect, and the up vector dragging can roll. */
+  public cameraObject = {
+    fov: 40,
+    aspect: 1.5,
+    up: {
+      x: 0, y: 1, z: 0,
+      set(x: number, y: number, z: number) { Object.assign(this, { x, y, z }); return this; },
+    },
+  };
+
   camera() {
-    return { fov: 40, aspect: 1.5 };
+    return this.cameraObject;
+  }
+
+  /** Moves the camera as a user's drag would, without it counting as a call. */
+  simulateDrag(position: Vec3, target: Vec3) {
+    this.cameraPos = { ...position };
+    this.controlsState.target = { ...target };
   }
 
   cameraPosition(position?: Partial<Vec3>, lookAt?: Vec3, transitionMs?: number) {
