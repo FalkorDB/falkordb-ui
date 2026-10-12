@@ -135,7 +135,7 @@ function GraphVisualization() {
 | **getDimension**() | | The dimension the graph is shown in, or is being switched to. |
 | **setDebug**(*enabled*) | `false` | Enable or disable debug logging to console. All log messages are prefixed with `[FalkorDBCanvas]`. |
 | **refresh**() | | Trigger a repaint after in-place property mutations (visibility, color, size). Recomputes positions for deterministic layouts. |
-| **getViewport**() | | Get current zoom and center position as `ViewportState`. After the element is disconnected, returns the viewport it was left at, so a host can save it while unmounting. |
+| **getViewport**() | | Get current zoom and center position as `ViewportState`. After the element is disconnected, returns the viewport it was left at, so a host can save it while unmounting. 2D only: in 3D it returns `undefined`, connected or not. |
 | **setViewport**(*viewport*) | | Restore a previously saved viewport state. |
 | **getZoom**() | | Get current zoom level. |
 | **zoom**(*zoomLevel*) | | Set zoom level. |

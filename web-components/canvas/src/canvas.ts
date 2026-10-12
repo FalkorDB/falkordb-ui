@@ -917,12 +917,17 @@ class FalkorDBCanvas extends HTMLElement {
   /**
    * Get the current viewport state (zoom level and center position).
    * Returns undefined if the graph hasn't been initialized yet, or is shown in
-   * 3D. Once the element is disconnected, returns the viewport it was left at.
+   * 3D. Once the element is disconnected, returns the 2D viewport it was left
+   * at (still undefined if it was left in 3D).
    */
   getViewport(): ViewportState {
     // Disconnected: the view as it was left. Otherwise, a 2D zoom-and-centre
     // does not describe a 3D camera.
-    if (!this.graph) return this.container ? undefined : this.detachedViewport;
+    if (!this.graph) {
+      // A copy, like the live path's fresh snapshot, so a caller adjusting it
+      // cannot change what later reads return.
+      return this.container || !this.detachedViewport ? undefined : { ...this.detachedViewport };
+    }
 
     const { x: centerX, y: centerY } = this.graph.centerAt();
     const zoom = this.graph.zoom();
