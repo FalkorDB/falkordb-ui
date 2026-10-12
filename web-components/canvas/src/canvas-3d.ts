@@ -328,6 +328,11 @@ export class Graph3D {
       return;
     }
 
+    // Taken by this fit even when there is nothing to frame, or a later plain
+    // fit would snap the view face-on with no layout applied since.
+    const resetView = this.resetViewPending;
+    this.resetViewPending = false;
+
     const nodes = (this.host.data.nodes as Node3D[]).filter((node) =>
       node.visible && (!filter || filter(node)) && Number.isFinite(node.x) && Number.isFinite(node.y) && Number.isFinite(node.z));
     if (nodes.length === 0) return;
@@ -353,14 +358,11 @@ export class Graph3D {
     const zoom = Math.min(fitZoom * zoomMultiplier, this.host.config.interaction.zoomToFitMaxZoom ?? 8);
     const distance = ZOOM_REFERENCE_DISTANCE / Math.max(zoom, 0.01);
 
-    const direction = this.resetViewPending ? new THREE.Vector3(0, 0, 1) : this.cameraOffset();
+    const direction = resetView ? new THREE.Vector3(0, 0, 1) : this.cameraOffset();
     if (direction.lengthSq() === 0) direction.set(0, 0, 1);
     direction.setLength(distance);
-    if (this.resetViewPending) {
-      // Dragging rolls the camera too; lookAt below re-aims it with this up.
-      camera.up.set(0, 1, 0);
-      this.resetViewPending = false;
-    }
+    // Dragging rolls the camera too; lookAt below re-aims it with this up.
+    if (resetView) camera.up.set(0, 1, 0);
 
     this.graph.cameraPosition(
       { x: center.x + direction.x, y: center.y + direction.y, z: center.z + direction.z },
