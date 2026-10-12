@@ -16,7 +16,7 @@ import {
   getNodeDisplayText,
   wrapVisibleLinks,
 } from "./canvas-utils.js";
-import { computeRadialPositions, computeTreePositions } from "./layouts.js";
+import { DEFAULT_LEVEL_DISTANCE, computeRadialPositions, computeTreePositions } from "./layouts.js";
 
 /** Selected nodes get an outline shell this much larger than the node. */
 const SELECTED_OUTLINE_SCALE = 1.2;
@@ -57,9 +57,6 @@ const ZOOM_REFERENCE_DISTANCE = 500;
  * collapse into one ball on screen.)
  */
 const DEPTH_PER_LEVEL = 1;
-
-/** The level distance radial rings fall back to, as in the 2D layout. */
-const DEFAULT_LEVEL_DISTANCE = 80;
 
 type Instance = ForceGraph3DInstance<GraphNode, GraphLink>;
 
@@ -279,10 +276,12 @@ export class Graph3D {
     const ringOf = (node: Node3D) => Math.round(Math.hypot(node.x ?? 0, node.y ?? 0) * 1000) / 1000;
     const rings = [...new Set(nodes.map(ringOf))].sort((a, b) => a - b);
     if (radial?.direction === "in") rings.reverse();
+    // Looked up once per node, so a deep graph stays linear in its size.
+    const levelOf = new Map(rings.map((ring, level) => [ring, level]));
     const step = (radial?.levelDistance ?? DEFAULT_LEVEL_DISTANCE) * DEPTH_PER_LEVEL;
 
     for (const node of nodes) {
-      place3D(node, node.x ?? 0, node.y ?? 0, -rings.indexOf(ringOf(node)) * step);
+      place3D(node, node.x ?? 0, node.y ?? 0, -levelOf.get(ringOf(node))! * step);
     }
   }
 
