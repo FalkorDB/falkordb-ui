@@ -102,6 +102,23 @@ describe("3D worker force layout", () => {
     expect(workers[1].terminate).toHaveBeenCalledOnce();
   });
 
+  it.each(["apply", "continue"])("terminates and reports %s callback errors", kind => {
+    const { client, workers, applied, failed } = harness();
+    client.start(request());
+    const worker = workers[0];
+    const start = worker.postMessage.mock.calls[0][0];
+    if (start.type !== "start") throw new Error("Missing start request");
+    if (kind === "apply") applied.mockImplementation(() => { throw new Error("host callback failed"); });
+    else worker.postMessage.mockImplementation(() => { throw new Error("transfer failed"); });
+    expect(() => worker.reply({
+      type: "positions", revision: start.request.revision, positions: new Float64Array(12), done: kind === "apply",
+    })).not.toThrow();
+    expect(worker.terminate).toHaveBeenCalledOnce();
+    expect(failed).toHaveBeenCalledWith(expect.objectContaining({ message: kind === "apply" ? "host callback failed" : "transfer failed" }));
+    worker.reply({ type: "positions", revision: start.request.revision, positions: new Float64Array(12), done: true });
+    expect(failed).toHaveBeenCalledOnce();
+  });
+
   it("reports startup, runtime, decode and malformed-position failures explicitly", () => {
     const failure = vi.fn();
     const startup = new ForceLayoutClient(vi.fn(), failure, () => { throw new Error("CSP"); });

@@ -76,7 +76,7 @@ async function canvasIn3D(): Promise<CanvasTestElement> {
 }
 
 describe("dimension", () => {
-  it("keeps left-drag rotation and enables right-drag and native two-touch panning", async () => {
+  it("keeps left-drag rotation and enables right-drag panning", async () => {
     await canvasIn3D();
     expect(last3D().controlsState).toMatchObject({
       noPan: false, noRotate: false, noZoom: false,
@@ -801,7 +801,7 @@ describe("3D scene objects", () => {
     expect(last3D().scene().children.some(object => object instanceof InstancedMesh)).toBe(false);
   });
 
-  it("does not recompute captions or rewrite unchanged materials on hover", async () => {
+  it("does not recompute captions or rewrite unchanged materials on selection restyling", async () => {
     const canvas = await canvasIn3D();
     canvas.setConfig({ captionsKeys: ["name"] });
     const node = canvas.getGraphData().nodes[0];
@@ -1127,10 +1127,49 @@ describe("3D scene objects", () => {
     const canvas = await canvasIn3D();
     const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
     const link = canvas.getGraphData().links[0];
-    const first = factory(link).children[0] as Mesh<BufferGeometry, LineBasicMaterial>;
+    const first = factory({ ...link }).children[0] as Mesh<BufferGeometry, LineBasicMaterial>;
     const disposed = vi.spyOn(first.material, "dispose");
-    for (let id = 1; id <= 256; id++) factory({ ...link, id, color: `#${id.toString(16).padStart(6, "0")}` });
+    for (let id = 1; id <= 256; id++) {
+      factory({ ...link, id, color: `#${id.toString(16).padStart(6, "0")}` });
+    }
+    canvas.setConfig({ isLinkSelected: () => false });
     expect(disposed).toHaveBeenCalled();
+  });
+
+  it("keeps 257 active shaft materials stable through unchanged restyles", async () => {
+    const canvas = createCanvas();
+    canvas.setData({
+      nodes: DATA.nodes,
+      links: Array.from({ length: 257 }, (_, id) => ({ ...DATA.links[0], id, color: `#${id.toString(16).padStart(6, "0")}` })),
+    });
+    await canvas.setDimension("3d");
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+    const shafts = canvas.getGraphData().links.map(factory);
+    const materials = shafts.map(shaft => shaft.material);
+    const disposals = materials.map(material => vi.spyOn(material, "dispose"));
+    for (let i = 0; i < 3; i++) canvas.setConfig({ isLinkSelected: () => false });
+    expect(shafts.map(shaft => shaft.material)).toEqual(materials);
+    for (const disposal of disposals) expect(disposal).not.toHaveBeenCalled();
+  });
+
+  it("updates shaft geometry on selection and disposes replacements and removed links", async () => {
+    const canvas = await canvasIn3D();
+    const link = canvas.getGraphData().links[0];
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+    const first = factory(link);
+    const original = first.children[0] as Mesh;
+    const disposed = vi.spyOn(original.geometry, "dispose");
+    canvas.setConfig({ isLinkSelected: () => true });
+    expect(first.children[0].type).toBe("Mesh");
+    expect(disposed).toHaveBeenCalledOnce();
+    canvas.setConfig({ isLinkSelected: () => false });
+    expect(first.children[0].type).toBe("Line");
+    const old = vi.spyOn((first.children[0] as Mesh).geometry, "dispose");
+    const replacement = factory(link);
+    expect(old).toHaveBeenCalledOnce();
+    const removed = vi.spyOn((replacement.children[0] as Mesh).geometry, "dispose");
+    canvas.setData({ nodes: DATA.nodes, links: [] });
+    expect(removed).toHaveBeenCalledOnce();
   });
 
   it("keeps repeated relationship captions cached after many unique node captions", async () => {
@@ -1275,6 +1314,23 @@ describe("3D idle rendering", () => {
     expect(graph.callsTo("pauseAnimation")).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(200);
     expect(graph.callsTo("pauseAnimation")).toHaveLength(1);
+  });
+
+  it("keeps a drag-reheated local simulation awake until its next engine stop", async () => {
+    await canvasIn3D();
+    vi.useFakeTimers();
+    const graph = last3D();
+    graph.callback("onEngineStop")();
+    await vi.advanceTimersByTimeAsync(200);
+    const pauses = graph.callsTo("pauseAnimation").length;
+    graph.container.dispatchEvent(new Event("pointerdown"));
+    graph.callback("onEngineTick")();
+    window.dispatchEvent(new Event("pointerup"));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(pauses);
+    graph.callback("onEngineStop")();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(pauses + 1);
   });
 
   it("removes activity listeners and cancels pending idle work on disconnect", async () => {

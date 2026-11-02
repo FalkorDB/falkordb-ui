@@ -112,7 +112,7 @@ export class Graph3D {
 
   private linkLabels = new WeakMap<GraphLink, THREE.Sprite>();
 
-  private linkShafts = new WeakMap<GraphLink, LinkShaft>();
+  private readonly linkShafts = new Map<GraphLink, LinkShaft>();
 
   private readonly shaftMaterials = new Map<string, THREE.LineBasicMaterial | THREE.MeshLambertMaterial>();
 
@@ -339,6 +339,7 @@ export class Graph3D {
       .nodeThreeObject((node) => this.createNodeObject(node))
       .linkThreeObjectExtend(false)
       .linkThreeObject((link) => {
+        this.linkShafts.get(link)?.dispose();
         const shaft = new LinkShaft(this.createLinkLabel(link),
           this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0, this.shaftMaterial(link));
         this.linkShafts.set(link, shaft);
@@ -464,11 +465,20 @@ export class Graph3D {
     }
     this.updateDetailVisibility();
 
+    const liveLinks = new Set(this.host.data.links.filter(link => link.visible));
+    for (const [link, shaft] of this.linkShafts) {
+      if (liveLinks.has(link)) continue;
+      shaft.dispose();
+      this.linkShafts.delete(link);
+    }
     let colorsChanged = false;
     for (const link of this.host.data.links) {
       const before = this.linkColors.get(link);
       this.linkColor(link);
-      this.linkShafts.get(link)?.setMaterial(this.shaftMaterial(link));
+      this.linkShafts.get(link)?.setStyle(
+        this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0,
+        this.shaftMaterial(link),
+      );
       if (before !== this.linkColors.get(link)) colorsChanged = true;
     }
 
@@ -479,6 +489,7 @@ export class Graph3D {
         .linkDirectionalArrowColor((link) => this.linkColor(link));
     }
     this.applyLinkSelection();
+    this.trimShaftMaterials();
     this.requestRender();
   }
 
@@ -636,19 +647,20 @@ export class Graph3D {
   }
 
   setPinned(pinned: boolean) {
-    if (this.workerActive) {
-      if (pinned) {
-        this.startWorker(this.layoutPending ? this.host.config.simulation.warmupTicks : 0);
-      } else {
-        for (const node of this.host.data.nodes) unpin3D(node);
-        this.startWorker(0);
-      }
+    if (pinned) {
+      this.stopWorker();
+      this.dragging = undefined;
+      for (const node of this.host.data.nodes) pin3D(node);
+      this.layoutLanded();
+      this.graph.cooldownTicks(0);
+      this.host.setEngineStatus(false);
+      this.engineRunning = false;
       this.requestRender();
       return;
     }
-    if (pinned) {
-      this.graph.cooldownTicks(0);
-      this.host.setEngineStatus(false);
+    if (this.workerActive) {
+      for (const node of this.host.data.nodes) unpin3D(node);
+      this.startWorker(0);
       this.requestRender();
       return;
     }
@@ -656,6 +668,11 @@ export class Graph3D {
     // As in 2D, only a force layout comes loose and starts moving again.
     if (this.holdsLayout) return;
     for (const node of this.host.data.nodes) unpin3D(node);
+    if (this.shouldUseWorker) {
+      this.startWorker(0);
+      this.requestRender();
+      return;
+    }
     if (this.host.config.animation) {
       this.graph.cooldownTicks(Infinity).d3ReheatSimulation();
       this.host.setEngineStatus(true);
@@ -783,6 +800,8 @@ export class Graph3D {
     this.cleanupInteraction?.();
     const renderer = this.graph.renderer();
     this.instances.dispose();
+    for (const shaft of this.linkShafts.values()) shaft.dispose();
+    this.linkShafts.clear();
     this.graph._destructor();
     this.sphereGeometry.dispose();
     this.boxGeometry.dispose();
@@ -844,6 +863,7 @@ export class Graph3D {
       // The engine first ticks, or stops, right after a layout has been applied.
       .onEngineTick(() => {
         if (this.workerActive) return;
+        this.engineRunning = true;
         this.layoutLanded();
         this.updateViewport();
       })
@@ -905,14 +925,19 @@ export class Graph3D {
       material = selected
         ? new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.9 })
         : new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
-      if (this.shaftMaterials.size >= MAX_CACHED_SHAFT_MATERIALS) {
-        const [oldKey, oldMaterial] = this.shaftMaterials.entries().next().value!;
-        this.shaftMaterials.delete(oldKey);
-        oldMaterial.dispose();
-      }
       this.shaftMaterials.set(key, material);
     }
     return material;
+  }
+
+  private trimShaftMaterials() {
+    const used = new Set([...this.linkShafts.values()].map(shaft => shaft.material));
+    for (const [key, material] of this.shaftMaterials) {
+      if (this.shaftMaterials.size <= MAX_CACHED_SHAFT_MATERIALS) break;
+      if (used.has(material)) continue;
+      this.shaftMaterials.delete(key);
+      material.dispose();
+    }
   }
 
   private arrowLength(link: GraphLink) {
@@ -1113,6 +1138,7 @@ function place3D(node: Node3D, x: number, y: number, z: number) {
 
 /** Fix `node` where it is, in all three axes. */
 function pin3D(node: Node3D) {
+  node.z ??= 0;
   node.fx = node.x;
   node.fy = node.y;
   node.fz = node.z;

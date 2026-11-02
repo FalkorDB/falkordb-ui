@@ -45,12 +45,16 @@ export class ForceLayoutClient {
           fail(new Error("Invalid 3D layout worker positions"));
           return;
         }
-        this.apply(data.positions, data.done);
-        if (this.worker !== worker) return;
-        if (data.done) this.stop();
-        else {
-          const next: LayoutInput = { type: "next", revision, positions: data.positions };
-          worker.postMessage(next, [data.positions.buffer]);
+        try {
+          this.apply(data.positions, data.done);
+          if (this.worker !== worker) return;
+          if (data.done) this.stop();
+          else {
+            const next: LayoutInput = { type: "next", revision, positions: data.positions };
+            worker.postMessage(next, [data.positions.buffer]);
+          }
+        } catch (error) {
+          fail(error instanceof Error ? error : new Error(String(error)));
         }
       };
       const message: LayoutInput = { type: "start", request: { ...request, revision } };

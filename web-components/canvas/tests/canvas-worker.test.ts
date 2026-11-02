@@ -173,4 +173,26 @@ describe("3D worker integration", () => {
     canvas.setConfig({ simulation: { workerLayout: false } });
     expect(forceGraph3DMockState.lastInstance!.props.get("warmupTicks")).toBe(300);
   });
+
+  it.each([false, true])("pins every node and cancels worker updates, after reply: %s", async replied => {
+    const canvas = await canvas3D();
+    const worker = LayoutWorkerMock.instances.at(-1)!;
+    if (replied) worker.complete(false);
+    const nodes = canvas.getGraphData().nodes;
+    const before = nodes.map(node => ({ x: node.x, y: node.y, z: (node as typeof node & { z?: number }).z }));
+    canvas.setPinOnDragEnd(true);
+    expect(worker.terminated).toBe(true);
+    nodes.forEach((node, index) => {
+      expect(node.fx).toBe(before[index].x);
+      expect(node.fy).toBe(before[index].y);
+      expect((node as typeof node & { fz?: number }).fz).toBe(before[index].z ?? 0);
+    });
+    worker.complete();
+    expect(nodes.map(node => ({ x: node.x, y: node.y, z: (node as typeof node & { z?: number }).z }))).toEqual(before.map(node => ({ ...node, z: node.z ?? 0 })));
+    canvas.setPinOnDragEnd(false);
+    const resumed = LayoutWorkerMock.instances.at(-1)!;
+    expect(resumed).not.toBe(worker);
+    expect(resumed.request.nodes.every(node => node.fx === undefined && node.fy === undefined && node.fz === undefined)).toBe(true);
+    canvas.remove();
+  });
 });

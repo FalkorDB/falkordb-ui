@@ -209,6 +209,7 @@ Configuration is passed to `setConfig()` as a `ForceGraphConfig` object. It is o
 | `velocityDecay` | `0.4` | Velocity decay (damping) |
 | `alphaMin` | `0.05` | Alpha min (convergence threshold) |
 | `warmupTicks` | `300` | Warmup ticks for force simulation |
+| `workerLayout` | `true` | Run 3D force physics in a module worker at 1,000+ nodes; `false` keeps local physics. No effect on 2D, tree or radial layouts. |
 
 #### `interaction` — Interaction / UX Parameters
 
@@ -293,6 +294,7 @@ Switching lays the graph out afresh in the new dimension and fits it to the view
 
 - Over empty space, left-drag to rotate, right-drag to pan without changing the viewing angle, and scroll to zoom. On touchscreens, one finger rotates; moving two fingers together pans, and pinching zooms. Start camera gestures away from nodes: dragging a node still moves that node. `zoom()` and `getZoom()` express the camera's distance as a zoom factor, so `zoom(getZoom() * 1.1)` zooms in as it does in 2D.
 - Edge shafts stop at the back of their arrowheads rather than continuing through the tip, including selected, curved and self-loop edges. When low-zoom settings hide arrows, shafts extend to the target node instead. 2D uses the same visual rule with its notched arrowheads.
+- Selected shafts reuse their geometry while their path, width and clipping inputs are unchanged. Shaft materials are shared by color and selection; cache eviction above 256 entries affects unused materials only, so graphs with more active colors do not churn materials on hover.
 - `tree` and `radial` keep their 2D positions, so face-on they read exactly as in 2D with no node over another, and each level sits one level distance further back than the one above it, the root nearest. Seen side-on the levels step back like stairs: a tree's levels each line up as one point, and a radial ring as one line. Both are pinned, so they hold still; picking a layout turns the view face-on again.
 - Pausing the animation or pinning stops a `force` layout's simulation.
 - Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Captions are left to the hover tooltip above 1,000 nodes or links.
@@ -336,6 +338,8 @@ and a single transferable position/velocity buffer is passed back and forth
 with backpressure instead of accumulating queued updates. Idle rendering can
 pause while warmup computes. Animation/pinning controls still apply; dragging
 cancels worker updates until release, then resumes from the dragged positions.
+Enabling pinning cancels even an in-progress warmup and holds every node at its
+current position; disabling pinning releases those pins and resumes force layout.
 Graph/data/layout changes and teardown cancel stale work. Tree, radial and 2D
 layouts stay on their existing paths.
 

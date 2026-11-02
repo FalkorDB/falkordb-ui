@@ -27,11 +27,11 @@ jobs:
       contents: write
       pull-requests: read
       id-token: write
-    uses: FalkorDB/.github/.github/workflows/release-notes.yml@main
+    uses: FalkorDB/.github/.github/workflows/release-notes.yml@7d9aa6cc66efe49b6f946cd3f567a0187be61ae5
     with:
       product: FalkorDB UI and Canvas
       product-description: independently released React UI components and a 2D/3D graph canvas for FalkorDB applications; the release tag identifies the package
-      tag: ${{ inputs.tag }}
+      tag: ${{ inputs.tag || github.event.release.tag_name }}
       from-tag: ${{ inputs.from_tag }}
       dry-run: ${{ inputs.dry_run || false }}
     secrets:

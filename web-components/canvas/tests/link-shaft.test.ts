@@ -65,4 +65,25 @@ describe("3D edge shaft", () => {
     expect(body.material.color.getHex()).toBe(0xff0000);
     expect(body.geometry.getAttribute("position").array.every(Number.isFinite)).toBe(true);
   });
+
+  it("reuses selected geometry for camera-only updates and rebuilds for a mutated curve", () => {
+    const curve = new THREE.QuadraticBezierCurve3(start, new THREE.Vector3(100, 150, 30), end);
+    const shaft = new LinkShaft(new THREE.Object3D(), 3, new THREE.MeshLambertMaterial());
+    shaft.update(start, end, curve, 10, 20);
+    const body = shaft.children[0] as THREE.Mesh;
+    const geometry = body.geometry;
+    const disposed = vi.spyOn(geometry, "dispose");
+    for (let i = 0; i < 20; i++) shaft.update(start, end, curve, 10, 20);
+    expect(body.geometry).toBe(geometry);
+    expect(disposed).not.toHaveBeenCalled();
+    curve.v1.y += 50;
+    curve.updateArcLengths();
+    shaft.update(start, end, curve, 10, 20);
+    expect(body.geometry).not.toBe(geometry);
+    expect(disposed).toHaveBeenCalledOnce();
+    const retired = vi.spyOn(body.geometry, "dispose");
+    shaft.dispose();
+    shaft.dispose();
+    expect(retired).toHaveBeenCalledOnce();
+  });
 });
