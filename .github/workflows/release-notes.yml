@@ -10,14 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to rewrite (v0.3.0 or canvas-v0.3.4), or the newest one of a range'
+        description: "Release tag to rewrite (v0.3.0 or canvas-v0.3.4), or the newest one of a range"
         required: true
       from_tag:
-        description: 'Oldest release tag of a range; leave empty for tag alone'
+        description: "Oldest release tag of a range; leave empty for tag alone"
         required: false
-        default: ''
+        default: ""
       dry_run:
-        description: 'Print the new notes without updating the release'
+        description: "Print the new notes without updating the release"
         type: boolean
         default: false
 
