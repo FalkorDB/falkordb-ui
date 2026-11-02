@@ -78,6 +78,7 @@ type NodeParts = {
   labelText: string;
   labelRevision: number;
   labelStyle: string;
+  dirty: boolean;
   color?: string;
   borderColor?: string;
   opacity?: number;
@@ -137,6 +138,57 @@ export class Graph3D {
 
   private details = { nodes: true, links: true, arrows: true };
 
+  private readonly frustum = new THREE.Frustum();
+
+  private readonly projection = new THREE.Matrix4();
+
+  private readonly bounds = new THREE.Sphere();
+
+  private updateFrustum() {
+    const camera = this.graph.camera();
+    camera.updateMatrixWorld();
+    this.projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.projection);
+  }
+
+  private inView(position: { x?: number; y?: number; z?: number }, radius: number) {
+    if (!this.host.config.largeGraph.enabled) return true;
+    this.bounds.center.set(position.x ?? 0, position.y ?? 0, position.z ?? 0);
+    this.bounds.radius = radius + Math.max(0, this.host.config.largeGraph.viewportPadding);
+    return this.frustum.intersectsSphere(this.bounds);
+  }
+
+  private syncNode(node: Node3D, parts: NodeParts) {
+    // Include the widest possible caption and square-node diagonal at the edge.
+    const height = Math.max(node.size * 0.6, 3);
+    const radius = node.size * SELECTED_OUTLINE_SCALE * Math.sqrt(3) +
+      height * (MAX_LABEL_TEXTURE_WIDTH / LABEL_TEXTURE_HEIGHT + 1);
+    const visible = node.visible !== false && this.inView(node, radius);
+    if (visible && parts.dirty) {
+      this.styleNode(node, parts);
+      parts.dirty = false;
+    }
+    if (parts.label) parts.label.visible = visible && this.details.nodes;
+  }
+
+  private syncLinkLabel(link: GraphLink, label: THREE.Sprite) {
+    const visible = link.visible !== false && this.inView(label.position, label.scale.length() / 2);
+    label.visible = visible && this.details.links;
+    if (label.visible) label.material.opacity = this.linkOpacity(link);
+  }
+
+  private updateViewport() {
+    this.updateFrustum();
+    for (const node of this.host.data.nodes) {
+      const parts = this.nodeParts.get(node);
+      if (parts) this.syncNode(node, parts);
+    }
+    for (const link of this.host.data.links) {
+      const label = this.linkLabels.get(link);
+      if (label) this.syncLinkLabel(link, label);
+    }
+  }
+
   /** Selected link ids, as last applied — link widths only change with the selection. */
   private linkSelection = "";
 
@@ -189,6 +241,8 @@ export class Graph3D {
           ? curve.getPoint(0.5)
           : { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 };
         obj.position.set(mid.x, mid.y, mid.z);
+        const label = this.linkLabels.get(link);
+        if (label) this.syncLinkLabel(link, label);
       })
       .enableNodeDrag(true)
       // Graphs with cycles are the norm: level them as well as possible
@@ -261,18 +315,7 @@ export class Graph3D {
     };
     const previous = this.details;
     this.details = next;
-    if (previous.nodes !== next.nodes) {
-      for (const node of this.host.data.nodes) {
-        const label = this.nodeParts.get(node)?.label;
-        if (label) label.visible = next.nodes;
-      }
-    }
-    if (previous.links !== next.links) {
-      for (const link of this.host.data.links) {
-        const label = this.linkLabels.get(link);
-        if (label) label.visible = next.links;
-      }
-    }
+    this.updateViewport();
     if (previous.arrows !== next.arrows) this.updateArrows();
   }
 
@@ -287,19 +330,17 @@ export class Graph3D {
       this.captionConfig = captionConfig;
       this.labelRevision += 1;
     }
-    this.updateDetailVisibility();
     for (const node of this.host.data.nodes) {
       const parts = this.nodeParts.get(node);
-      if (parts) this.styleNode(node, parts);
+      if (parts) parts.dirty = true;
     }
+    this.updateDetailVisibility();
 
     let colorsChanged = false;
     for (const link of this.host.data.links) {
       const before = this.linkColors.get(link);
       this.linkColor(link);
       if (before !== this.linkColors.get(link)) colorsChanged = true;
-      const label = this.linkLabels.get(link);
-      if (label && this.linkColors.get(link) !== before) label.material.opacity = this.linkColors.get(link)?.opacity ?? 1;
     }
 
     // Colours are re-read when the accessors are set; that keeps the objects.
@@ -331,6 +372,13 @@ export class Graph3D {
 
   setSize(width: number, height: number) {
     this.graph.width(width).height(height);
+    // The library resizes on a debounce; culling needs the new projection now.
+    const camera = this.graph.camera();
+    if (camera instanceof THREE.PerspectiveCamera && width > 0 && height > 0) {
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+    this.updateViewport();
     this.requestRender();
   }
 
@@ -569,6 +617,7 @@ export class Graph3D {
       lookAt,
       durationMs,
     );
+    this.updateDetailVisibility();
     this.requestRender(durationMs);
   }
 
@@ -621,10 +670,14 @@ export class Graph3D {
         handlers()?.onNodeDragEnd?.(node);
       })
       // The engine first ticks, or stops, right after a layout has been applied.
-      .onEngineTick(() => this.layoutLanded())
+      .onEngineTick(() => {
+        this.layoutLanded();
+        this.updateViewport();
+      })
       .onEngineStop(() => {
         this.host.log("3D engine stopped");
         this.layoutLanded();
+        this.updateDetailVisibility();
         this.host.setEngineStatus(false);
         this.engineRunning = false;
         this.requestRender();
@@ -708,9 +761,10 @@ export class Graph3D {
     const group = new THREE.Group();
     group.add(body, outline);
 
-    const parts: NodeParts = { body, outline, label: null, labelText: "", labelRevision: -1, labelStyle: "" };
+    const parts: NodeParts = { body, outline, label: null, labelText: "", labelRevision: -1, labelStyle: "", dirty: true };
     this.nodeParts.set(node, parts);
-    this.styleNode(node, parts);
+    this.updateFrustum();
+    this.syncNode(node, parts);
 
     return group;
   }

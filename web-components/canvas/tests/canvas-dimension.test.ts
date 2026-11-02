@@ -750,6 +750,140 @@ describe("3D scene objects", () => {
     expect(parts.outline.visible).toBe(false);
   });
 
+  it("defers offscreen captions and selection work until the camera reveals the node", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ captionsKeys: ["name"], largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 10000, y: 0, z: 0 });
+    const name = vi.fn(() => "offscreen");
+    Object.defineProperty(node.data, "name", { get: name, configurable: true });
+    const selected = vi.fn(() => true);
+    const { body, caption } = nodeObject(canvas, 1);
+    canvas.setConfig({ isNodeSelected: selected });
+
+    expect(caption).toBeUndefined();
+    expect(name).not.toHaveBeenCalled();
+    expect(selected).not.toHaveBeenCalledWith(node);
+    expect(canvas.getGraphData().nodes).toContain(node);
+    expect(last3D().data.nodes).toContain(node);
+
+    last3D().simulateDrag({ x: 10000, y: 0, z: 1000 }, { x: 10000, y: 0, z: 0 });
+    last3D().controlsChanged();
+
+    expect(body.parent!.children[2]).toBeInstanceOf(Sprite);
+    expect(name).toHaveBeenCalled();
+    expect(selected).toHaveBeenCalledWith(node);
+    expect((body.parent!.children[1] as Mesh).visible).toBe(true);
+  });
+
+  it("applies deferred dimming and caption changes when a node moves back onscreen", async () => {
+    const canvas = await canvasIn3D();
+    last3D().callback("onEngineTick")();
+    canvas.setConfig({ captionsKeys: ["name"], largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    const { body, caption } = nodeObject(canvas, 1);
+    Object.assign(node, { x: 10000, y: 0, z: 0 });
+    last3D().callback("onEngineTick")();
+    expect(caption!.visible).toBe(false);
+    const color = vi.spyOn(body.material.color, "set");
+    node.color = "#0000ff";
+    canvas.setConfig({
+      dimmed: true, isNodeDimmed: () => true, dimOpacity: 0.2,
+      captionsKeys: ["missing"],
+    });
+    expect(color).not.toHaveBeenCalled();
+    expect(body.parent!.children[2]).toBe(caption);
+
+    node.x = 0;
+    last3D().callback("onEngineTick")();
+
+    expect(color).toHaveBeenCalledWith("#0000ff");
+    expect(body.material.opacity).toBe(0.2);
+    expect(body.parent!.children[2]).not.toBe(caption);
+    expect(body.parent!.children[2].visible).toBe(true);
+  });
+
+  it("culls behind the camera and restores captions when culling is disabled", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    const { caption } = nodeObject(canvas, 1);
+    Object.assign(node, { x: 0, y: 0, z: 10000 });
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(false);
+
+    last3D().simulateDrag({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 10000 });
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(true);
+    last3D().simulateDrag({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 });
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(false);
+
+    canvas.setConfig({ largeGraph: { enabled: false } });
+    expect(caption!.visible).toBe(true);
+  });
+
+  it("keeps edge captions and honors world-space viewport padding", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 500, y: 0, z: 0 });
+    const { caption } = nodeObject(canvas, 1);
+    expect(caption).toBeInstanceOf(Sprite);
+
+    node.x = 10000;
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(false);
+    canvas.setConfig({ largeGraph: { viewportPadding: 10000 } });
+    expect(caption!.visible).toBe(true);
+  });
+
+  it("culls link captions at their actual midpoint, not at their endpoints", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const link = canvas.getGraphData().links[0];
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const label = factory(link);
+    const position = last3D().callback("linkPositionUpdate");
+    position(label, { start: { x: 9000, y: 0, z: 0 }, end: { x: 11000, y: 0, z: 0 } }, link);
+    expect(label.visible).toBe(false);
+    canvas.setConfig({ dimmed: true, isLinkDimmed: () => true, dimOpacity: 0.2 });
+    expect(label.material.opacity).toBe(1);
+
+    position(label, { start: { x: -10000, y: 0, z: 0 }, end: { x: 10000, y: 0, z: 0 } }, link);
+    expect(label.visible).toBe(true);
+    expect(label.material.opacity).toBe(0.2);
+    expect(last3D().data.links).toContain(link);
+  });
+
+  it("uses the curved link midpoint for caption culling", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const link = canvas.getGraphData().links[0];
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const label = factory(link);
+    Object.assign(link, { __curve: { getPoint: () => ({ x: 10000, y: 0, z: 0 }) } });
+
+    last3D().callback("linkPositionUpdate")(label, {
+      start: { x: -100, y: 0, z: 0 }, end: { x: 100, y: 0, z: 0 },
+    }, link);
+    expect(label.visible).toBe(false);
+    expect(label.position.x).toBe(10000);
+  });
+
+  it("reveals deferred captions when resizing widens the camera view", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 2000, y: 0, z: 0 });
+    const { body, caption } = nodeObject(canvas, 1);
+    expect(caption).toBeUndefined();
+
+    canvas.setWidth(10000);
+    expect(body.parent!.children[2]).toBeInstanceOf(Sprite);
+    expect(body.parent!.children[2].visible).toBe(true);
+  });
+
   it("refreshes cached captions when data changes on an incremental update", async () => {
     const canvas = await canvasIn3D();
     canvas.setConfig({ captionsKeys: ["name"] });

@@ -141,7 +141,7 @@ function GraphVisualization() {
 | **zoom**(*zoomLevel*) | | Set zoom level. |
 | **zoomToFit**(*paddingMultiplier*, *filter*) | `1.0`, `undefined` | Auto-fit all visible nodes in view. Optional padding multiplier and node filter function. |
 | **getGraph**() | | Get the underlying force-graph instance for advanced control. |
-| **getCullingStats**() | | Get viewport culling statistics (bounds, visible vs total node/link counts). |
+| **getCullingStats**() | | Get 2D viewport culling statistics (bounds, visible vs total node/link counts); does not report the 3D camera frustum. |
 
 ### Configuration Options
 
@@ -297,7 +297,8 @@ Switching lays the graph out afresh in the new dimension and fits it to the view
 - Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Captions are left to the hover tooltip above 1,000 nodes or links.
 - A dragged node stays where it is dropped when `pinOnDragEnd` is on.
 - `getViewport()` returns `undefined` and `setViewport()` does nothing, since a 2D zoom and center do not describe a 3D camera. `getGraph()` returns `undefined`.
-- Custom `node` / `link` canvas renderers, `linkLineDash`, the expand glow and viewport-bound culling apply to 2D only.
+- Custom `node` / `link` canvas renderers, `linkLineDash` and the expand glow apply to 2D only.
+- With `largeGraph.enabled`, 3D camera-frustum checks defer offscreen node styling and caption calculation, hide offscreen captions, and defer offscreen link-caption opacity updates. Camera movement, resize, simulation ticks and data/style changes refresh visibility; pending node changes are applied on re-entry. Bounds include caption extent and `viewportPadding` (world units) to avoid clipping edge labels. All nodes and links remain in the simulation. Native link styling, link-caption allocation and scene traversal are not culled by this optimization; Three.js handles mesh draw culling.
 - The existing `largeGraph` low-zoom settings also apply in 3D: labels and arrows hide at or below `lowZoomThreshold` and return when zooming in. `getZoom()` uses camera distance in 3D, not a 2D screen scale. Disable `largeGraph.enabled` or the individual `skip*AtLowZoom` settings to keep details visible. Hover tooltips remain available.
 
 Settled 3D scenes stop drawing after 150 ms without activity. Pointer input,

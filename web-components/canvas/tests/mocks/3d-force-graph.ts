@@ -1,3 +1,5 @@
+import { PerspectiveCamera } from "three";
+
 type Vec3 = { x: number; y: number; z: number };
 
 type Callback = (...args: unknown[]) => unknown;
@@ -112,16 +114,15 @@ export class MockForceGraph3DInstance {
   }
 
   /** The perspective camera: field of view, aspect, and the up vector dragging can roll. */
-  public cameraObject = {
-    fov: 40,
-    aspect: 1.5,
-    up: {
-      x: 0, y: 1, z: 0,
-      set(x: number, y: number, z: number) { Object.assign(this, { x, y, z }); return this; },
-    },
-  };
+  public cameraObject = new PerspectiveCamera(40, 1.5, 0.1, 100000);
 
   camera() {
+    this.cameraObject.position.copy(this.cameraPos);
+    const target = this.controlsState.target;
+    this.cameraObject.lookAt(target.x, target.y, target.z);
+    this.cameraObject.aspect = this.width() / this.height();
+    this.cameraObject.updateProjectionMatrix();
+    this.cameraObject.updateMatrixWorld();
     return this.cameraObject;
   }
 

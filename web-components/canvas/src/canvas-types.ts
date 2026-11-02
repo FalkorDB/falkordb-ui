@@ -121,7 +121,8 @@ export interface InteractionConfig {
 export interface LargeGraphConfig {
   /**
    * Master switch. When `true` (default) viewport culling and low-zoom
-   * optimisations are active.
+   * optimisations are active. In 3D, offscreen node styling/caption work and
+   * caption visibility are culled without removing graph data or simulation.
    */
   enabled?: boolean;
 
