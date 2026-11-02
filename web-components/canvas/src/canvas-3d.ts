@@ -18,6 +18,9 @@ import {
   wrapVisibleLinks,
 } from "./canvas-utils.js";
 import { DEFAULT_LEVEL_DISTANCE, computeRadialPositions, computeTreePositions } from "./layouts.js";
+import { NodeInstances } from "./node-instances.js";
+import { ForceLayoutClient } from "./force-layout-client.js";
+import type { LayoutNode } from "./force-layout.js";
 
 /** Selected nodes get an outline shell this much larger than the node. */
 const SELECTED_OUTLINE_SCALE = 1.2;
@@ -44,6 +47,7 @@ const MAX_CACHED_LABELS = 256;
 const MAX_CACHED_LABEL_PIXELS = 1024 * 1024;
 const MAX_LABEL_TEXTURE_WIDTH = 2048;
 const IDLE_RENDER_DELAY = 150;
+const LARGE_GRAPH_NODE_THRESHOLD = 1000;
 
 /**
  * `getZoom()`/`zoom()` express camera distance as a zoom factor, so callers
@@ -144,6 +148,88 @@ export class Graph3D {
 
   private readonly bounds = new THREE.Sphere();
 
+  private instances: NodeInstances;
+
+  private layoutWorker: ForceLayoutClient;
+
+  private workerActive = false;
+
+  private workerWarming = false;
+
+  private workerFailed = false;
+
+  private dragging: GraphNode | undefined;
+
+  private workerNodes: Node3D[] = [];
+
+  private get shouldUseWorker() {
+    return !this.holdsLayout && this.host.config.simulation.workerLayout && !this.workerFailed &&
+      typeof Worker !== "undefined" && this.host.data.nodes.length >= LARGE_GRAPH_NODE_THRESHOLD;
+  }
+
+  private startWorker(warmupTicks: number) {
+    const { simulation, layoutOptions, animation, pinOnDragEnd } = this.host.config;
+    // A style/config refresh during warmup must not replace it with an unlaid graph.
+    const ticks = this.workerWarming ? Math.max(warmupTicks, simulation.warmupTicks) : warmupTicks;
+    if (!this.shouldUseWorker) {
+      this.stopWorker();
+      return false;
+    }
+    this.workerNodes = [...this.host.data.nodes];
+    const nodes: LayoutNode[] = this.workerNodes.map(node => ({
+      id: node.id, size: node.size,
+      x: node.x, y: node.y, z: node.z, vx: node.vx, vy: node.vy, vz: node.vz,
+      fx: node.fx, fy: node.fy, fz: node.fz,
+    }));
+    const links = this.host.data.links.filter(link => link.visible !== false).map(link => ({
+      source: typeof link.source === "number" ? link.source : link.source.id,
+      target: typeof link.target === "number" ? link.target : link.target.id,
+    }));
+    this.workerActive = true;
+    this.workerWarming = ticks > 0;
+    this.engineRunning = true;
+    this.layoutPending = true;
+    this.graph.warmupTicks(0).cooldownTicks(0);
+    this.host.setEngineStatus(true);
+    return this.layoutWorker.start({
+      nodes, links, warmupTicks: ticks,
+      chargeStrength: simulation.chargeStrength,
+      velocityDecay: simulation.velocityDecay,
+      alphaMin: simulation.alphaMin,
+      linkDistance: layoutOptions.force?.linkDistance ?? LINK_DISTANCE,
+      animate: !!animation && !pinOnDragEnd,
+    });
+  }
+
+  private stopWorker() {
+    this.layoutWorker.stop();
+    this.workerActive = false;
+    this.workerWarming = false;
+    this.workerNodes = [];
+  }
+
+  private applyWorkerPositions(positions: Float64Array, done: boolean) {
+    if (!this.workerActive || this.destroyed) return;
+    this.workerWarming = false;
+    this.workerNodes.forEach((node, index) => {
+      const offset = index * 6;
+      node.x = positions[offset];
+      node.y = positions[offset + 1];
+      node.z = positions[offset + 2];
+      node.vx = positions[offset + 3];
+      node.vy = positions[offset + 4];
+      node.vz = positions[offset + 5];
+    });
+    this.layoutLanded();
+    // cooldown=0 updates scene positions without executing any local force tick.
+    this.graph.d3ReheatSimulation();
+    this.updateViewport();
+    this.engineRunning = !done;
+    this.host.setEngineStatus(!done);
+    this.requestRender();
+    if (done) this.host.config.eventHandlers?.onEngineStop?.();
+  }
+
   private updateFrustum() {
     const camera = this.graph.camera();
     camera.updateMatrixWorld();
@@ -187,6 +273,18 @@ export class Graph3D {
       const label = this.linkLabels.get(link);
       if (label) this.syncLinkLabel(link, label);
     }
+    const { largeGraph } = this.host.config;
+    const items = [];
+    if (largeGraph.enabled && largeGraph.nodeInstancing && this.host.data.nodes.length >= LARGE_GRAPH_NODE_THRESHOLD) {
+      for (const node of this.host.data.nodes as Node3D[]) {
+        const parts = this.nodeParts.get(node);
+        // Keep selected bodies with their shells to preserve contour depth.
+        if (!parts || node.visible === false || parts.outline.visible || parts.body.material.opacity !== 1) continue;
+        if (!this.inView(node, node.size * Math.sqrt(3))) continue;
+        items.push({ body: parts.body, x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0, size: node.size });
+      }
+    }
+    this.instances.update(items);
   }
 
   /** Selected link ids, as last applied — link widths only change with the selection. */
@@ -250,6 +348,16 @@ export class Graph3D {
       .onDagError(() => {});
 
     this.applyLinkSelection(true);
+    this.instances = new NodeInstances(this.graph.scene());
+    this.layoutWorker = new ForceLayoutClient(
+      (positions, done) => this.applyWorkerPositions(positions, done),
+      error => {
+        console.error("[FalkorDBCanvas] 3D layout worker failed; using local physics", error);
+        this.workerFailed = true;
+        this.stopWorker();
+        if (!this.destroyed) this.applyLayout();
+      },
+    );
     this.bindEventHandlers();
     this.bindRenderActivity(container);
   }
@@ -265,7 +373,7 @@ export class Graph3D {
     clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
       this.idleTimer = undefined;
-      if (this.engineRunning || this.pointerDown || this.destroyed) return;
+      if ((this.engineRunning && !this.workerWarming) || this.pointerDown || this.destroyed) return;
       if (Date.now() < this.renderUntil) {
         this.requestRender();
         return;
@@ -361,6 +469,7 @@ export class Graph3D {
     const linkForce = this.graph.d3Force("link");
     if (linkForce) wrapVisibleLinks(linkForce).links(this.host.data.links);
     this.graph.refresh();
+    if (this.workerActive && !this.startWorker(0)) this.applyLayout(false);
     this.restyle();
   }
 
@@ -388,6 +497,7 @@ export class Graph3D {
    * per step down the hierarchy.
    */
   applyLayout(fit = false) {
+    this.stopWorker();
     this.labelRevision += 1;
     this.engineRunning = true;
     const { layoutMode, simulation, animation, pinOnDragEnd } = this.host.config;
@@ -399,7 +509,7 @@ export class Graph3D {
     const placed = layoutMode === "tree" || layoutMode === "radial";
     const running = !!animation && !pinOnDragEnd && !placed;
 
-    this.setupForces();
+    this.setupForces(false);
     for (const node of this.host.data.nodes) unpin3D(node);
 
     if (layoutMode === "tree") this.placeTree();
@@ -408,9 +518,12 @@ export class Graph3D {
     // As in 2D: a force layout is settled up front, then either keeps running
     // with animation on or is held still. Tree and radial are placed, not
     // simulated, so there is nothing to warm up.
-    this.graph.warmupTicks(placed ? 0 : simulation.warmupTicks);
-    this.graph.cooldownTicks(running ? Infinity : 0);
-    this.host.setEngineStatus(running);
+    const worker = this.startWorker(simulation.warmupTicks);
+    if (!worker) {
+      this.graph.warmupTicks(placed ? 0 : simulation.warmupTicks);
+      this.graph.cooldownTicks(running ? Infinity : 0);
+      this.host.setEngineStatus(running);
+    }
 
     // Handing the data over again is what re-runs the warmup; a fresh wrapper
     // so it is never taken for the data already shown.
@@ -424,6 +537,11 @@ export class Graph3D {
     this.labelRevision += 1;
     this.engineRunning = true;
     const { nodes, links } = this.host.data;
+    if (!this.startWorker(this.host.config.simulation.warmupTicks)) {
+      const { simulation, animation, pinOnDragEnd } = this.host.config;
+      this.graph.warmupTicks(this.holdsLayout ? 0 : simulation.warmupTicks)
+        .cooldownTicks(animation && !pinOnDragEnd && !this.holdsLayout ? Infinity : 0);
+    }
     this.graph.graphData({ nodes, links });
     this.restyle();
   }
@@ -480,6 +598,11 @@ export class Graph3D {
   }
 
   setAnimation(enabled: boolean) {
+    if (this.workerActive) {
+      this.startWorker(this.layoutPending ? this.host.config.simulation.warmupTicks : 0);
+      this.requestRender();
+      return;
+    }
     if (enabled && !this.host.config.pinOnDragEnd && !this.holdsLayout) {
       this.graph.cooldownTicks(Infinity).d3ReheatSimulation();
       this.host.setEngineStatus(true);
@@ -492,6 +615,16 @@ export class Graph3D {
   }
 
   setPinned(pinned: boolean) {
+    if (this.workerActive) {
+      if (pinned) {
+        this.startWorker(this.layoutPending ? this.host.config.simulation.warmupTicks : 0);
+      } else {
+        for (const node of this.host.data.nodes) unpin3D(node);
+        this.startWorker(0);
+      }
+      this.requestRender();
+      return;
+    }
     if (pinned) {
       this.graph.cooldownTicks(0);
       this.host.setEngineStatus(false);
@@ -510,7 +643,7 @@ export class Graph3D {
     this.requestRender();
   }
 
-  setupForces() {
+  setupForces(restartWorker = true) {
     const { layoutOptions, simulation } = this.host.config;
     const linkDist = layoutOptions.force?.linkDistance ?? LINK_DISTANCE;
 
@@ -524,6 +657,7 @@ export class Graph3D {
     this.graph.d3Force("charge")?.strength?.(simulation.chargeStrength);
     this.graph.d3VelocityDecay(simulation.velocityDecay);
     this.graph.d3AlphaMin(simulation.alphaMin);
+    if (restartWorker && (this.workerActive || this.shouldUseWorker) && !this.startWorker(0)) this.applyLayout(false);
   }
 
   /**
@@ -623,9 +757,11 @@ export class Graph3D {
 
   destroy() {
     this.destroyed = true;
+    this.stopWorker();
     clearTimeout(this.idleTimer);
     this.cleanupInteraction?.();
     const renderer = this.graph.renderer();
+    this.instances.dispose();
     this.graph._destructor();
     this.sphereGeometry.dispose();
     this.boxGeometry.dispose();
@@ -664,17 +800,35 @@ export class Graph3D {
       .onLinkHover((link) => handlers()?.onLinkHover?.(link))
       .onBackgroundClick((event) => handlers()?.onBackgroundClick?.(event))
       .onBackgroundRightClick((event) => handlers()?.onBackgroundRightClick?.(event))
+      .onNodeDrag((node) => {
+        if (!this.workerActive) return;
+        this.dragging = node;
+        this.layoutWorker.stop();
+        this.engineRunning = false;
+        this.graph.cooldownTicks(0);
+        this.updateViewport();
+        this.requestRender();
+      })
       .onNodeDragEnd((node) => {
         // The library has released the drag's own pin by now.
         if (this.host.config.pinOnDragEnd) pin3D(node);
+        if (this.workerActive && this.dragging === node) {
+          this.dragging = undefined;
+          this.startWorker(0);
+        }
         handlers()?.onNodeDragEnd?.(node);
       })
       // The engine first ticks, or stops, right after a layout has been applied.
       .onEngineTick(() => {
+        if (this.workerActive) return;
         this.layoutLanded();
         this.updateViewport();
       })
       .onEngineStop(() => {
+        if (this.workerActive) {
+          this.updateViewport();
+          return;
+        }
         this.host.log("3D engine stopped");
         this.layoutLanded();
         this.updateDetailVisibility();

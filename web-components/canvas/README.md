@@ -315,7 +315,60 @@ textures (but keep separate materials for independent opacity); the retained
 cache is bounded to 256 entries and 1,048,576 pixels, about 4 MiB before mipmaps.
 Caption textures are at most 2,048 pixels wide. Geometry, cached textures and
 the WebGL context are released when leaving 3D or disconnecting the element.
-Large scenes still require per-element objects and draw calls. Hosts should
+
+For graphs with at least 1,000 nodes, opaque node bodies use GPU instancing by
+default: one draw call per shape, with per-instance position, scale and color.
+Offscreen bodies are excluded using camera-frustum bounds. Existing node objects
+remain as raycast/drag targets; captions keep their current renderer. Selected
+nodes retain individual bodies and outlines to preserve their contour/depth
+behavior. Transparent/dimmed bodies retain individual meshes so Three.js can
+sort them for blending. Disable this path with `largeGraph.nodeInstancing: false`
+(or `largeGraph.enabled: false`). This is node-body instancing, not link batching:
+links, arrowheads and captions still have per-element draw costs, and physics and
+interaction-object counts do not shrink.
+
+3D force layouts with at least 1,000 nodes run warmup and ongoing physics in a
+module Web Worker by default. This moves the existing 3D link, repulsion and
+center forces off the UI thread; it does not change the physics algorithm or
+reduce its total work. The renderer's local force ticks and warmup are disabled,
+and a single transferable position/velocity buffer is passed back and forth
+with backpressure instead of accumulating queued updates. Idle rendering can
+pause while warmup computes. Animation/pinning controls still apply; dragging
+cancels worker updates until release, then resumes from the dragged positions.
+Graph/data/layout changes and teardown cancel stale work. Tree, radial and 2D
+layouts stay on their existing paths.
+
+Set `simulation.workerLayout: false` to use the original local force path.
+Browsers without Worker support also use that path; worker load/runtime failures
+log an error and disable the worker for the mounted 3D renderer before falling
+back to local physics. A consumer bundler must emit the module worker asset from
+`new Worker(new URL(..., import.meta.url), { type: 'module' })`; CSP must permit it.
+The worker receives only IDs, sizes, coordinates/pins and force parameters, not
+node properties or captions. It makes no network requests for graph data.
+
+In a production-bundled Chromium/SwiftShader check with 2,000 nodes already in 3D,
+settled coordinates matched the local force path exactly. A 10 ms main-thread
+heartbeat's largest gap was about 6.6 seconds with local warmup versus 237 ms with the worker; total
+settling time was about 7.2 seconds in both cases. This demonstrates improved
+responsiveness, not guaranteed faster settling or frame rates. Rendering, scene
+updates and picking still run on the main thread; 2D warmup is unchanged.
+
+In a local Chromium/SwiftShader A/B check with a fixed, opaque 5,000-node,
+4,999-link graph, instancing reduced total draw calls from 9,999 to 5,000.
+Two alternating runs measured median camera-culling plus synchronized rendering
+at 129-134 ms without instancing versus about 87 ms with it. Pixel readback
+matched and triangle counts were unchanged. At 2,000 nodes, timings were closer
+(35-36 ms versus 31-35 ms). These software-renderer results are not hardware-GPU
+FPS guarantees; edge-heavy or mostly transparent scenes benefit less. These are
+development checks, not benchmarks or frame-time monitoring run in the component.
+
+Shared geometry and instancing solve different problems. Geometry sharing reuses
+the sphere/cube vertex and index buffers; instancing additionally submits many
+copies in one draw. Canvas2D draws circle/rectangle paths rather than creating a
+Three.js mesh per node, so neither mechanism directly applies to the 2D renderer.
+Its existing text caches, viewport culling and idle redraw address its own costs.
+
+Large scenes still require per-element interaction objects. Hosts should
 warn or limit graph sizes before calling `setDimension`, `setData` or
 `setGraphData`; browser CPU/RAM hints cannot reliably predict free GPU memory.
 
@@ -558,6 +611,7 @@ canvas.setConfig({
     skipLabelsAtLowZoom: true,      // skip node labels at low zoom (default: true)
     skipArrowsAtLowZoom: true,      // skip link arrowheads at low zoom (default: true)
     skipLinkLabelsAtLowZoom: true,  // skip link relationship labels at low zoom (default: true)
+    nodeInstancing: true,          // batch opaque 3D node bodies at 1,000+ nodes (default: true)
   }
 });
 ```

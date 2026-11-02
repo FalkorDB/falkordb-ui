@@ -80,6 +80,7 @@ const DEFAULT_SIMULATION: Required<SimulationConfig> = {
   velocityDecay: 0.4,
   alphaMin: 0.05,
   warmupTicks: 300,
+  workerLayout: true,
   chargeDistanceMax: Infinity,
   disableCollisionAbove: 0,
 };
@@ -103,6 +104,7 @@ const DEFAULT_LARGE_GRAPH: Required<LargeGraphConfig> = {
   skipLabelsAtLowZoom: true,
   skipArrowsAtLowZoom: true,
   skipLinkLabelsAtLowZoom: true,
+  nodeInstancing: true,
 };
 
 /** A node as the 3D renderer leaves it: positioned, moving and pinned in depth too. */

@@ -1,4 +1,4 @@
-import { PerspectiveCamera } from "three";
+import { PerspectiveCamera, Scene } from "three";
 
 type Vec3 = { x: number; y: number; z: number };
 
@@ -32,6 +32,10 @@ export class MockForceGraph3DInstance {
   public destroyed = false;
 
   public contextLost = false;
+
+  private readonly sceneObject = new Scene();
+
+  scene() { return this.sceneObject; }
 
   renderer() {
     return { forceContextLoss: () => { this.contextLost = true; } };

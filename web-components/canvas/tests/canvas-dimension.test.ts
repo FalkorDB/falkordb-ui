@@ -12,7 +12,7 @@ import {
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
-import { BoxGeometry, Group, Object3D, Sprite, type BufferGeometry, type Mesh, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { BoxGeometry, Group, InstancedMesh, Matrix4, Object3D, Sprite, Vector3, type BufferGeometry, type Mesh, type MeshLambertMaterial, type SpriteMaterial } from "three";
 import "../src/canvas";
 import type { CanvasTestElement, GraphNode, GraphLink } from "./test-types";
 
@@ -724,6 +724,68 @@ describe("3D scene objects", () => {
     expect(outline.visible).toBe(false);
     expect(caption).toBeInstanceOf(Sprite);
     expect(caption!.position.y).toBeLessThan(0);
+  });
+
+  it("instances large opaque graphs while keeping outlines, transparent nodes and picking objects", async () => {
+    const canvas = createCanvas();
+    canvas.setData({
+      nodes: Array.from({ length: 1001 }, (_, id) => ({
+        ...DATA.nodes[0], id, data: { name: `n${id}` },
+      })),
+      links: [],
+    });
+    await canvas.setDimension("3d");
+    const nodes = canvas.getGraphData().nodes;
+    nodes.forEach(node => Object.assign(node, { x: 0, y: 0, z: 0 }));
+    const first = nodeObject(canvas, 0);
+    const second = nodeObject(canvas, 1);
+    const third = nodeObject(canvas, 2);
+    last3D().callback("onEngineStop")();
+    const batches = () => last3D().scene().children.filter((object): object is InstancedMesh => object instanceof InstancedMesh);
+    expect(batches()).toHaveLength(1);
+    expect(batches()[0].count).toBe(3);
+    expect(first.body.visible).toBe(false);
+    expect(first.body.parent).not.toBeNull();
+
+    nodes[0].x = 40;
+    last3D().callback("onEngineTick")();
+    const matrix = new Matrix4();
+    batches()[0].getMatrixAt(0, matrix);
+    expect(new Vector3().setFromMatrixPosition(matrix).x).toBe(40);
+
+    canvas.setConfig({
+      isNodeSelected: node => node.id === 0,
+      dimmed: true, isNodeDimmed: node => node.id === 1, dimOpacity: 0.2,
+    });
+    expect(first.outline.visible).toBe(true);
+    expect(first.body.visible).toBe(true);
+    expect(second.body.visible).toBe(true);
+    expect(second.body.material.opacity).toBe(0.2);
+    expect(batches()[0].count).toBe(1);
+
+    canvas.setConfig({ largeGraph: { nodeInstancing: false } });
+    expect(batches()).toHaveLength(0);
+    expect(first.body.visible).toBe(true);
+    canvas.setConfig({ largeGraph: { nodeInstancing: true } });
+    expect(batches()).toHaveLength(1);
+    nodes[2].visible = false;
+    last3D().controlsChanged();
+    expect(batches()).toHaveLength(0);
+    nodes[2].visible = true;
+    last3D().controlsChanged();
+    expect(batches()).toHaveLength(1);
+    canvas.setConfig({ largeGraph: { enabled: false } });
+    expect(batches()).toHaveLength(0);
+    expect(first.body.visible).toBe(true);
+    expect(third.body.visible).toBe(true);
+  });
+
+  it("keeps small graphs on the original node renderer", async () => {
+    const canvas = await canvasIn3D();
+    const { body } = nodeObject(canvas, 1);
+    last3D().callback("onEngineStop")();
+    expect(body.visible).toBe(true);
+    expect(last3D().scene().children.some(object => object instanceof InstancedMesh)).toBe(false);
   });
 
   it("does not recompute captions or rewrite unchanged materials on hover", async () => {
