@@ -1,5 +1,6 @@
 import ForceGraph3D, { type ForceGraph3DInstance } from "3d-force-graph";
 import * as THREE from "three";
+import type { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
 import * as d3 from "d3";
 import {
   GraphData,
@@ -39,6 +40,11 @@ const LABEL_TEXTURE_HEIGHT = 64;
  */
 const MAX_LABELED_ELEMENTS = 1000;
 
+const MAX_CACHED_LABELS = 256;
+const MAX_CACHED_LABEL_PIXELS = 1024 * 1024;
+const MAX_LABEL_TEXTURE_WIDTH = 2048;
+const IDLE_RENDER_DELAY = 150;
+
 /**
  * `getZoom()`/`zoom()` express camera distance as a zoom factor, so callers
  * that scale the current zoom (`zoom(getZoom() * 1.1)`) work in both
@@ -70,6 +76,11 @@ type NodeParts = {
   outline: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   label: THREE.Sprite | null;
   labelText: string;
+  labelRevision: number;
+  labelStyle: string;
+  color?: string;
+  borderColor?: string;
+  opacity?: number;
 };
 
 /** What the 3D renderer reads from the `<falkordb-canvas>` element that owns it. */
@@ -93,6 +104,38 @@ export class Graph3D {
   private nodeParts = new WeakMap<GraphNode, NodeParts>();
 
   private linkLabels = new WeakMap<GraphLink, THREE.Sprite>();
+
+  private readonly sphereGeometry = new THREE.SphereGeometry(1, 12, 8);
+
+  private readonly boxGeometry = new THREE.BoxGeometry(2, 2, 2);
+
+  private readonly labelTextures = new Map<string, THREE.CanvasTexture>();
+
+  private readonly cachedTextures = new WeakSet<THREE.Texture>();
+
+  private cachedLabelPixels = 0;
+
+  private labelRevision = 0;
+
+  private captionConfig = "";
+
+  private readonly linkColors = new WeakMap<GraphLink, { color: string; background: string; opacity: number; output: string }>();
+
+  private rendering = true;
+
+  private engineRunning = true;
+
+  private pointerDown = false;
+
+  private destroyed = false;
+
+  private renderUntil = 0;
+
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  private cleanupInteraction: (() => void) | undefined;
+
+  private details = { nodes: true, links: true, arrows: true };
 
   /** Selected link ids, as last applied — link widths only change with the selection. */
   private linkSelection = "";
@@ -154,6 +197,83 @@ export class Graph3D {
 
     this.applyLinkSelection(true);
     this.bindEventHandlers();
+    this.bindRenderActivity(container);
+  }
+
+  private requestRender(durationMs = 0) {
+    if (this.destroyed) return;
+    this.renderUntil = Math.max(this.renderUntil, Date.now() + durationMs);
+    clearTimeout(this.idleTimer);
+    if (!this.rendering) {
+      this.rendering = true;
+      this.graph.resumeAnimation();
+    }
+    clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = undefined;
+      if (this.engineRunning || this.pointerDown || this.destroyed) return;
+      if (Date.now() < this.renderUntil) {
+        this.requestRender();
+        return;
+      }
+      this.graph.pauseAnimation();
+      this.rendering = false;
+    }, IDLE_RENDER_DELAY);
+  }
+
+  private bindRenderActivity(container: HTMLElement) {
+    const controls = this.graph.controls() as TrackballControls;
+    const change = () => {
+      this.updateDetailVisibility();
+      this.requestRender();
+    };
+    const wake = () => this.requestRender();
+    const down = () => { this.pointerDown = true; this.requestRender(); };
+    const up = () => { this.pointerDown = false; this.requestRender(); };
+    const end = () => { if (this.pointerDown) up(); };
+    controls.addEventListener("change", change);
+    container.addEventListener("pointermove", wake, { passive: true });
+    container.addEventListener("pointerleave", wake, { passive: true });
+    container.addEventListener("pointerdown", down, { passive: true });
+    container.addEventListener("wheel", wake, { passive: true });
+    window.addEventListener("pointerup", end, { passive: true });
+    window.addEventListener("pointercancel", end, { passive: true });
+    window.addEventListener("blur", up);
+    this.cleanupInteraction = () => {
+      controls.removeEventListener("change", change);
+      container.removeEventListener("pointermove", wake);
+      container.removeEventListener("pointerleave", wake);
+      container.removeEventListener("pointerdown", down);
+      container.removeEventListener("wheel", wake);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      window.removeEventListener("blur", up);
+    };
+  }
+
+  private updateDetailVisibility() {
+    const { largeGraph } = this.host.config;
+    const lowZoom = largeGraph.enabled && this.getZoom() <= largeGraph.lowZoomThreshold;
+    const next = {
+      nodes: !(lowZoom && largeGraph.skipLabelsAtLowZoom),
+      links: !(lowZoom && largeGraph.skipLinkLabelsAtLowZoom),
+      arrows: !(lowZoom && largeGraph.skipArrowsAtLowZoom),
+    };
+    const previous = this.details;
+    this.details = next;
+    if (previous.nodes !== next.nodes) {
+      for (const node of this.host.data.nodes) {
+        const label = this.nodeParts.get(node)?.label;
+        if (label) label.visible = next.nodes;
+      }
+    }
+    if (previous.links !== next.links) {
+      for (const link of this.host.data.links) {
+        const label = this.linkLabels.get(link);
+        if (label) label.visible = next.links;
+      }
+    }
+    if (previous.arrows !== next.arrows) this.updateArrows();
   }
 
   /**
@@ -161,25 +281,40 @@ export class Graph3D {
    * and dimming. Cheap enough to run on every hover.
    */
   restyle() {
+    const { config } = this.host;
+    const captionConfig = JSON.stringify([config.captionsKeys, config.showPropertyKeyPrefix]);
+    if (captionConfig !== this.captionConfig) {
+      this.captionConfig = captionConfig;
+      this.labelRevision += 1;
+    }
+    this.updateDetailVisibility();
     for (const node of this.host.data.nodes) {
       const parts = this.nodeParts.get(node);
       if (parts) this.styleNode(node, parts);
     }
 
+    let colorsChanged = false;
     for (const link of this.host.data.links) {
+      const before = this.linkColors.get(link);
+      this.linkColor(link);
+      if (before !== this.linkColors.get(link)) colorsChanged = true;
       const label = this.linkLabels.get(link);
-      if (label) label.material.opacity = this.linkOpacity(link);
+      if (label && this.linkColors.get(link) !== before) label.material.opacity = this.linkColors.get(link)?.opacity ?? 1;
     }
 
     // Colours are re-read when the accessors are set; that keeps the objects.
-    this.graph
-      .linkColor((link) => this.linkColor(link))
-      .linkDirectionalArrowColor((link) => this.linkColor(link));
+    if (colorsChanged) {
+      this.graph
+        .linkColor((link) => this.linkColor(link))
+        .linkDirectionalArrowColor((link) => this.linkColor(link));
+    }
     this.applyLinkSelection();
+    this.requestRender();
   }
 
   /** Recreate every object, for changes restyle() does not cover (sizes, shapes, captions' colours). */
   rebuild() {
+    this.labelRevision += 1;
     // Visibility may have changed in place, and the force caches the links it
     // was given, so hand it the live ones again; the wrapper drops hidden ones.
     const linkForce = this.graph.d3Force("link");
@@ -196,6 +331,7 @@ export class Graph3D {
 
   setSize(width: number, height: number) {
     this.graph.width(width).height(height);
+    this.requestRender();
   }
 
   /**
@@ -204,6 +340,8 @@ export class Graph3D {
    * per step down the hierarchy.
    */
   applyLayout(fit = false) {
+    this.labelRevision += 1;
+    this.engineRunning = true;
     const { layoutMode, simulation, animation, pinOnDragEnd } = this.host.config;
     this.layoutPending = true;
     if (fit) {
@@ -235,6 +373,8 @@ export class Graph3D {
 
   /** Show the host's data as it changed, keeping the nodes that stayed where they are. */
   updateData() {
+    this.labelRevision += 1;
+    this.engineRunning = true;
     const { nodes, links } = this.host.data;
     this.graph.graphData({ nodes, links });
     this.restyle();
@@ -295,16 +435,19 @@ export class Graph3D {
     if (enabled && !this.host.config.pinOnDragEnd && !this.holdsLayout) {
       this.graph.cooldownTicks(Infinity).d3ReheatSimulation();
       this.host.setEngineStatus(true);
+      this.engineRunning = true;
     } else if (!enabled) {
       this.graph.cooldownTicks(0);
       this.host.setEngineStatus(false);
     }
+    this.requestRender();
   }
 
   setPinned(pinned: boolean) {
     if (pinned) {
       this.graph.cooldownTicks(0);
       this.host.setEngineStatus(false);
+      this.requestRender();
       return;
     }
 
@@ -314,7 +457,9 @@ export class Graph3D {
     if (this.host.config.animation) {
       this.graph.cooldownTicks(Infinity).d3ReheatSimulation();
       this.host.setEngineStatus(true);
+      this.engineRunning = true;
     }
+    this.requestRender();
   }
 
   setupForces() {
@@ -389,6 +534,8 @@ export class Graph3D {
       { x: center.x, y: center.y, z: center.z },
       durationMs,
     );
+    this.updateDetailVisibility();
+    this.requestRender(durationMs);
   }
 
   getZoom(): number {
@@ -408,6 +555,8 @@ export class Graph3D {
       target,
       durationMs,
     );
+    this.updateDetailVisibility();
+    this.requestRender(durationMs);
   }
 
   /** Look at (x, y) on the current target's depth, keeping the camera's angle and distance. */
@@ -420,10 +569,27 @@ export class Graph3D {
       lookAt,
       durationMs,
     );
+    this.requestRender(durationMs);
   }
 
   destroy() {
+    this.destroyed = true;
+    clearTimeout(this.idleTimer);
+    this.cleanupInteraction?.();
+    const renderer = this.graph.renderer();
     this.graph._destructor();
+    this.sphereGeometry.dispose();
+    this.boxGeometry.dispose();
+    this.clearLabelTextures();
+    // dispose() frees renderer objects, but does not release the WebGL context.
+    // Repeated dimension switches otherwise wait for the browser to collect it.
+    renderer.forceContextLoss();
+  }
+
+  private clearLabelTextures() {
+    for (const texture of this.labelTextures.values()) texture.dispose();
+    this.labelTextures.clear();
+    this.cachedLabelPixels = 0;
   }
 
   private cameraTarget(): Vec3 {
@@ -460,6 +626,8 @@ export class Graph3D {
         this.host.log("3D engine stopped");
         this.layoutLanded();
         this.host.setEngineStatus(false);
+        this.engineRunning = false;
+        this.requestRender();
         handlers()?.onEngineStop?.();
       });
   }
@@ -490,8 +658,14 @@ export class Graph3D {
     this.linkSelection = selection;
 
     this.graph
-      .linkWidth((link) => (this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0))
-      .linkDirectionalArrowLength((link) => (link.arrowSize ?? ARROW_SIZE) * (this.isLinkSelected(link) ? SELECTED_LINK_WIDTH : 1));
+      .linkWidth((link) => (this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0));
+    this.updateArrows();
+  }
+
+  private updateArrows() {
+    this.graph.linkDirectionalArrowLength((link) => this.details.arrows
+      ? (link.arrowSize ?? ARROW_SIZE) * (this.isLinkSelected(link) ? SELECTED_LINK_WIDTH : 1)
+      : 0);
   }
 
   private isLinkSelected(link: GraphLink): boolean {
@@ -513,23 +687,28 @@ export class Graph3D {
   /** Line opacity is shared by all links, so a dimmed link is blended into the background instead. */
   private linkColor(link: GraphLink): string {
     const opacity = this.linkOpacity(link);
-    if (opacity === 1) return link.color;
-    return d3.interpolateRgb(this.host.config.backgroundColor, link.color)(opacity);
+    const background = this.host.config.backgroundColor;
+    const cached = this.linkColors.get(link);
+    if (cached?.color === link.color && cached.background === background && cached.opacity === opacity) return cached.output;
+    const output = opacity === 1 ? link.color : d3.interpolateRgb(background, link.color)(opacity);
+    this.linkColors.set(link, { color: link.color, background, opacity, output });
+    return output;
   }
 
   private createNodeObject(node: GraphNode): THREE.Object3D {
     const geometry = node.shape === "square"
-      ? new THREE.BoxGeometry(node.size * 2, node.size * 2, node.size * 2)
-      : new THREE.SphereGeometry(node.size, 24, 16);
+      ? this.boxGeometry
+      : this.sphereGeometry;
 
     const body = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial());
     const outline = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.BackSide }));
-    outline.scale.setScalar(SELECTED_OUTLINE_SCALE);
+    body.scale.setScalar(node.size);
+    outline.scale.setScalar(node.size * SELECTED_OUTLINE_SCALE);
 
     const group = new THREE.Group();
     group.add(body, outline);
 
-    const parts: NodeParts = { body, outline, label: null, labelText: "" };
+    const parts: NodeParts = { body, outline, label: null, labelText: "", labelRevision: -1, labelStyle: "" };
     this.nodeParts.set(node, parts);
     this.styleNode(node, parts);
 
@@ -541,33 +720,52 @@ export class Graph3D {
     const opacity = this.nodeOpacity(node);
     const { body, outline } = parts;
 
-    body.material.color.set(node.color);
-    body.material.opacity = opacity;
-    body.material.transparent = opacity < 1;
+    if (parts.color !== node.color) {
+      body.material.color.set(node.color);
+      parts.color = node.color;
+    }
 
     outline.visible = config.isNodeSelected?.(node) ?? false;
-    outline.material.color.set(node.borderColor ?? config.foregroundColor);
-    outline.material.opacity = opacity;
-    outline.material.transparent = opacity < 1;
+    const borderColor = node.borderColor ?? config.foregroundColor;
+    if (parts.borderColor !== borderColor) {
+      outline.material.color.set(borderColor);
+      parts.borderColor = borderColor;
+    }
+    if (parts.opacity !== opacity) {
+      body.material.opacity = outline.material.opacity = opacity;
+      body.material.transparent = outline.material.transparent = opacity < 1;
+      if (parts.label) parts.label.material.opacity = opacity;
+      parts.opacity = opacity;
+    }
 
+    if (parts.labelRevision === this.labelRevision) return;
+    parts.labelRevision = this.labelRevision;
     const text = this.host.data.nodes.length <= MAX_LABELED_ELEMENTS
       ? getNodeDisplayText(node, config.captionsKeys, config.showPropertyKeyPrefix)
       : "";
-    if (text !== parts.labelText) {
+    const labelStyle = JSON.stringify([node.size, config.nodeStyle.fontWeightUnselected, config.nodeStyle.fontFamily,
+      config.backgroundColor, config.interaction.contrastThreshold]);
+    if (text !== parts.labelText || labelStyle !== parts.labelStyle) {
       if (parts.label) {
         parts.label.removeFromParent();
-        disposeSprite(parts.label);
+        // Textures can be shared by other labels; only this sprite's material
+        // belongs to the outgoing caption.
+        const texture = parts.label.material.map;
+        if (texture && !this.cachedTextures.has(texture)) texture.dispose();
+        parts.label.material.dispose();
       }
-      parts.label = createTextSprite(text, {
+      parts.label = this.createTextSprite(text, {
         height: Math.max(node.size * 0.6, 3),
         font: `${config.nodeStyle.fontWeightUnselected} ${LABEL_TEXTURE_HEIGHT * 0.8}px ${config.nodeStyle.fontFamily}`,
         color: getContrastTextColor(config.backgroundColor, config.interaction.contrastThreshold),
       });
       parts.labelText = text;
+      parts.labelStyle = labelStyle;
       if (parts.label) {
         // Under the node: inside it, the caption would be hidden by the surface.
         parts.label.position.y = -(node.size * SELECTED_OUTLINE_SCALE + parts.label.scale.y / 2);
         body.parent?.add(parts.label);
+        parts.label.visible = this.details.nodes;
       }
     }
     if (parts.label) parts.label.material.opacity = opacity;
@@ -577,7 +775,7 @@ export class Graph3D {
     const { config } = this.host;
     if (this.host.data.links.length > MAX_LABELED_ELEMENTS) return new THREE.Object3D();
 
-    const sprite = createTextSprite(link.relationship, {
+    const sprite = this.createTextSprite(link.relationship, {
       height: (link.fontSize ?? LINK_FONT_SIZE) * 0.6,
       font: `${config.linkStyle.fontWeightUnselected} ${LABEL_TEXTURE_HEIGHT * 0.8}px ${config.linkStyle.fontFamily}`,
       color: getContrastTextColor(config.backgroundColor, config.interaction.contrastThreshold),
@@ -586,7 +784,64 @@ export class Graph3D {
     if (!sprite) return new THREE.Object3D();
 
     sprite.material.opacity = this.linkOpacity(link);
+    sprite.visible = this.details.links;
     this.linkLabels.set(link, sprite);
+    return sprite;
+  }
+
+  private createTextSprite(
+    text: string,
+    options: { height: number; font: string; color: string; background?: string },
+  ): THREE.Sprite | null {
+    if (!text) return null;
+
+    const key = JSON.stringify([text, options.font, options.color, options.background]);
+    let texture = this.labelTextures.get(key);
+    if (texture) {
+      this.labelTextures.delete(key);
+      this.labelTextures.set(key, texture);
+    }
+    if (!texture) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+
+      const padding = options.background ? LABEL_TEXTURE_HEIGHT * 0.2 : 0;
+      ctx.font = options.font;
+      canvas.width = Math.min(Math.max(Math.ceil(ctx.measureText(text).width + padding * 2), 1), MAX_LABEL_TEXTURE_WIDTH);
+      canvas.height = LABEL_TEXTURE_HEIGHT;
+
+      if (options.background) {
+        ctx.fillStyle = options.background;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.font = options.font;
+      ctx.fillStyle = options.color;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width - padding * 2);
+
+      texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      // Evict old captions so unique node names cannot starve recurring
+      // relationship labels. Live sprites retain their texture and Three.js
+      // re-uploads it if disposal invalidated a buffer they still need.
+      const pixels = canvas.width * canvas.height;
+      while (this.labelTextures.size >= MAX_CACHED_LABELS || this.cachedLabelPixels + pixels > MAX_CACHED_LABEL_PIXELS) {
+        const oldest = this.labelTextures.entries().next().value;
+        if (!oldest) break;
+        this.labelTextures.delete(oldest[0]);
+        this.cachedTextures.delete(oldest[1]);
+        this.cachedLabelPixels -= oldest[1].image.width * oldest[1].image.height;
+        oldest[1].dispose();
+      }
+      this.labelTextures.set(key, texture);
+      this.cachedTextures.add(texture);
+      this.cachedLabelPixels += pixels;
+    }
+
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+    sprite.scale.set((options.height * texture.image.width) / LABEL_TEXTURE_HEIGHT, options.height, 1);
     return sprite;
   }
 }
@@ -613,46 +868,4 @@ function unpin3D(node: Node3D) {
   delete node.fx;
   delete node.fy;
   delete node.fz;
-}
-
-/**
- * A camera-facing text label `height` world units tall, or null when there is
- * nothing to draw or no 2D context to draw it with (e.g. a headless browser).
- */
-function createTextSprite(
-  text: string,
-  options: { height: number; font: string; color: string; background?: string },
-): THREE.Sprite | null {
-  if (!text) return null;
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-
-  const padding = options.background ? LABEL_TEXTURE_HEIGHT * 0.2 : 0;
-  ctx.font = options.font;
-  canvas.width = Math.max(Math.ceil(ctx.measureText(text).width + padding * 2), 1);
-  canvas.height = LABEL_TEXTURE_HEIGHT;
-
-  // Resizing the canvas reset its state, the font included.
-  if (options.background) {
-    ctx.fillStyle = options.background;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-  ctx.font = options.font;
-  ctx.fillStyle = options.color;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  sprite.scale.set((options.height * canvas.width) / canvas.height, options.height, 1);
-  return sprite;
-}
-
-function disposeSprite(sprite: THREE.Sprite) {
-  sprite.material.map?.dispose();
-  sprite.material.dispose();
 }

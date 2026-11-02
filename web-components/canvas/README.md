@@ -297,7 +297,26 @@ Switching lays the graph out afresh in the new dimension and fits it to the view
 - Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Captions are left to the hover tooltip above 1,000 nodes or links.
 - A dragged node stays where it is dropped when `pinOnDragEnd` is on.
 - `getViewport()` returns `undefined` and `setViewport()` does nothing, since a 2D zoom and center do not describe a 3D camera. `getGraph()` returns `undefined`.
-- Custom `node` / `link` canvas renderers, `linkLineDash`, the expand glow and the `largeGraph` culling apply to 2D only.
+- Custom `node` / `link` canvas renderers, `linkLineDash`, the expand glow and viewport-bound culling apply to 2D only.
+- The existing `largeGraph` low-zoom settings also apply in 3D: labels and arrows hide at or below `lowZoomThreshold` and return when zooming in. `getZoom()` uses camera distance in 3D, not a 2D screen scale. Disable `largeGraph.enabled` or the individual `skip*AtLowZoom` settings to keep details visible. Hover tooltips remain available.
+
+Settled 3D scenes stop drawing after 150 ms without activity. Pointer input,
+camera controls, camera transitions, data/style updates and resizing wake the
+renderer; ongoing simulation, dragging and camera damping keep it awake.
+This is event-driven idle scheduling, not frame-time monitoring or a benchmark.
+Hover restyling reuses caption calculations, node material colors and blended
+link colors until their inputs change. Caption/style/data changes invalidate
+the corresponding caches.
+
+3D nodes share unit sphere/cube geometry, scaled per node. Spheres use 12 by 8
+segments rather than 24 by 16 to reduce vertex work. Identical captions share
+textures (but keep separate materials for independent opacity); the retained
+cache is bounded to 256 entries and 1,048,576 pixels, about 4 MiB before mipmaps.
+Caption textures are at most 2,048 pixels wide. Geometry, cached textures and
+the WebGL context are released when leaving 3D or disconnecting the element.
+Large scenes still require per-element objects and draw calls. Hosts should
+warn or limit graph sizes before calling `setDimension`, `setData` or
+`setGraphData`; browser CPU/RAM hints cannot reliably predict free GPU memory.
 
 ### Data Types
 

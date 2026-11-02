@@ -15,9 +15,25 @@ export class MockForceGraph3DInstance {
 
   public cameraPos: Vec3 = { x: 0, y: 0, z: 1000 };
 
-  public controlsState = { target: { x: 0, y: 0, z: 0 } };
+  private controlChanges = new Set<() => void>();
+
+  public controlsState = {
+    target: { x: 0, y: 0, z: 0 },
+    addEventListener: (_name: string, callback: () => void) => { this.controlChanges.add(callback); },
+    removeEventListener: (_name: string, callback: () => void) => { this.controlChanges.delete(callback); },
+  };
+
+  controlsChanged() {
+    for (const callback of this.controlChanges) callback();
+  }
 
   public destroyed = false;
+
+  public contextLost = false;
+
+  renderer() {
+    return { forceContextLoss: () => { this.contextLost = true; } };
+  }
 
   public linkForce = {
     distanceAccessor: undefined as unknown,

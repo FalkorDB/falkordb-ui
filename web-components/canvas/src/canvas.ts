@@ -1273,7 +1273,7 @@ class FalkorDBCanvas extends HTMLElement {
   }
 
   private triggerRender() {
-    // three.js redraws every frame; the objects only need to follow the config.
+    // Restyle also wakes an idle 3D renderer for the updated objects.
     if (this.graph3d) {
       this.graph3d.restyle();
       return;
