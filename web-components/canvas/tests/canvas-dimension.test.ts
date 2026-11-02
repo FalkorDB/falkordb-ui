@@ -12,7 +12,8 @@ import {
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
-import { BoxGeometry, Group, InstancedMesh, Matrix4, Object3D, Sprite, Vector3, type BufferGeometry, type Mesh, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { BoxGeometry, Group, InstancedMesh, LineBasicMaterial, Matrix4, MOUSE, Object3D, QuadraticBezierCurve3, Sprite, Vector3, type BufferGeometry, type Mesh, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { LinkShaft } from "../src/link-shaft";
 import "../src/canvas";
 import type { CanvasTestElement, GraphNode, GraphLink } from "./test-types";
 
@@ -62,6 +63,11 @@ function last3D(): MockForceGraph3DInstance {
   return forceGraph3DMockState.lastInstance!;
 }
 
+function linkLabelFactory() {
+  const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+  return (link: GraphLink) => factory(link).label as Sprite;
+}
+
 async function canvasIn3D(): Promise<CanvasTestElement> {
   const canvas = createCanvas();
   canvas.setData(DATA);
@@ -70,6 +76,13 @@ async function canvasIn3D(): Promise<CanvasTestElement> {
 }
 
 describe("dimension", () => {
+  it("keeps left-drag rotation and enables right-drag and native two-touch panning", async () => {
+    await canvasIn3D();
+    expect(last3D().controlsState).toMatchObject({
+      noPan: false, noRotate: false, noZoom: false,
+      mouseButtons: { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN },
+    });
+  });
   it("defaults to 2D without loading the 3D renderer", () => {
     const canvas = createCanvas();
     canvas.setData(DATA);
@@ -904,15 +917,15 @@ describe("3D scene objects", () => {
     const canvas = await canvasIn3D();
     canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
     const link = canvas.getGraphData().links[0];
-    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const factory = linkLabelFactory();
     const label = factory(link);
     const position = last3D().callback("linkPositionUpdate");
-    position(label, { start: { x: 9000, y: 0, z: 0 }, end: { x: 11000, y: 0, z: 0 } }, link);
+    position(label.parent, { start: { x: 9000, y: 0, z: 0 }, end: { x: 11000, y: 0, z: 0 } }, link);
     expect(label.visible).toBe(false);
     canvas.setConfig({ dimmed: true, isLinkDimmed: () => true, dimOpacity: 0.2 });
     expect(label.material.opacity).toBe(1);
 
-    position(label, { start: { x: -10000, y: 0, z: 0 }, end: { x: 10000, y: 0, z: 0 } }, link);
+    position(label.parent, { start: { x: -10000, y: 0, z: 0 }, end: { x: 10000, y: 0, z: 0 } }, link);
     expect(label.visible).toBe(true);
     expect(label.material.opacity).toBe(0.2);
     expect(last3D().data.links).toContain(link);
@@ -922,11 +935,11 @@ describe("3D scene objects", () => {
     const canvas = await canvasIn3D();
     canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
     const link = canvas.getGraphData().links[0];
-    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const factory = linkLabelFactory();
     const label = factory(link);
-    Object.assign(link, { __curve: { getPoint: () => ({ x: 10000, y: 0, z: 0 }) } });
+    Object.assign(link, { __curve: new QuadraticBezierCurve3(new Vector3(-100, 0, 0), new Vector3(20000, 0, 0), new Vector3(100, 0, 0)) });
 
-    last3D().callback("linkPositionUpdate")(label, {
+    last3D().callback("linkPositionUpdate")(label.parent, {
       start: { x: -100, y: 0, z: 0 }, end: { x: 100, y: 0, z: 0 },
     }, link);
     expect(label.visible).toBe(false);
@@ -963,7 +976,7 @@ describe("3D scene objects", () => {
     const canvas = await canvasIn3D();
     const { caption } = nodeObject(canvas, 1);
     const link = canvas.getGraphData().links[0];
-    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const factory = linkLabelFactory();
     const linkLabel = factory(link);
     const widths = last3D().callsTo("linkWidth").length;
 
@@ -1083,7 +1096,7 @@ describe("3D scene objects", () => {
 
   it("shares relationship textures and caps unusually long captions", async () => {
     const canvas = await canvasIn3D();
-    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const factory = linkLabelFactory();
     const link = canvas.getGraphData().links[0];
     const first = factory(link);
     const second = factory({ ...link, id: 20 });
@@ -1091,6 +1104,33 @@ describe("3D scene objects", () => {
     expect(first.material).not.toBe(second.material);
     const long = factory({ ...link, relationship: "x".repeat(10000) });
     expect(long.material.map!.image.width).toBe(2048);
+  });
+
+  it("shares shaft materials without leaking color changes across links", async () => {
+    const canvas = await canvasIn3D();
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+    const link = canvas.getGraphData().links[0];
+    const first = factory(link).children[0] as Mesh<BufferGeometry, LineBasicMaterial>;
+    const second = factory({ ...link, id: 20 }).children[0] as Mesh<BufferGeometry, LineBasicMaterial>;
+    expect(first.material).toBe(second.material);
+    link.color = "#ff0000";
+    canvas.setConfig({ dimmed: true, isLinkDimmed: () => false });
+    expect(first.material).not.toBe(second.material);
+    expect(first.material.color.getHex()).toBe(0xff0000);
+    expect(second.material.color.getHex()).not.toBe(0xff0000);
+    const disposed = vi.spyOn(first.material, "dispose");
+    await canvas.setDimension("2d");
+    expect(disposed).toHaveBeenCalled();
+  });
+
+  it("bounds retained shaft materials when link colors change", async () => {
+    const canvas = await canvasIn3D();
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+    const link = canvas.getGraphData().links[0];
+    const first = factory(link).children[0] as Mesh<BufferGeometry, LineBasicMaterial>;
+    const disposed = vi.spyOn(first.material, "dispose");
+    for (let id = 1; id <= 256; id++) factory({ ...link, id, color: `#${id.toString(16).padStart(6, "0")}` });
+    expect(disposed).toHaveBeenCalled();
   });
 
   it("keeps repeated relationship captions cached after many unique node captions", async () => {
@@ -1103,7 +1143,7 @@ describe("3D scene objects", () => {
     await canvas.setDimension("3d");
     for (let id = 0; id < 300; id++) nodeObject(canvas, id);
 
-    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const factory = linkLabelFactory();
     const link = canvas.getGraphData().links[0];
     const first = factory(link);
     const second = factory({ ...link, id: 20 });
@@ -1112,7 +1152,7 @@ describe("3D scene objects", () => {
 
   it("bounds retained caption pixels even when captions are wide", async () => {
     const canvas = await canvasIn3D();
-    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const factory = linkLabelFactory();
     const link = canvas.getGraphData().links[0];
     const first = factory({ ...link, relationship: "x".repeat(10000) });
     const disposed = vi.spyOn(first.material.map!, "dispose");
@@ -1138,7 +1178,7 @@ describe("3D scene objects", () => {
     const canvas = await canvasIn3D();
     canvas.setConfig({ dimmed: true, isLinkDimmed: () => true, dimOpacity: 0.3 });
 
-    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const factory = linkLabelFactory();
     const label = factory(canvas.getGraphData().links[0]);
 
     expect(label).toBeInstanceOf(Sprite);
@@ -1149,8 +1189,9 @@ describe("3D scene objects", () => {
     await canvasIn3D();
     const update = last3D().props.get("linkPositionUpdate") as (obj: Object3D, coords: object, link: object) => void;
     const label = new Object3D();
+    const shaft = new LinkShaft(label, 0, new LineBasicMaterial({ color: "#888888" }));
 
-    update(label, { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 20, z: 30 } }, {});
+    update(shaft, { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 20, z: 30 } }, { target: { size: 10 } });
 
     expect(label.position.toArray()).toEqual([5, 10, 15]);
   });

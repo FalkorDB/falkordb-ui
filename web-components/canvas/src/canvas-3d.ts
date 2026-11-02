@@ -19,6 +19,7 @@ import {
 } from "./canvas-utils.js";
 import { DEFAULT_LEVEL_DISTANCE, computeRadialPositions, computeTreePositions } from "./layouts.js";
 import { NodeInstances } from "./node-instances.js";
+import { LinkShaft } from "./link-shaft.js";
 import { ForceLayoutClient } from "./force-layout-client.js";
 import type { LayoutNode } from "./force-layout.js";
 
@@ -44,6 +45,7 @@ const LABEL_TEXTURE_HEIGHT = 64;
 const MAX_LABELED_ELEMENTS = 1000;
 
 const MAX_CACHED_LABELS = 256;
+const MAX_CACHED_SHAFT_MATERIALS = 256;
 const MAX_CACHED_LABEL_PIXELS = 1024 * 1024;
 const MAX_LABEL_TEXTURE_WIDTH = 2048;
 const IDLE_RENDER_DELAY = 150;
@@ -109,6 +111,10 @@ export class Graph3D {
   private nodeParts = new WeakMap<GraphNode, NodeParts>();
 
   private linkLabels = new WeakMap<GraphLink, THREE.Sprite>();
+
+  private linkShafts = new WeakMap<GraphLink, LinkShaft>();
+
+  private readonly shaftMaterials = new Map<string, THREE.LineBasicMaterial | THREE.MeshLambertMaterial>();
 
   private readonly sphereGeometry = new THREE.SphereGeometry(1, 12, 8);
 
@@ -331,16 +337,25 @@ export class Graph3D {
       // Setting either factory again recreates every object, so they are set
       // once here; restyle() updates the objects they build.
       .nodeThreeObject((node) => this.createNodeObject(node))
-      .linkThreeObjectExtend(true)
-      .linkThreeObject((link) => this.createLinkLabel(link))
+      .linkThreeObjectExtend(false)
+      .linkThreeObject((link) => {
+        const shaft = new LinkShaft(this.createLinkLabel(link),
+          this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0, this.shaftMaterial(link));
+        this.linkShafts.set(link, shaft);
+        return shaft;
+      })
       .linkPositionUpdate((obj, { start, end }, link) => {
         const curve = (link as GraphLink & { __curve?: THREE.Curve<THREE.Vector3> | null }).__curve;
         const mid = curve
           ? curve.getPoint(0.5)
           : { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 };
-        obj.position.set(mid.x, mid.y, mid.z);
+        const shaft = obj as LinkShaft;
+        shaft.label.position.set(mid.x, mid.y, mid.z);
+        shaft.update(new THREE.Vector3(start.x, start.y, start.z ?? 0), new THREE.Vector3(end.x, end.y, end.z ?? 0),
+          curve ?? null, typeof link.target === "number" ? 0 : link.target.size, this.arrowLength(link));
         const label = this.linkLabels.get(link);
         if (label) this.syncLinkLabel(link, label);
+        return true;
       })
       .enableNodeDrag(true)
       // Graphs with cycles are the norm: level them as well as possible
@@ -359,6 +374,11 @@ export class Graph3D {
       },
     );
     this.bindEventHandlers();
+    const controls = this.graph.controls() as TrackballControls;
+    controls.noPan = false;
+    controls.noRotate = false;
+    controls.noZoom = false;
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this.bindRenderActivity(container);
   }
 
@@ -448,6 +468,7 @@ export class Graph3D {
     for (const link of this.host.data.links) {
       const before = this.linkColors.get(link);
       this.linkColor(link);
+      this.linkShafts.get(link)?.setMaterial(this.shaftMaterial(link));
       if (before !== this.linkColors.get(link)) colorsChanged = true;
     }
 
@@ -765,6 +786,8 @@ export class Graph3D {
     this.graph._destructor();
     this.sphereGeometry.dispose();
     this.boxGeometry.dispose();
+    for (const material of this.shaftMaterials.values()) material.dispose();
+    this.shaftMaterials.clear();
     this.clearLabelTextures();
     // dispose() frees renderer objects, but does not release the WebGL context.
     // Repeated dimension switches otherwise wait for the browser to collect it.
@@ -870,9 +893,32 @@ export class Graph3D {
   }
 
   private updateArrows() {
-    this.graph.linkDirectionalArrowLength((link) => this.details.arrows
+    this.graph.linkDirectionalArrowLength((link) => this.arrowLength(link));
+  }
+
+  private shaftMaterial(link: GraphLink) {
+    const color = this.linkColor(link);
+    const selected = this.isLinkSelected(link);
+    const key = `${selected}:${color}`;
+    let material = this.shaftMaterials.get(key);
+    if (!material) {
+      material = selected
+        ? new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.9 })
+        : new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
+      if (this.shaftMaterials.size >= MAX_CACHED_SHAFT_MATERIALS) {
+        const [oldKey, oldMaterial] = this.shaftMaterials.entries().next().value!;
+        this.shaftMaterials.delete(oldKey);
+        oldMaterial.dispose();
+      }
+      this.shaftMaterials.set(key, material);
+    }
+    return material;
+  }
+
+  private arrowLength(link: GraphLink) {
+    return this.details.arrows
       ? (link.arrowSize ?? ARROW_SIZE) * (this.isLinkSelected(link) ? SELECTED_LINK_WIDTH : 1)
-      : 0);
+      : 0;
   }
 
   private isLinkSelected(link: GraphLink): boolean {
