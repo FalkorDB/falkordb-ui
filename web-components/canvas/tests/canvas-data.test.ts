@@ -43,6 +43,7 @@ describe("setData and getData", () => {
     { reversed: [false, true] },
     { reversed: [true, false] },
     { reversed: [true, true] },
+    { reversed: [false, false, true] },
     { reversed: [false, false, true, true] },
     { reversed: [false, true, false, true, false, true] },
   ])("separates parallel edges regardless of direction: $reversed", ({ reversed }) => {
