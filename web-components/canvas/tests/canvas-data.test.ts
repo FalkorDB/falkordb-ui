@@ -38,6 +38,48 @@ describe("setData and getData", () => {
     resetForceGraphMockState();
   });
 
+  it.each([
+    { reversed: [false, false] },
+    { reversed: [false, true] },
+    { reversed: [true, false] },
+    { reversed: [true, true] },
+    { reversed: [false, false, true] },
+    { reversed: [false, false, true, true] },
+    { reversed: [false, true, false, true, false, true] },
+  ])("separates parallel edges regardless of direction: $reversed", ({ reversed }) => {
+    const canvas = createCanvas();
+    const input = {
+      nodes: [
+        { id: 1, labels: ["A"], visible: true, color: "#f00", data: {} },
+        { id: 2, labels: ["A"], visible: true, color: "#f00", data: {} },
+      ],
+      links: reversed.map((reverse, id) => ({
+        id, relationship: "REL", source: reverse ? 2 : 1, target: reverse ? 1 : 2,
+        visible: true, color: "#888", data: {},
+      })),
+    };
+    canvas.setData(input);
+    const offsets = () => canvas.getGraphData().links.map(link =>
+      link.curve * (link.source.id < link.target.id ? 1 : -1));
+    expect(new Set(offsets()).size).toBe(reversed.length);
+    const before = offsets();
+    canvas.setGraphData(input);
+    expect(offsets()).toEqual(before);
+  });
+
+  it("keeps self-loop lanes distinct and honors parallel-edge curvature settings", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ linkStyle: { parallelEdgeCurveMultiplier: 0.7 } });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
+      links: [1, 2, 3].map(id => ({
+        id, relationship: "SELF", source: 1, target: 1, visible: true, color: "#888", data: {},
+      })),
+    });
+    expect(canvas.getGraphData().links.map(link => link.curve)).toEqual([-2.1, 2.1, -2.8].map(value =>
+      expect.closeTo(value, 8)));
+  });
+
   it("a full replacement drops per-node caches and pending glow repaints", () => {
     const canvas = createCanvas();
     canvas.setConfig({ width: 800, height: 600 });
