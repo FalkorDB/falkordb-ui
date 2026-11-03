@@ -188,7 +188,10 @@ export function dataToGraphData(
       ...link,
       source: sourceNode,
       target: targetNode,
-      curve: calculateLinkCurve(duplicateIndex, sourceNode.id === targetNode.id, curveMultiplier),
+      // Reversing endpoints reverses the curve's perpendicular. Keep each
+      // unordered pair's assigned lane distinct in both rendering dimensions.
+      curve: calculateLinkCurve(duplicateIndex, sourceNode.id === targetNode.id, curveMultiplier)
+        * (sourceNode.id > targetNode.id ? -1 : 1),
     };
   }).filter((link) => link !== undefined);
 
