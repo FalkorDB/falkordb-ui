@@ -493,15 +493,21 @@ export class Graph3D {
     this.requestRender();
   }
 
-  /** Recreate every object, for changes restyle() does not cover (sizes, shapes, captions' colours). */
-  rebuild() {
-    this.labelRevision += 1;
+  /** Refresh physics after callers mutate live graph structure or visibility. */
+  refresh() {
     // Visibility may have changed in place, and the force caches the links it
     // was given, so hand it the live ones again; the wrapper drops hidden ones.
     const linkForce = this.graph.d3Force("link");
     if (linkForce) wrapVisibleLinks(linkForce).links(this.host.data.links);
-    this.graph.refresh();
     if (this.workerActive && !this.startWorker(0)) this.applyLayout(false);
+    this.rebuild();
+  }
+
+  /** Recreate visual objects without restarting the current simulation. */
+  rebuild(fontsLoaded = false) {
+    if (fontsLoaded) this.clearLabelTextures();
+    this.labelRevision += 1;
+    this.graph.refresh();
     this.restyle();
   }
 
@@ -1138,6 +1144,8 @@ function place3D(node: Node3D, x: number, y: number, z: number) {
 
 /** Fix `node` where it is, in all three axes. */
 function pin3D(node: Node3D) {
+  node.x ??= 0;
+  node.y ??= 0;
   node.z ??= 0;
   node.fx = node.x;
   node.fy = node.y;

@@ -311,6 +311,9 @@ This is event-driven idle scheduling, not frame-time monitoring or a benchmark.
 Hover restyling reuses caption calculations, node material colors and blended
 link colors until their inputs change. Caption/style/data changes invalidate
 the corresponding caches.
+Background, caption-font and contrast changes rebuild visuals without restarting
+worker physics. Font-load events also discard cached fallback-font textures.
+Use `refresh()` after mutating live node sizes or link visibility to update forces.
 
 3D nodes share unit sphere/cube geometry, scaled per node. Spheres use 12 by 8
 segments rather than 24 by 16 to reduce vertex work. Identical captions share

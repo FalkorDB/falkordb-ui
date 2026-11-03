@@ -163,6 +163,31 @@ describe("3D worker integration", () => {
     canvas.remove();
   });
 
+  it.each([false, true])("keeps worker physics unchanged during visual rebuilds, settled: %s", async settled => {
+    const canvas = await canvas3D();
+    canvas.setAnimation(true);
+    const worker = LayoutWorkerMock.instances.at(-1)!;
+    worker.complete(settled);
+    const count = LayoutWorkerMock.instances.length;
+    const messages = worker.messages.length;
+    canvas.setBackgroundColor("#123456");
+    canvas.setConfig({ nodeStyle: { fontFamily: "Inter" } });
+    canvas.setConfig({ interaction: { contrastThreshold: 0.6 } });
+    expect(LayoutWorkerMock.instances).toHaveLength(count);
+    expect(worker.messages).toHaveLength(messages);
+    canvas.remove();
+  });
+
+  it("refreshes worker forces after live visibility changes", async () => {
+    const canvas = await canvas3D();
+    const worker = LayoutWorkerMock.instances.at(-1)!;
+    canvas.getGraphData().links[0].visible = false;
+    canvas.refresh();
+    expect(worker.terminated).toBe(true);
+    expect(LayoutWorkerMock.instances.at(-1)!.request.links).toEqual([]);
+    canvas.remove();
+  });
+
   it("retains warmup when configuration changes before its first reply", async () => {
     const canvas = await canvas3D();
     const first = LayoutWorkerMock.instances.at(-1)!;
@@ -191,12 +216,12 @@ describe("3D worker integration", () => {
       expect(node).not.toHaveProperty("fz");
     }
     nodes.forEach((node, index) => {
-      expect(node.fx).toBe(before[index].x);
-      expect(node.fy).toBe(before[index].y);
+      expect(node.fx).toBe(before[index].x ?? 0);
+      expect(node.fy).toBe(before[index].y ?? 0);
       expect((node as typeof node & { fz?: number }).fz).toBe(before[index].z ?? 0);
     });
     worker.complete();
-    expect(nodes.map(node => ({ x: node.x, y: node.y, z: (node as typeof node & { z?: number }).z }))).toEqual(before.map(node => ({ ...node, z: node.z ?? 0 })));
+    expect(nodes.map(node => ({ x: node.x, y: node.y, z: (node as typeof node & { z?: number }).z }))).toEqual(before.map(node => ({ x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0 })));
     canvas.setPinOnDragEnd(false);
     const resumed = LayoutWorkerMock.instances.at(-1)!;
     expect(resumed).not.toBe(worker);

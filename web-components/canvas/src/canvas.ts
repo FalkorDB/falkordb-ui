@@ -291,7 +291,7 @@ class FalkorDBCanvas extends HTMLElement {
       node.displayName = ["" , ""];
     }
     // 3D captions are textures drawn once, with whatever font was loaded then.
-    this.graph3d?.rebuild();
+    this.graph3d?.rebuild(true);
     this.triggerRender();
   };
 
@@ -984,7 +984,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     if (this.graph3d) {
       // Sizes and shapes are built into the 3D objects.
-      this.graph3d.rebuild();
+      this.graph3d.refresh();
       return;
     }
 

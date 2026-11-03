@@ -727,6 +727,20 @@ describe("3D scene objects", () => {
     return { body, outline, caption };
   }
 
+  it("invalidates caption textures when a font finishes loading", async () => {
+    const canvas = await canvasIn3D();
+    const link = canvas.getGraphData().links[0];
+    const original = linkLabelFactory()(link).material.map!;
+    const disposed = vi.spyOn(original, "dispose");
+    const listeners = vi.mocked(document.fonts.addEventListener).mock.calls;
+    const listener = listeners.filter(([event]) => event === "loadingdone").at(-1)?.[1];
+    expect(typeof listener).toBe("function");
+    if (typeof listener !== "function") throw new Error("Missing font-load callback");
+    listener.call(document.fonts, new Event("loadingdone"));
+    expect(disposed).toHaveBeenCalledOnce();
+    expect(linkLabelFactory()(link).material.map).not.toBe(original);
+  });
+
   it("draws a node in its colour, with its caption underneath", async () => {
     const canvas = await canvasIn3D();
     canvas.setConfig({ captionsKeys: ["name"] });
