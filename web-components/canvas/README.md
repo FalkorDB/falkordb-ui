@@ -339,7 +339,8 @@ with backpressure instead of accumulating queued updates. Idle rendering can
 pause while warmup computes. Animation/pinning controls still apply; dragging
 cancels worker updates until release, then resumes from the dragged positions.
 Enabling pinning cancels even an in-progress warmup and holds every node at its
-current position; disabling pinning releases those pins and resumes force layout.
+current position; disabling pinning releases those pins and resumes force layout
+when animation is enabled.
 Graph/data/layout changes and teardown cancel stale work. Tree, radial and 2D
 layouts stay on their existing paths.
 

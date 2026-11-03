@@ -83,6 +83,9 @@ describe("3D worker integration", () => {
     expect(graph.callsTo("cameraPosition")).toHaveLength(positionsBefore);
     worker.complete();
     expect(canvas.getGraphData().nodes[1]).toMatchObject({ x: 1, y: 2, z: 3 });
+    expect(canvas.getData().nodes[1]).not.toHaveProperty("z");
+    expect(canvas.getData().nodes[1]).not.toHaveProperty("vz");
+    expect(canvas.getData().nodes[1]).not.toHaveProperty("fz");
     expect(graph.callsTo("cameraPosition").length).toBeGreaterThan(positionsBefore);
     expect(worker.terminated).toBe(true);
     canvas.remove();
@@ -182,6 +185,11 @@ describe("3D worker integration", () => {
     const before = nodes.map(node => ({ x: node.x, y: node.y, z: (node as typeof node & { z?: number }).z }));
     canvas.setPinOnDragEnd(true);
     expect(worker.terminated).toBe(true);
+    for (const node of canvas.getData().nodes) {
+      expect(node).not.toHaveProperty("z");
+      expect(node).not.toHaveProperty("vz");
+      expect(node).not.toHaveProperty("fz");
+    }
     nodes.forEach((node, index) => {
       expect(node.fx).toBe(before[index].x);
       expect(node.fy).toBe(before[index].y);
