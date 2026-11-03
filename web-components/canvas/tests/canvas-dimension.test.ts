@@ -12,7 +12,8 @@ import {
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
-import { BoxGeometry, Group, Object3D, Sprite, type BufferGeometry, type Mesh, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { BoxGeometry, Group, InstancedMesh, LineBasicMaterial, Matrix4, MOUSE, Object3D, QuadraticBezierCurve3, Sprite, Vector3, type BufferGeometry, type Mesh, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { LinkShaft } from "../src/link-shaft";
 import "../src/canvas";
 import type { CanvasTestElement, GraphNode, GraphLink } from "./test-types";
 
@@ -62,6 +63,11 @@ function last3D(): MockForceGraph3DInstance {
   return forceGraph3DMockState.lastInstance!;
 }
 
+function linkLabelFactory() {
+  const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+  return (link: GraphLink) => factory(link).label as Sprite;
+}
+
 async function canvasIn3D(): Promise<CanvasTestElement> {
   const canvas = createCanvas();
   canvas.setData(DATA);
@@ -70,6 +76,13 @@ async function canvasIn3D(): Promise<CanvasTestElement> {
 }
 
 describe("dimension", () => {
+  it("keeps left-drag rotation and enables right-drag panning", async () => {
+    await canvasIn3D();
+    expect(last3D().controlsState).toMatchObject({
+      noPan: false, noRotate: false, noZoom: false,
+      mouseButtons: { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN },
+    });
+  });
   it("defaults to 2D without loading the 3D renderer", () => {
     const canvas = createCanvas();
     canvas.setData(DATA);
@@ -714,6 +727,20 @@ describe("3D scene objects", () => {
     return { body, outline, caption };
   }
 
+  it("invalidates caption textures when a font finishes loading", async () => {
+    const canvas = await canvasIn3D();
+    const link = canvas.getGraphData().links[0];
+    const original = linkLabelFactory()(link).material.map!;
+    const disposed = vi.spyOn(original, "dispose");
+    const listeners = vi.mocked(document.fonts.addEventListener).mock.calls;
+    const listener = listeners.filter(([event]) => event === "loadingdone").at(-1)?.[1];
+    expect(typeof listener).toBe("function");
+    if (typeof listener !== "function") throw new Error("Missing font-load callback");
+    listener.call(document.fonts, new Event("loadingdone"));
+    expect(disposed).toHaveBeenCalledOnce();
+    expect(linkLabelFactory()(link).material.map).not.toBe(original);
+  });
+
   it("draws a node in its colour, with its caption underneath", async () => {
     const canvas = await canvasIn3D();
     canvas.setConfig({ captionsKeys: ["name"] });
@@ -724,6 +751,277 @@ describe("3D scene objects", () => {
     expect(outline.visible).toBe(false);
     expect(caption).toBeInstanceOf(Sprite);
     expect(caption!.position.y).toBeLessThan(0);
+  });
+
+  it("instances large opaque graphs while keeping outlines, transparent nodes and picking objects", async () => {
+    const canvas = createCanvas();
+    canvas.setData({
+      nodes: Array.from({ length: 1001 }, (_, id) => ({
+        ...DATA.nodes[0], id, data: { name: `n${id}` },
+      })),
+      links: [],
+    });
+    await canvas.setDimension("3d");
+    const nodes = canvas.getGraphData().nodes;
+    nodes.forEach(node => Object.assign(node, { x: 0, y: 0, z: 0 }));
+    const first = nodeObject(canvas, 0);
+    const second = nodeObject(canvas, 1);
+    const third = nodeObject(canvas, 2);
+    last3D().callback("onEngineStop")();
+    const batches = () => last3D().scene().children.filter((object): object is InstancedMesh => object instanceof InstancedMesh);
+    expect(batches()).toHaveLength(1);
+    expect(batches()[0].count).toBe(3);
+    expect(first.body.visible).toBe(false);
+    expect(first.body.parent).not.toBeNull();
+
+    nodes[0].x = 40;
+    last3D().callback("onEngineTick")();
+    const matrix = new Matrix4();
+    batches()[0].getMatrixAt(0, matrix);
+    expect(new Vector3().setFromMatrixPosition(matrix).x).toBe(40);
+
+    canvas.setConfig({
+      isNodeSelected: node => node.id === 0,
+      dimmed: true, isNodeDimmed: node => node.id === 1, dimOpacity: 0.2,
+    });
+    expect(first.outline.visible).toBe(true);
+    expect(first.body.visible).toBe(true);
+    expect(second.body.visible).toBe(true);
+    expect(second.body.material.opacity).toBe(0.2);
+    expect(batches()[0].count).toBe(1);
+
+    canvas.setConfig({ largeGraph: { nodeInstancing: false } });
+    expect(batches()).toHaveLength(0);
+    expect(first.body.visible).toBe(true);
+    canvas.setConfig({ largeGraph: { nodeInstancing: true } });
+    expect(batches()).toHaveLength(1);
+    nodes[2].visible = false;
+    last3D().controlsChanged();
+    expect(batches()).toHaveLength(0);
+    nodes[2].visible = true;
+    last3D().controlsChanged();
+    expect(batches()).toHaveLength(1);
+    canvas.setConfig({ largeGraph: { enabled: false } });
+    expect(batches()).toHaveLength(0);
+    expect(first.body.visible).toBe(true);
+    expect(third.body.visible).toBe(true);
+  });
+
+  it("keeps small graphs on the original node renderer", async () => {
+    const canvas = await canvasIn3D();
+    const { body } = nodeObject(canvas, 1);
+    last3D().callback("onEngineStop")();
+    expect(body.visible).toBe(true);
+    expect(last3D().scene().children.some(object => object instanceof InstancedMesh)).toBe(false);
+  });
+
+  it("does not recompute captions or rewrite unchanged materials on selection restyling", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ captionsKeys: ["name"] });
+    const node = canvas.getGraphData().nodes[0];
+    const name = vi.fn(() => "n1");
+    Object.defineProperty(node.data, "name", { get: name, configurable: true });
+    const parts = nodeObject(canvas, 1);
+    const reads = name.mock.calls.length;
+    const bodyColor = vi.spyOn(parts.body.material.color, "set");
+    const borderColor = vi.spyOn(parts.outline.material.color, "set");
+    const colors = last3D().callsTo("linkColor").length;
+    const arrows = last3D().callsTo("linkDirectionalArrowColor").length;
+
+    canvas.setConfig({ isNodeSelected: item => item.id === 1 });
+    canvas.setConfig({ isNodeSelected: () => false });
+
+    expect(name).toHaveBeenCalledTimes(reads);
+    expect(bodyColor).not.toHaveBeenCalled();
+    expect(borderColor).not.toHaveBeenCalled();
+    expect(last3D().callsTo("linkColor")).toHaveLength(colors);
+    expect(last3D().callsTo("linkDirectionalArrowColor")).toHaveLength(arrows);
+    expect(parts.outline.visible).toBe(false);
+  });
+
+  it("defers offscreen captions and selection work until the camera reveals the node", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ captionsKeys: ["name"], largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 10000, y: 0, z: 0 });
+    const name = vi.fn(() => "offscreen");
+    Object.defineProperty(node.data, "name", { get: name, configurable: true });
+    const selected = vi.fn(() => true);
+    const { body, caption } = nodeObject(canvas, 1);
+    canvas.setConfig({ isNodeSelected: selected });
+
+    expect(caption).toBeUndefined();
+    expect(name).not.toHaveBeenCalled();
+    expect(selected).not.toHaveBeenCalledWith(node);
+    expect(canvas.getGraphData().nodes).toContain(node);
+    expect(last3D().data.nodes).toContain(node);
+
+    last3D().simulateDrag({ x: 10000, y: 0, z: 1000 }, { x: 10000, y: 0, z: 0 });
+    last3D().controlsChanged();
+
+    expect(body.parent!.children[2]).toBeInstanceOf(Sprite);
+    expect(name).toHaveBeenCalled();
+    expect(selected).toHaveBeenCalledWith(node);
+    expect((body.parent!.children[1] as Mesh).visible).toBe(true);
+  });
+
+  it("applies deferred dimming and caption changes when a node moves back onscreen", async () => {
+    const canvas = await canvasIn3D();
+    last3D().callback("onEngineTick")();
+    canvas.setConfig({ captionsKeys: ["name"], largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    const { body, caption } = nodeObject(canvas, 1);
+    Object.assign(node, { x: 10000, y: 0, z: 0 });
+    last3D().callback("onEngineTick")();
+    expect(caption!.visible).toBe(false);
+    const color = vi.spyOn(body.material.color, "set");
+    node.color = "#0000ff";
+    canvas.setConfig({
+      dimmed: true, isNodeDimmed: () => true, dimOpacity: 0.2,
+      captionsKeys: ["missing"],
+    });
+    expect(color).not.toHaveBeenCalled();
+    expect(body.parent!.children[2]).toBe(caption);
+
+    node.x = 0;
+    last3D().callback("onEngineTick")();
+
+    expect(color).toHaveBeenCalledWith("#0000ff");
+    expect(body.material.opacity).toBe(0.2);
+    expect(body.parent!.children[2]).not.toBe(caption);
+    expect(body.parent!.children[2].visible).toBe(true);
+  });
+
+  it("culls behind the camera and restores captions when culling is disabled", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    const { caption } = nodeObject(canvas, 1);
+    Object.assign(node, { x: 0, y: 0, z: 10000 });
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(false);
+
+    last3D().simulateDrag({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 10000 });
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(true);
+    last3D().simulateDrag({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 });
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(false);
+
+    canvas.setConfig({ largeGraph: { enabled: false } });
+    expect(caption!.visible).toBe(true);
+  });
+
+  it("keeps edge captions and honors world-space viewport padding", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 500, y: 0, z: 0 });
+    const { caption } = nodeObject(canvas, 1);
+    expect(caption).toBeInstanceOf(Sprite);
+
+    node.x = 10000;
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(false);
+    canvas.setConfig({ largeGraph: { viewportPadding: 10000 } });
+    expect(caption!.visible).toBe(true);
+  });
+
+  it("culls link captions at their actual midpoint, not at their endpoints", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const link = canvas.getGraphData().links[0];
+    const factory = linkLabelFactory();
+    const label = factory(link);
+    const position = last3D().callback("linkPositionUpdate");
+    position(label.parent, { start: { x: 9000, y: 0, z: 0 }, end: { x: 11000, y: 0, z: 0 } }, link);
+    expect(label.visible).toBe(false);
+    canvas.setConfig({ dimmed: true, isLinkDimmed: () => true, dimOpacity: 0.2 });
+    expect(label.material.opacity).toBe(1);
+
+    position(label.parent, { start: { x: -10000, y: 0, z: 0 }, end: { x: 10000, y: 0, z: 0 } }, link);
+    expect(label.visible).toBe(true);
+    expect(label.material.opacity).toBe(0.2);
+    expect(last3D().data.links).toContain(link);
+  });
+
+  it("uses the curved link midpoint for caption culling", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const link = canvas.getGraphData().links[0];
+    const factory = linkLabelFactory();
+    const label = factory(link);
+    Object.assign(link, { __curve: new QuadraticBezierCurve3(new Vector3(-100, 0, 0), new Vector3(20000, 0, 0), new Vector3(100, 0, 0)) });
+
+    last3D().callback("linkPositionUpdate")(label.parent, {
+      start: { x: -100, y: 0, z: 0 }, end: { x: 100, y: 0, z: 0 },
+    }, link);
+    expect(label.visible).toBe(false);
+    expect(label.position.x).toBe(10000);
+  });
+
+  it("reveals deferred captions when resizing widens the camera view", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 2000, y: 0, z: 0 });
+    const { body, caption } = nodeObject(canvas, 1);
+    expect(caption).toBeUndefined();
+
+    canvas.setWidth(10000);
+    expect(body.parent!.children[2]).toBeInstanceOf(Sprite);
+    expect(body.parent!.children[2].visible).toBe(true);
+  });
+
+  it("refreshes cached captions when data changes on an incremental update", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ captionsKeys: ["name"] });
+    const { body, caption: previous } = nodeObject(canvas, 1);
+    const group = body.parent!;
+
+    canvas.setGraphData({ ...DATA, nodes: DATA.nodes.map(node => ({ ...node, data: { name: "updated" } })) });
+
+    expect(group.children[2]).not.toBe(previous);
+    expect(group.children).not.toContain(previous);
+    expect(group.children[2]).toBeInstanceOf(Sprite);
+  });
+
+  it("reuses low-zoom detail settings in 3D without rebuilding link widths", async () => {
+    const canvas = await canvasIn3D();
+    const { caption } = nodeObject(canvas, 1);
+    const link = canvas.getGraphData().links[0];
+    const factory = linkLabelFactory();
+    const linkLabel = factory(link);
+    const widths = last3D().callsTo("linkWidth").length;
+
+    canvas.zoom(2);
+    expect(caption!.visible).toBe(true);
+    expect(linkLabel.visible).toBe(true);
+    expect(last3D().callback("linkDirectionalArrowLength")(link)).toBeGreaterThan(0);
+
+    canvas.zoom(0.5);
+    expect(caption!.visible).toBe(false);
+    expect(linkLabel.visible).toBe(false);
+    expect(last3D().callback("linkDirectionalArrowLength")(link)).toBe(0);
+    expect(last3D().callsTo("linkWidth")).toHaveLength(widths);
+
+    canvas.setConfig({ largeGraph: { skipLabelsAtLowZoom: false } });
+    expect(caption!.visible).toBe(true);
+    expect(linkLabel.visible).toBe(false);
+    canvas.setConfig({ largeGraph: { enabled: false } });
+    expect(linkLabel.visible).toBe(true);
+    expect(last3D().callback("linkDirectionalArrowLength")(link)).toBeGreaterThan(0);
+  });
+
+  it("updates detail visibility when the camera is moved by controls", async () => {
+    const canvas = await canvasIn3D();
+    const { caption } = nodeObject(canvas, 1);
+    last3D().simulateDrag({ x: 0, y: 0, z: 100 }, { x: 0, y: 0, z: 0 });
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(true);
+    last3D().simulateDrag({ x: 0, y: 0, z: 2000 }, { x: 0, y: 0, z: 0 });
+    last3D().controlsChanged();
+    expect(caption!.visible).toBe(false);
   });
 
   it("outlines selected nodes and fades dimmed ones, in place", async () => {
@@ -766,11 +1064,174 @@ describe("3D scene objects", () => {
     expect(nodeObject(canvas, 1).body.geometry).toBeInstanceOf(BoxGeometry);
   });
 
+  it("shares low-poly geometry across different node sizes without sharing materials", async () => {
+    const canvas = createCanvas();
+    canvas.setData({
+      nodes: [{ ...DATA.nodes[0], size: 10 }, { ...DATA.nodes[1], size: 30 }],
+      links: [],
+    });
+    await canvas.setDimension("3d");
+    const first = nodeObject(canvas, 1);
+    const second = nodeObject(canvas, 2);
+
+    expect(first.body.geometry).toBe(second.body.geometry);
+    expect(first.body.geometry).toBe(first.outline.geometry);
+    expect(first.body.geometry.getAttribute("position").count).toBe(117);
+    expect(first.body.scale.x).toBe(10);
+    expect(second.body.scale.x).toBe(30);
+    expect(first.outline.scale.x).toBe(12);
+    expect(first.body.material).not.toBe(second.body.material);
+  });
+
+  it("reuses identical caption textures but keeps opacity independent", async () => {
+    const canvas = createCanvas();
+    canvas.setData({
+      nodes: DATA.nodes.map(node => ({ ...node, data: { name: "shared" } })),
+      links: [],
+    });
+    canvas.setConfig({ captionsKeys: ["name"] });
+    await canvas.setDimension("3d");
+    const first = nodeObject(canvas, 1);
+    const second = nodeObject(canvas, 2);
+    const texture = first.caption!.material.map!;
+    const disposed = vi.spyOn(texture, "dispose");
+
+    expect(second.caption!.material.map).toBe(texture);
+    expect(second.caption!.material).not.toBe(first.caption!.material);
+    canvas.setConfig({ dimmed: true, isNodeDimmed: node => node.id === 1, dimOpacity: 0.2 });
+    expect(first.caption!.material.opacity).toBe(0.2);
+    expect(second.caption!.material.opacity).toBe(1);
+    canvas.setConfig({ captionsKeys: ["missing"] });
+    expect(disposed).not.toHaveBeenCalled();
+    await canvas.setDimension("2d");
+    expect(disposed).toHaveBeenCalled();
+    expect(last3D().contextLost).toBe(true);
+  });
+
+  it("shares relationship textures and caps unusually long captions", async () => {
+    const canvas = await canvasIn3D();
+    const factory = linkLabelFactory();
+    const link = canvas.getGraphData().links[0];
+    const first = factory(link);
+    const second = factory({ ...link, id: 20 });
+    expect(first.material.map).toBe(second.material.map);
+    expect(first.material).not.toBe(second.material);
+    const long = factory({ ...link, relationship: "x".repeat(10000) });
+    expect(long.material.map!.image.width).toBe(2048);
+  });
+
+  it("shares shaft materials without leaking color changes across links", async () => {
+    const canvas = await canvasIn3D();
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+    const link = canvas.getGraphData().links[0];
+    const first = factory(link).children[0] as Mesh<BufferGeometry, LineBasicMaterial>;
+    const second = factory({ ...link, id: 20 }).children[0] as Mesh<BufferGeometry, LineBasicMaterial>;
+    expect(first.material).toBe(second.material);
+    link.color = "#ff0000";
+    canvas.setConfig({ dimmed: true, isLinkDimmed: () => false });
+    expect(first.material).not.toBe(second.material);
+    expect(first.material.color.getHex()).toBe(0xff0000);
+    expect(second.material.color.getHex()).not.toBe(0xff0000);
+    const disposed = vi.spyOn(first.material, "dispose");
+    await canvas.setDimension("2d");
+    expect(disposed).toHaveBeenCalled();
+  });
+
+  it("bounds retained shaft materials when link colors change", async () => {
+    const canvas = await canvasIn3D();
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+    const link = canvas.getGraphData().links[0];
+    const first = factory({ ...link }).children[0] as Mesh<BufferGeometry, LineBasicMaterial>;
+    const disposed = vi.spyOn(first.material, "dispose");
+    for (let id = 1; id <= 256; id++) {
+      factory({ ...link, id, color: `#${id.toString(16).padStart(6, "0")}` });
+    }
+    canvas.setConfig({ isLinkSelected: () => false });
+    expect(disposed).toHaveBeenCalled();
+  });
+
+  it("keeps 257 active shaft materials stable through unchanged restyles", async () => {
+    const canvas = createCanvas();
+    canvas.setData({
+      nodes: DATA.nodes,
+      links: Array.from({ length: 257 }, (_, id) => ({ ...DATA.links[0], id, color: `#${id.toString(16).padStart(6, "0")}` })),
+    });
+    await canvas.setDimension("3d");
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+    const shafts = canvas.getGraphData().links.map(factory);
+    const materials = shafts.map(shaft => shaft.material);
+    const disposals = materials.map(material => vi.spyOn(material, "dispose"));
+    for (let i = 0; i < 3; i++) canvas.setConfig({ isLinkSelected: () => false });
+    expect(shafts.map(shaft => shaft.material)).toEqual(materials);
+    for (const disposal of disposals) expect(disposal).not.toHaveBeenCalled();
+  });
+
+  it("updates shaft geometry on selection and disposes replacements and removed links", async () => {
+    const canvas = await canvasIn3D();
+    const link = canvas.getGraphData().links[0];
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
+    const first = factory(link);
+    const original = first.children[0] as Mesh;
+    const disposed = vi.spyOn(original.geometry, "dispose");
+    canvas.setConfig({ isLinkSelected: () => true });
+    expect(first.children[0].type).toBe("Mesh");
+    expect(disposed).toHaveBeenCalledOnce();
+    canvas.setConfig({ isLinkSelected: () => false });
+    expect(first.children[0].type).toBe("Line");
+    const old = vi.spyOn((first.children[0] as Mesh).geometry, "dispose");
+    const replacement = factory(link);
+    expect(old).toHaveBeenCalledOnce();
+    const removed = vi.spyOn((replacement.children[0] as Mesh).geometry, "dispose");
+    canvas.setData({ nodes: DATA.nodes, links: [] });
+    expect(removed).toHaveBeenCalledOnce();
+  });
+
+  it("keeps repeated relationship captions cached after many unique node captions", async () => {
+    const canvas = createCanvas();
+    canvas.setData({
+      nodes: Array.from({ length: 300 }, (_, id) => ({ ...DATA.nodes[0], id, data: { name: `Node ${id}` } })),
+      links: DATA.links,
+    });
+    canvas.setConfig({ captionsKeys: ["name"] });
+    await canvas.setDimension("3d");
+    for (let id = 0; id < 300; id++) nodeObject(canvas, id);
+
+    const factory = linkLabelFactory();
+    const link = canvas.getGraphData().links[0];
+    const first = factory(link);
+    const second = factory({ ...link, id: 20 });
+    expect(first.material.map).toBe(second.material.map);
+  });
+
+  it("bounds retained caption pixels even when captions are wide", async () => {
+    const canvas = await canvasIn3D();
+    const factory = linkLabelFactory();
+    const link = canvas.getGraphData().links[0];
+    const first = factory({ ...link, relationship: "x".repeat(10000) });
+    const disposed = vi.spyOn(first.material.map!, "dispose");
+    for (let id = 1; id <= 8; id++) {
+      factory({ ...link, id, relationship: `${id}${"x".repeat(10000)}` });
+    }
+    // At 2048 * 64 pixels each, at most eight wide textures fit in the cache.
+    expect(disposed).toHaveBeenCalled();
+  });
+
+  it("disposes shared geometry and releases the WebGL context on unmount", async () => {
+    const canvas = await canvasIn3D();
+    const { body } = nodeObject(canvas, 1);
+    const disposed = vi.spyOn(body.geometry, "dispose");
+    const graph = last3D();
+    canvas.remove();
+    expect(disposed).toHaveBeenCalled();
+    expect(graph.destroyed).toBe(true);
+    expect(graph.contextLost).toBe(true);
+  });
+
   it("labels links with their relationship, faded when dimmed", async () => {
     const canvas = await canvasIn3D();
     canvas.setConfig({ dimmed: true, isLinkDimmed: () => true, dimOpacity: 0.3 });
 
-    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Sprite;
+    const factory = linkLabelFactory();
     const label = factory(canvas.getGraphData().links[0]);
 
     expect(label).toBeInstanceOf(Sprite);
@@ -781,8 +1242,9 @@ describe("3D scene objects", () => {
     await canvasIn3D();
     const update = last3D().props.get("linkPositionUpdate") as (obj: Object3D, coords: object, link: object) => void;
     const label = new Object3D();
+    const shaft = new LinkShaft(label, 0, new LineBasicMaterial({ color: "#888888" }));
 
-    update(label, { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 20, z: 30 } }, {});
+    update(shaft, { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 20, z: 30 } }, { target: { size: 10 } });
 
     expect(label.position.toArray()).toEqual([5, 10, 15]);
   });
@@ -794,6 +1256,112 @@ describe("3D scene objects", () => {
     canvas.refresh();
 
     expect(last3D().callsTo("refresh")).toHaveLength(refreshes + 1);
+  });
+});
+
+describe("3D idle rendering", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    vi.useRealTimers();
+  });
+
+  it("pauses settled scenes and wakes for style, resize and camera changes", async () => {
+    const canvas = await canvasIn3D();
+    vi.useFakeTimers();
+    const graph = last3D();
+    graph.callback("onEngineStop")();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(1);
+
+    canvas.setConfig({ isNodeSelected: () => true });
+    expect(graph.callsTo("resumeAnimation")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(2);
+
+    canvas.setWidth(700);
+    expect(graph.callsTo("resumeAnimation")).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(200);
+    canvas.zoom(2);
+    expect(graph.callsTo("resumeAnimation")).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(4);
+  });
+
+  it("does not pause simulation or a held pointer and wakes on subsequent pointer motion", async () => {
+    const canvas = await canvasIn3D();
+    vi.useFakeTimers();
+    const graph = last3D();
+    canvas.setAnimation(true);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(0);
+
+    graph.container.dispatchEvent(new Event("pointerdown"));
+    graph.callback("onEngineStop")();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(0);
+    window.dispatchEvent(new Event("pointerup"));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(1);
+
+    graph.container.dispatchEvent(new Event("pointermove"));
+    expect(graph.callsTo("resumeAnimation")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(2);
+    canvas.setAnimation(false);
+    canvas.setAnimation(true);
+    expect(graph.callsTo("resumeAnimation")).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(2);
+  });
+
+  it("waits for control damping to settle before sleeping", async () => {
+    await canvasIn3D();
+    vi.useFakeTimers();
+    const graph = last3D();
+    graph.callback("onEngineStop")();
+    for (let i = 0; i < 5; i++) {
+      await vi.advanceTimersByTimeAsync(100);
+      graph.controlsChanged();
+    }
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(1);
+  });
+
+  it("keeps a drag-reheated local simulation awake until its next engine stop", async () => {
+    await canvasIn3D();
+    vi.useFakeTimers();
+    const graph = last3D();
+    graph.callback("onEngineStop")();
+    await vi.advanceTimersByTimeAsync(200);
+    const pauses = graph.callsTo("pauseAnimation").length;
+    graph.container.dispatchEvent(new Event("pointerdown"));
+    graph.callback("onEngineTick")();
+    window.dispatchEvent(new Event("pointerup"));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(pauses);
+    graph.callback("onEngineStop")();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(pauses + 1);
+  });
+
+  it("removes activity listeners and cancels pending idle work on disconnect", async () => {
+    const canvas = await canvasIn3D();
+    vi.useFakeTimers();
+    const graph = last3D();
+    graph.callback("onEngineStop")();
+    canvas.remove();
+    const pauses = graph.callsTo("pauseAnimation").length;
+    const resumes = graph.callsTo("resumeAnimation").length;
+    graph.container.dispatchEvent(new Event("pointermove"));
+    graph.controlsChanged();
+    window.dispatchEvent(new Event("pointerup"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(graph.callsTo("pauseAnimation")).toHaveLength(pauses);
+    expect(graph.callsTo("resumeAnimation")).toHaveLength(resumes);
+    expect(graph.destroyed).toBe(true);
   });
 });
 

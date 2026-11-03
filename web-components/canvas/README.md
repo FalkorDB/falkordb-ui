@@ -141,7 +141,7 @@ function GraphVisualization() {
 | **zoom**(*zoomLevel*) | | Set zoom level. |
 | **zoomToFit**(*paddingMultiplier*, *filter*) | `1.0`, `undefined` | Auto-fit all visible nodes in view. Optional padding multiplier and node filter function. |
 | **getGraph**() | | Get the underlying force-graph instance for advanced control. |
-| **getCullingStats**() | | Get viewport culling statistics (bounds, visible vs total node/link counts). |
+| **getCullingStats**() | | Get 2D viewport culling statistics (bounds, visible vs total node/link counts); does not report the 3D camera frustum. |
 
 ### Configuration Options
 
@@ -209,6 +209,7 @@ Configuration is passed to `setConfig()` as a `ForceGraphConfig` object. It is o
 | `velocityDecay` | `0.4` | Velocity decay (damping) |
 | `alphaMin` | `0.05` | Alpha min (convergence threshold) |
 | `warmupTicks` | `300` | Warmup ticks for force simulation |
+| `workerLayout` | `true` | Run 3D force physics in a module worker at 1,000+ nodes; `false` keeps local physics. No effect on 2D, tree or radial layouts. |
 
 #### `interaction` — Interaction / UX Parameters
 
@@ -291,13 +292,94 @@ The 3D renderer and three.js are loaded the first time 3D is used, so pages that
 
 Switching lays the graph out afresh in the new dimension and fits it to the view. The data, selection, dimming, colors, captions and event handlers carry over. In 3D:
 
-- Drag to rotate, scroll to zoom, right-drag to pan. `zoom()` and `getZoom()` express the camera's distance as a zoom factor, so `zoom(getZoom() * 1.1)` zooms in as it does in 2D.
+- Over empty space, left-drag to rotate, right-drag to pan without changing the viewing angle, and scroll to zoom. On touchscreens, one finger rotates; moving two fingers together pans, and pinching zooms. Start camera gestures away from nodes: dragging a node still moves that node. `zoom()` and `getZoom()` express the camera's distance as a zoom factor, so `zoom(getZoom() * 1.1)` zooms in as it does in 2D.
+- Edge shafts stop at the back of their arrowheads rather than continuing through the tip, including selected, curved and self-loop edges. When low-zoom settings hide arrows, shafts extend to the target node instead. 2D uses the same visual rule with its notched arrowheads.
+- Selected shafts reuse their geometry while their path, width and clipping inputs are unchanged. Shaft materials are shared by color and selection; cache eviction above 256 entries affects unused materials only, so graphs with more active colors do not churn materials on hover.
 - `tree` and `radial` keep their 2D positions, so face-on they read exactly as in 2D with no node over another, and each level sits one level distance further back than the one above it, the root nearest. Seen side-on the levels step back like stairs: a tree's levels each line up as one point, and a radial ring as one line. Both are pinned, so they hold still; picking a layout turns the view face-on again.
 - Pausing the animation or pinning stops a `force` layout's simulation.
 - Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Captions are left to the hover tooltip above 1,000 nodes or links.
 - A dragged node stays where it is dropped when `pinOnDragEnd` is on.
 - `getViewport()` returns `undefined` and `setViewport()` does nothing, since a 2D zoom and center do not describe a 3D camera. `getGraph()` returns `undefined`.
-- Custom `node` / `link` canvas renderers, `linkLineDash`, the expand glow and the `largeGraph` culling apply to 2D only.
+- Custom `node` / `link` canvas renderers, `linkLineDash` and the expand glow apply to 2D only.
+- With `largeGraph.enabled`, 3D camera-frustum checks defer offscreen node styling and caption calculation, hide offscreen captions, and defer offscreen link-caption opacity updates. Camera movement, resize, simulation ticks and data/style changes refresh visibility; pending node changes are applied on re-entry. Bounds include caption extent and `viewportPadding` (world units) to avoid clipping edge labels. All nodes and links remain in the simulation. Native link styling, link-caption allocation and scene traversal are not culled by this optimization; Three.js handles mesh draw culling.
+- The existing `largeGraph` low-zoom settings also apply in 3D: labels and arrows hide at or below `lowZoomThreshold` and return when zooming in. `getZoom()` uses camera distance in 3D, not a 2D screen scale. Disable `largeGraph.enabled` or the individual `skip*AtLowZoom` settings to keep details visible. Hover tooltips remain available.
+
+Settled 3D scenes stop drawing after 150 ms without activity. Pointer input,
+camera controls, camera transitions, data/style updates and resizing wake the
+renderer; ongoing simulation, dragging and camera damping keep it awake.
+This is event-driven idle scheduling, not frame-time monitoring or a benchmark.
+Hover restyling reuses caption calculations, node material colors and blended
+link colors until their inputs change. Caption/style/data changes invalidate
+the corresponding caches.
+Background, caption-font and contrast changes rebuild visuals without restarting
+worker physics. Font-load events also discard cached fallback-font textures.
+Use `refresh()` after mutating live node sizes or link visibility to update forces.
+
+3D nodes share unit sphere/cube geometry, scaled per node. Spheres use 12 by 8
+segments rather than 24 by 16 to reduce vertex work. Identical captions share
+textures (but keep separate materials for independent opacity); the retained
+cache is bounded to 256 entries and 1,048,576 pixels, about 4 MiB before mipmaps.
+Caption textures are at most 2,048 pixels wide. Geometry, cached textures and
+the WebGL context are released when leaving 3D or disconnecting the element.
+
+For graphs with at least 1,000 nodes, opaque node bodies use GPU instancing by
+default: one draw call per shape, with per-instance position, scale and color.
+Offscreen bodies are excluded using camera-frustum bounds. Existing node objects
+remain as raycast/drag targets; captions keep their current renderer. Selected
+nodes retain individual bodies and outlines to preserve their contour/depth
+behavior. Transparent/dimmed bodies retain individual meshes so Three.js can
+sort them for blending. Disable this path with `largeGraph.nodeInstancing: false`
+(or `largeGraph.enabled: false`). This is node-body instancing, not link batching:
+links, arrowheads and captions still have per-element draw costs, and physics and
+interaction-object counts do not shrink.
+
+3D force layouts with at least 1,000 nodes run warmup and ongoing physics in a
+module Web Worker by default. This moves the existing 3D link, repulsion and
+center forces off the UI thread; it does not change the physics algorithm or
+reduce its total work. The renderer's local force ticks and warmup are disabled,
+and a single transferable position/velocity buffer is passed back and forth
+with backpressure instead of accumulating queued updates. Idle rendering can
+pause while warmup computes. Animation/pinning controls still apply; dragging
+cancels worker updates until release, then resumes from the dragged positions.
+Enabling pinning cancels even an in-progress warmup and holds every node at its
+current position; disabling pinning releases those pins and resumes force layout
+when animation is enabled.
+Graph/data/layout changes and teardown cancel stale work. Tree, radial and 2D
+layouts stay on their existing paths.
+
+Set `simulation.workerLayout: false` to use the original local force path.
+Browsers without Worker support also use that path; worker load/runtime failures
+log an error and disable the worker for the mounted 3D renderer before falling
+back to local physics. A consumer bundler must emit the module worker asset from
+`new Worker(new URL(..., import.meta.url), { type: 'module' })`; CSP must permit it.
+The worker receives only IDs, sizes, coordinates/pins and force parameters, not
+node properties or captions. It makes no network requests for graph data.
+
+In a production-bundled Chromium/SwiftShader check with 2,000 nodes already in 3D,
+settled coordinates matched the local force path exactly. A 10 ms main-thread
+heartbeat's largest gap was about 6.6 seconds with local warmup versus 237 ms with the worker; total
+settling time was about 7.2 seconds in both cases. This demonstrates improved
+responsiveness, not guaranteed faster settling or frame rates. Rendering, scene
+updates and picking still run on the main thread; 2D warmup is unchanged.
+
+In a local Chromium/SwiftShader A/B check with a fixed, opaque 5,000-node,
+4,999-link graph, instancing reduced total draw calls from 9,999 to 5,000.
+Two alternating runs measured median camera-culling plus synchronized rendering
+at 129-134 ms without instancing versus about 87 ms with it. Pixel readback
+matched and triangle counts were unchanged. At 2,000 nodes, timings were closer
+(35-36 ms versus 31-35 ms). These software-renderer results are not hardware-GPU
+FPS guarantees; edge-heavy or mostly transparent scenes benefit less. These are
+development checks, not benchmarks or frame-time monitoring run in the component.
+
+Shared geometry and instancing solve different problems. Geometry sharing reuses
+the sphere/cube vertex and index buffers; instancing additionally submits many
+copies in one draw. Canvas2D draws circle/rectangle paths rather than creating a
+Three.js mesh per node, so neither mechanism directly applies to the 2D renderer.
+Its existing text caches, viewport culling and idle redraw address its own costs.
+
+Large scenes still require per-element interaction objects. Hosts should
+warn or limit graph sizes before calling `setDimension`, `setData` or
+`setGraphData`; browser CPU/RAM hints cannot reliably predict free GPU memory.
 
 ### Data Types
 
@@ -538,6 +620,7 @@ canvas.setConfig({
     skipLabelsAtLowZoom: true,      // skip node labels at low zoom (default: true)
     skipArrowsAtLowZoom: true,      // skip link arrowheads at low zoom (default: true)
     skipLinkLabelsAtLowZoom: true,  // skip link relationship labels at low zoom (default: true)
+    nodeInstancing: true,          // batch opaque 3D node bodies at 1,000+ nodes (default: true)
   }
 });
 ```

@@ -402,6 +402,18 @@ The tag is also where the version comes from. Every `package.json` in the reposi
 
 Each package must list this repository's `release.yml` as a trusted publisher on npmjs.com.
 
+Published releases also call the organization's shared
+[release-notes polisher](./.github/workflows/release-notes.yml), which rewrites
+generated notes for users while preserving the original notes underneath.
+It pins the shared workflow to a reviewed commit; update that SHA deliberately
+when adopting changes to the polisher. Enable this
+repository's access to the organization `AZURE_OPENAI_API_KEY` secret and
+`AZURE_OPENAI_ENDPOINT` variable (optionally `AZURE_OPENAI_DEPLOYMENT`).
+The workflow can also be run manually with a release tag, an optional oldest
+tag for a range, and `dry_run` to preview without editing releases. Both
+`v<version>` and `canvas-v<version>` tags are supported; use ranges within one
+package's release series. Polishing does not publish an npm package.
+
 GitHub shows only one "Latest" release per repository, so it belongs to `@falkordb/ui`:
 
 - **`v<version>` releases:** tick "Set as the latest release".

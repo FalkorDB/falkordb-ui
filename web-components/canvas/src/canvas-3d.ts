@@ -1,5 +1,6 @@
 import ForceGraph3D, { type ForceGraph3DInstance } from "3d-force-graph";
 import * as THREE from "three";
+import type { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
 import * as d3 from "d3";
 import {
   GraphData,
@@ -17,6 +18,10 @@ import {
   wrapVisibleLinks,
 } from "./canvas-utils.js";
 import { DEFAULT_LEVEL_DISTANCE, computeRadialPositions, computeTreePositions } from "./layouts.js";
+import { NodeInstances } from "./node-instances.js";
+import { LinkShaft } from "./link-shaft.js";
+import { ForceLayoutClient } from "./force-layout-client.js";
+import type { LayoutNode } from "./force-layout.js";
 
 /** Selected nodes get an outline shell this much larger than the node. */
 const SELECTED_OUTLINE_SCALE = 1.2;
@@ -38,6 +43,13 @@ const LABEL_TEXTURE_HEIGHT = 64;
  * left to the hover tooltip to keep large graphs responsive.
  */
 const MAX_LABELED_ELEMENTS = 1000;
+
+const MAX_CACHED_LABELS = 256;
+const MAX_CACHED_SHAFT_MATERIALS = 256;
+const MAX_CACHED_LABEL_PIXELS = 1024 * 1024;
+const MAX_LABEL_TEXTURE_WIDTH = 2048;
+const IDLE_RENDER_DELAY = 150;
+const LARGE_GRAPH_NODE_THRESHOLD = 1000;
 
 /**
  * `getZoom()`/`zoom()` express camera distance as a zoom factor, so callers
@@ -70,6 +82,12 @@ type NodeParts = {
   outline: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   label: THREE.Sprite | null;
   labelText: string;
+  labelRevision: number;
+  labelStyle: string;
+  dirty: boolean;
+  color?: string;
+  borderColor?: string;
+  opacity?: number;
 };
 
 /** What the 3D renderer reads from the `<falkordb-canvas>` element that owns it. */
@@ -93,6 +111,187 @@ export class Graph3D {
   private nodeParts = new WeakMap<GraphNode, NodeParts>();
 
   private linkLabels = new WeakMap<GraphLink, THREE.Sprite>();
+
+  private readonly linkShafts = new Map<GraphLink, LinkShaft>();
+
+  private readonly shaftMaterials = new Map<string, THREE.LineBasicMaterial | THREE.MeshLambertMaterial>();
+
+  private readonly sphereGeometry = new THREE.SphereGeometry(1, 12, 8);
+
+  private readonly boxGeometry = new THREE.BoxGeometry(2, 2, 2);
+
+  private readonly labelTextures = new Map<string, THREE.CanvasTexture>();
+
+  private readonly cachedTextures = new WeakSet<THREE.Texture>();
+
+  private cachedLabelPixels = 0;
+
+  private labelRevision = 0;
+
+  private captionConfig = "";
+
+  private readonly linkColors = new WeakMap<GraphLink, { color: string; background: string; opacity: number; output: string }>();
+
+  private rendering = true;
+
+  private engineRunning = true;
+
+  private pointerDown = false;
+
+  private destroyed = false;
+
+  private renderUntil = 0;
+
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  private cleanupInteraction: (() => void) | undefined;
+
+  private details = { nodes: true, links: true, arrows: true };
+
+  private readonly frustum = new THREE.Frustum();
+
+  private readonly projection = new THREE.Matrix4();
+
+  private readonly bounds = new THREE.Sphere();
+
+  private instances: NodeInstances;
+
+  private layoutWorker: ForceLayoutClient;
+
+  private workerActive = false;
+
+  private workerWarming = false;
+
+  private workerFailed = false;
+
+  private dragging: GraphNode | undefined;
+
+  private workerNodes: Node3D[] = [];
+
+  private get shouldUseWorker() {
+    return !this.holdsLayout && this.host.config.simulation.workerLayout && !this.workerFailed &&
+      typeof Worker !== "undefined" && this.host.data.nodes.length >= LARGE_GRAPH_NODE_THRESHOLD;
+  }
+
+  private startWorker(warmupTicks: number) {
+    const { simulation, layoutOptions, animation, pinOnDragEnd } = this.host.config;
+    // A style/config refresh during warmup must not replace it with an unlaid graph.
+    const ticks = this.workerWarming ? Math.max(warmupTicks, simulation.warmupTicks) : warmupTicks;
+    if (!this.shouldUseWorker) {
+      this.stopWorker();
+      return false;
+    }
+    this.workerNodes = [...this.host.data.nodes];
+    const nodes: LayoutNode[] = this.workerNodes.map(node => ({
+      id: node.id, size: node.size,
+      x: node.x, y: node.y, z: node.z, vx: node.vx, vy: node.vy, vz: node.vz,
+      fx: node.fx, fy: node.fy, fz: node.fz,
+    }));
+    const links = this.host.data.links.filter(link => link.visible !== false).map(link => ({
+      source: typeof link.source === "number" ? link.source : link.source.id,
+      target: typeof link.target === "number" ? link.target : link.target.id,
+    }));
+    this.workerActive = true;
+    this.workerWarming = ticks > 0;
+    this.engineRunning = true;
+    this.layoutPending = true;
+    this.graph.warmupTicks(0).cooldownTicks(0);
+    this.host.setEngineStatus(true);
+    return this.layoutWorker.start({
+      nodes, links, warmupTicks: ticks,
+      chargeStrength: simulation.chargeStrength,
+      velocityDecay: simulation.velocityDecay,
+      alphaMin: simulation.alphaMin,
+      linkDistance: layoutOptions.force?.linkDistance ?? LINK_DISTANCE,
+      animate: !!animation && !pinOnDragEnd,
+    });
+  }
+
+  private stopWorker() {
+    this.layoutWorker.stop();
+    this.workerActive = false;
+    this.workerWarming = false;
+    this.workerNodes = [];
+  }
+
+  private applyWorkerPositions(positions: Float64Array, done: boolean) {
+    if (!this.workerActive || this.destroyed) return;
+    this.workerWarming = false;
+    this.workerNodes.forEach((node, index) => {
+      const offset = index * 6;
+      node.x = positions[offset];
+      node.y = positions[offset + 1];
+      node.z = positions[offset + 2];
+      node.vx = positions[offset + 3];
+      node.vy = positions[offset + 4];
+      node.vz = positions[offset + 5];
+    });
+    this.layoutLanded();
+    // cooldown=0 updates scene positions without executing any local force tick.
+    this.graph.d3ReheatSimulation();
+    this.updateViewport();
+    this.engineRunning = !done;
+    this.host.setEngineStatus(!done);
+    this.requestRender();
+    if (done) this.host.config.eventHandlers?.onEngineStop?.();
+  }
+
+  private updateFrustum() {
+    const camera = this.graph.camera();
+    camera.updateMatrixWorld();
+    this.projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.projection);
+  }
+
+  private inView(position: { x?: number; y?: number; z?: number }, radius: number) {
+    if (!this.host.config.largeGraph.enabled) return true;
+    this.bounds.center.set(position.x ?? 0, position.y ?? 0, position.z ?? 0);
+    this.bounds.radius = radius + Math.max(0, this.host.config.largeGraph.viewportPadding);
+    return this.frustum.intersectsSphere(this.bounds);
+  }
+
+  private syncNode(node: Node3D, parts: NodeParts) {
+    // Include the widest possible caption and square-node diagonal at the edge.
+    const height = Math.max(node.size * 0.6, 3);
+    const radius = node.size * SELECTED_OUTLINE_SCALE * Math.sqrt(3) +
+      height * (MAX_LABEL_TEXTURE_WIDTH / LABEL_TEXTURE_HEIGHT + 1);
+    const visible = node.visible !== false && this.inView(node, radius);
+    if (visible && parts.dirty) {
+      this.styleNode(node, parts);
+      parts.dirty = false;
+    }
+    if (parts.label) parts.label.visible = visible && this.details.nodes;
+  }
+
+  private syncLinkLabel(link: GraphLink, label: THREE.Sprite) {
+    const visible = link.visible !== false && this.inView(label.position, label.scale.length() / 2);
+    label.visible = visible && this.details.links;
+    if (label.visible) label.material.opacity = this.linkOpacity(link);
+  }
+
+  private updateViewport() {
+    this.updateFrustum();
+    for (const node of this.host.data.nodes) {
+      const parts = this.nodeParts.get(node);
+      if (parts) this.syncNode(node, parts);
+    }
+    for (const link of this.host.data.links) {
+      const label = this.linkLabels.get(link);
+      if (label) this.syncLinkLabel(link, label);
+    }
+    const { largeGraph } = this.host.config;
+    const items = [];
+    if (largeGraph.enabled && largeGraph.nodeInstancing && this.host.data.nodes.length >= LARGE_GRAPH_NODE_THRESHOLD) {
+      for (const node of this.host.data.nodes as Node3D[]) {
+        const parts = this.nodeParts.get(node);
+        // Keep selected bodies with their shells to preserve contour depth.
+        if (!parts || node.visible === false || parts.outline.visible || parts.body.material.opacity !== 1) continue;
+        if (!this.inView(node, node.size * Math.sqrt(3))) continue;
+        items.push({ body: parts.body, x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0, size: node.size });
+      }
+    }
+    this.instances.update(items);
+  }
 
   /** Selected link ids, as last applied — link widths only change with the selection. */
   private linkSelection = "";
@@ -138,14 +337,26 @@ export class Graph3D {
       // Setting either factory again recreates every object, so they are set
       // once here; restyle() updates the objects they build.
       .nodeThreeObject((node) => this.createNodeObject(node))
-      .linkThreeObjectExtend(true)
-      .linkThreeObject((link) => this.createLinkLabel(link))
+      .linkThreeObjectExtend(false)
+      .linkThreeObject((link) => {
+        this.linkShafts.get(link)?.dispose();
+        const shaft = new LinkShaft(this.createLinkLabel(link),
+          this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0, this.shaftMaterial(link));
+        this.linkShafts.set(link, shaft);
+        return shaft;
+      })
       .linkPositionUpdate((obj, { start, end }, link) => {
         const curve = (link as GraphLink & { __curve?: THREE.Curve<THREE.Vector3> | null }).__curve;
         const mid = curve
           ? curve.getPoint(0.5)
           : { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 };
-        obj.position.set(mid.x, mid.y, mid.z);
+        const shaft = obj as LinkShaft;
+        shaft.label.position.set(mid.x, mid.y, mid.z);
+        shaft.update(new THREE.Vector3(start.x, start.y, start.z ?? 0), new THREE.Vector3(end.x, end.y, end.z ?? 0),
+          curve ?? null, typeof link.target === "number" ? 0 : link.target.size, this.arrowLength(link));
+        const label = this.linkLabels.get(link);
+        if (label) this.syncLinkLabel(link, label);
+        return true;
       })
       .enableNodeDrag(true)
       // Graphs with cycles are the norm: level them as well as possible
@@ -153,7 +364,88 @@ export class Graph3D {
       .onDagError(() => {});
 
     this.applyLinkSelection(true);
+    this.instances = new NodeInstances(this.graph.scene());
+    this.layoutWorker = new ForceLayoutClient(
+      (positions, done) => this.applyWorkerPositions(positions, done),
+      error => {
+        console.error("[FalkorDBCanvas] 3D layout worker failed; using local physics", error);
+        this.workerFailed = true;
+        this.stopWorker();
+        if (!this.destroyed) this.applyLayout();
+      },
+    );
     this.bindEventHandlers();
+    const controls = this.graph.controls() as TrackballControls;
+    controls.noPan = false;
+    controls.noRotate = false;
+    controls.noZoom = false;
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this.bindRenderActivity(container);
+  }
+
+  private requestRender(durationMs = 0) {
+    if (this.destroyed) return;
+    this.renderUntil = Math.max(this.renderUntil, Date.now() + durationMs);
+    clearTimeout(this.idleTimer);
+    if (!this.rendering) {
+      this.rendering = true;
+      this.graph.resumeAnimation();
+    }
+    clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = undefined;
+      if ((this.engineRunning && !this.workerWarming) || this.pointerDown || this.destroyed) return;
+      if (Date.now() < this.renderUntil) {
+        this.requestRender();
+        return;
+      }
+      this.graph.pauseAnimation();
+      this.rendering = false;
+    }, IDLE_RENDER_DELAY);
+  }
+
+  private bindRenderActivity(container: HTMLElement) {
+    const controls = this.graph.controls() as TrackballControls;
+    const change = () => {
+      this.updateDetailVisibility();
+      this.requestRender();
+    };
+    const wake = () => this.requestRender();
+    const down = () => { this.pointerDown = true; this.requestRender(); };
+    const up = () => { this.pointerDown = false; this.requestRender(); };
+    const end = () => { if (this.pointerDown) up(); };
+    controls.addEventListener("change", change);
+    container.addEventListener("pointermove", wake, { passive: true });
+    container.addEventListener("pointerleave", wake, { passive: true });
+    container.addEventListener("pointerdown", down, { passive: true });
+    container.addEventListener("wheel", wake, { passive: true });
+    window.addEventListener("pointerup", end, { passive: true });
+    window.addEventListener("pointercancel", end, { passive: true });
+    window.addEventListener("blur", up);
+    this.cleanupInteraction = () => {
+      controls.removeEventListener("change", change);
+      container.removeEventListener("pointermove", wake);
+      container.removeEventListener("pointerleave", wake);
+      container.removeEventListener("pointerdown", down);
+      container.removeEventListener("wheel", wake);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      window.removeEventListener("blur", up);
+    };
+  }
+
+  private updateDetailVisibility() {
+    const { largeGraph } = this.host.config;
+    const lowZoom = largeGraph.enabled && this.getZoom() <= largeGraph.lowZoomThreshold;
+    const next = {
+      nodes: !(lowZoom && largeGraph.skipLabelsAtLowZoom),
+      links: !(lowZoom && largeGraph.skipLinkLabelsAtLowZoom),
+      arrows: !(lowZoom && largeGraph.skipArrowsAtLowZoom),
+    };
+    const previous = this.details;
+    this.details = next;
+    this.updateViewport();
+    if (previous.arrows !== next.arrows) this.updateArrows();
   }
 
   /**
@@ -161,29 +453,60 @@ export class Graph3D {
    * and dimming. Cheap enough to run on every hover.
    */
   restyle() {
+    const { config } = this.host;
+    const captionConfig = JSON.stringify([config.captionsKeys, config.showPropertyKeyPrefix]);
+    if (captionConfig !== this.captionConfig) {
+      this.captionConfig = captionConfig;
+      this.labelRevision += 1;
+    }
     for (const node of this.host.data.nodes) {
       const parts = this.nodeParts.get(node);
-      if (parts) this.styleNode(node, parts);
+      if (parts) parts.dirty = true;
     }
+    this.updateDetailVisibility();
 
+    const liveLinks = new Set(this.host.data.links.filter(link => link.visible));
+    for (const [link, shaft] of this.linkShafts) {
+      if (liveLinks.has(link)) continue;
+      shaft.dispose();
+      this.linkShafts.delete(link);
+    }
+    let colorsChanged = false;
     for (const link of this.host.data.links) {
-      const label = this.linkLabels.get(link);
-      if (label) label.material.opacity = this.linkOpacity(link);
+      const before = this.linkColors.get(link);
+      this.linkColor(link);
+      this.linkShafts.get(link)?.setStyle(
+        this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0,
+        this.shaftMaterial(link),
+      );
+      if (before !== this.linkColors.get(link)) colorsChanged = true;
     }
 
     // Colours are re-read when the accessors are set; that keeps the objects.
-    this.graph
-      .linkColor((link) => this.linkColor(link))
-      .linkDirectionalArrowColor((link) => this.linkColor(link));
+    if (colorsChanged) {
+      this.graph
+        .linkColor((link) => this.linkColor(link))
+        .linkDirectionalArrowColor((link) => this.linkColor(link));
+    }
     this.applyLinkSelection();
+    this.trimShaftMaterials();
+    this.requestRender();
   }
 
-  /** Recreate every object, for changes restyle() does not cover (sizes, shapes, captions' colours). */
-  rebuild() {
+  /** Refresh physics after callers mutate live graph structure or visibility. */
+  refresh() {
     // Visibility may have changed in place, and the force caches the links it
     // was given, so hand it the live ones again; the wrapper drops hidden ones.
     const linkForce = this.graph.d3Force("link");
     if (linkForce) wrapVisibleLinks(linkForce).links(this.host.data.links);
+    if (this.workerActive && !this.startWorker(0)) this.applyLayout(false);
+    this.rebuild();
+  }
+
+  /** Recreate visual objects without restarting the current simulation. */
+  rebuild(fontsLoaded = false) {
+    if (fontsLoaded) this.clearLabelTextures();
+    this.labelRevision += 1;
     this.graph.refresh();
     this.restyle();
   }
@@ -196,6 +519,14 @@ export class Graph3D {
 
   setSize(width: number, height: number) {
     this.graph.width(width).height(height);
+    // The library resizes on a debounce; culling needs the new projection now.
+    const camera = this.graph.camera();
+    if (camera instanceof THREE.PerspectiveCamera && width > 0 && height > 0) {
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+    this.updateViewport();
+    this.requestRender();
   }
 
   /**
@@ -204,6 +535,9 @@ export class Graph3D {
    * per step down the hierarchy.
    */
   applyLayout(fit = false) {
+    this.stopWorker();
+    this.labelRevision += 1;
+    this.engineRunning = true;
     const { layoutMode, simulation, animation, pinOnDragEnd } = this.host.config;
     this.layoutPending = true;
     if (fit) {
@@ -213,7 +547,7 @@ export class Graph3D {
     const placed = layoutMode === "tree" || layoutMode === "radial";
     const running = !!animation && !pinOnDragEnd && !placed;
 
-    this.setupForces();
+    this.setupForces(false);
     for (const node of this.host.data.nodes) unpin3D(node);
 
     if (layoutMode === "tree") this.placeTree();
@@ -222,9 +556,12 @@ export class Graph3D {
     // As in 2D: a force layout is settled up front, then either keeps running
     // with animation on or is held still. Tree and radial are placed, not
     // simulated, so there is nothing to warm up.
-    this.graph.warmupTicks(placed ? 0 : simulation.warmupTicks);
-    this.graph.cooldownTicks(running ? Infinity : 0);
-    this.host.setEngineStatus(running);
+    const worker = this.startWorker(simulation.warmupTicks);
+    if (!worker) {
+      this.graph.warmupTicks(placed ? 0 : simulation.warmupTicks);
+      this.graph.cooldownTicks(running ? Infinity : 0);
+      this.host.setEngineStatus(running);
+    }
 
     // Handing the data over again is what re-runs the warmup; a fresh wrapper
     // so it is never taken for the data already shown.
@@ -235,7 +572,14 @@ export class Graph3D {
 
   /** Show the host's data as it changed, keeping the nodes that stayed where they are. */
   updateData() {
+    this.labelRevision += 1;
+    this.engineRunning = true;
     const { nodes, links } = this.host.data;
+    if (!this.startWorker(this.host.config.simulation.warmupTicks)) {
+      const { simulation, animation, pinOnDragEnd } = this.host.config;
+      this.graph.warmupTicks(this.holdsLayout ? 0 : simulation.warmupTicks)
+        .cooldownTicks(animation && !pinOnDragEnd && !this.holdsLayout ? Infinity : 0);
+    }
     this.graph.graphData({ nodes, links });
     this.restyle();
   }
@@ -292,32 +636,58 @@ export class Graph3D {
   }
 
   setAnimation(enabled: boolean) {
+    if (this.workerActive) {
+      this.startWorker(this.layoutPending ? this.host.config.simulation.warmupTicks : 0);
+      this.requestRender();
+      return;
+    }
     if (enabled && !this.host.config.pinOnDragEnd && !this.holdsLayout) {
       this.graph.cooldownTicks(Infinity).d3ReheatSimulation();
       this.host.setEngineStatus(true);
+      this.engineRunning = true;
     } else if (!enabled) {
       this.graph.cooldownTicks(0);
       this.host.setEngineStatus(false);
     }
+    this.requestRender();
   }
 
   setPinned(pinned: boolean) {
     if (pinned) {
+      this.stopWorker();
+      this.dragging = undefined;
+      for (const node of this.host.data.nodes) pin3D(node);
+      this.layoutLanded();
       this.graph.cooldownTicks(0);
       this.host.setEngineStatus(false);
+      this.engineRunning = false;
+      this.requestRender();
+      return;
+    }
+    if (this.workerActive) {
+      for (const node of this.host.data.nodes) unpin3D(node);
+      this.startWorker(0);
+      this.requestRender();
       return;
     }
 
     // As in 2D, only a force layout comes loose and starts moving again.
     if (this.holdsLayout) return;
     for (const node of this.host.data.nodes) unpin3D(node);
+    if (this.shouldUseWorker) {
+      this.startWorker(0);
+      this.requestRender();
+      return;
+    }
     if (this.host.config.animation) {
       this.graph.cooldownTicks(Infinity).d3ReheatSimulation();
       this.host.setEngineStatus(true);
+      this.engineRunning = true;
     }
+    this.requestRender();
   }
 
-  setupForces() {
+  setupForces(restartWorker = true) {
     const { layoutOptions, simulation } = this.host.config;
     const linkDist = layoutOptions.force?.linkDistance ?? LINK_DISTANCE;
 
@@ -331,6 +701,7 @@ export class Graph3D {
     this.graph.d3Force("charge")?.strength?.(simulation.chargeStrength);
     this.graph.d3VelocityDecay(simulation.velocityDecay);
     this.graph.d3AlphaMin(simulation.alphaMin);
+    if (restartWorker && (this.workerActive || this.shouldUseWorker) && !this.startWorker(0)) this.applyLayout(false);
   }
 
   /**
@@ -389,6 +760,8 @@ export class Graph3D {
       { x: center.x, y: center.y, z: center.z },
       durationMs,
     );
+    this.updateDetailVisibility();
+    this.requestRender(durationMs);
   }
 
   getZoom(): number {
@@ -408,6 +781,8 @@ export class Graph3D {
       target,
       durationMs,
     );
+    this.updateDetailVisibility();
+    this.requestRender(durationMs);
   }
 
   /** Look at (x, y) on the current target's depth, keeping the camera's angle and distance. */
@@ -420,10 +795,34 @@ export class Graph3D {
       lookAt,
       durationMs,
     );
+    this.updateDetailVisibility();
+    this.requestRender(durationMs);
   }
 
   destroy() {
+    this.destroyed = true;
+    this.stopWorker();
+    clearTimeout(this.idleTimer);
+    this.cleanupInteraction?.();
+    const renderer = this.graph.renderer();
+    this.instances.dispose();
+    for (const shaft of this.linkShafts.values()) shaft.dispose();
+    this.linkShafts.clear();
     this.graph._destructor();
+    this.sphereGeometry.dispose();
+    this.boxGeometry.dispose();
+    for (const material of this.shaftMaterials.values()) material.dispose();
+    this.shaftMaterials.clear();
+    this.clearLabelTextures();
+    // dispose() frees renderer objects, but does not release the WebGL context.
+    // Repeated dimension switches otherwise wait for the browser to collect it.
+    renderer.forceContextLoss();
+  }
+
+  private clearLabelTextures() {
+    for (const texture of this.labelTextures.values()) texture.dispose();
+    this.labelTextures.clear();
+    this.cachedLabelPixels = 0;
   }
 
   private cameraTarget(): Vec3 {
@@ -449,17 +848,42 @@ export class Graph3D {
       .onLinkHover((link) => handlers()?.onLinkHover?.(link))
       .onBackgroundClick((event) => handlers()?.onBackgroundClick?.(event))
       .onBackgroundRightClick((event) => handlers()?.onBackgroundRightClick?.(event))
+      .onNodeDrag((node) => {
+        if (!this.workerActive) return;
+        this.dragging = node;
+        this.layoutWorker.stop();
+        this.engineRunning = false;
+        this.graph.cooldownTicks(0);
+        this.updateViewport();
+        this.requestRender();
+      })
       .onNodeDragEnd((node) => {
         // The library has released the drag's own pin by now.
         if (this.host.config.pinOnDragEnd) pin3D(node);
+        if (this.workerActive && this.dragging === node) {
+          this.dragging = undefined;
+          this.startWorker(0);
+        }
         handlers()?.onNodeDragEnd?.(node);
       })
       // The engine first ticks, or stops, right after a layout has been applied.
-      .onEngineTick(() => this.layoutLanded())
+      .onEngineTick(() => {
+        if (this.workerActive) return;
+        this.engineRunning = true;
+        this.layoutLanded();
+        this.updateViewport();
+      })
       .onEngineStop(() => {
+        if (this.workerActive) {
+          this.updateViewport();
+          return;
+        }
         this.host.log("3D engine stopped");
         this.layoutLanded();
+        this.updateDetailVisibility();
         this.host.setEngineStatus(false);
+        this.engineRunning = false;
+        this.requestRender();
         handlers()?.onEngineStop?.();
       });
   }
@@ -490,8 +914,42 @@ export class Graph3D {
     this.linkSelection = selection;
 
     this.graph
-      .linkWidth((link) => (this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0))
-      .linkDirectionalArrowLength((link) => (link.arrowSize ?? ARROW_SIZE) * (this.isLinkSelected(link) ? SELECTED_LINK_WIDTH : 1));
+      .linkWidth((link) => (this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0));
+    this.updateArrows();
+  }
+
+  private updateArrows() {
+    this.graph.linkDirectionalArrowLength((link) => this.arrowLength(link));
+  }
+
+  private shaftMaterial(link: GraphLink) {
+    const color = this.linkColor(link);
+    const selected = this.isLinkSelected(link);
+    const key = `${selected}:${color}`;
+    let material = this.shaftMaterials.get(key);
+    if (!material) {
+      material = selected
+        ? new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.9 })
+        : new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
+      this.shaftMaterials.set(key, material);
+    }
+    return material;
+  }
+
+  private trimShaftMaterials() {
+    const used = new Set([...this.linkShafts.values()].map(shaft => shaft.material));
+    for (const [key, material] of this.shaftMaterials) {
+      if (this.shaftMaterials.size <= MAX_CACHED_SHAFT_MATERIALS) break;
+      if (used.has(material)) continue;
+      this.shaftMaterials.delete(key);
+      material.dispose();
+    }
+  }
+
+  private arrowLength(link: GraphLink) {
+    return this.details.arrows
+      ? (link.arrowSize ?? ARROW_SIZE) * (this.isLinkSelected(link) ? SELECTED_LINK_WIDTH : 1)
+      : 0;
   }
 
   private isLinkSelected(link: GraphLink): boolean {
@@ -513,25 +971,31 @@ export class Graph3D {
   /** Line opacity is shared by all links, so a dimmed link is blended into the background instead. */
   private linkColor(link: GraphLink): string {
     const opacity = this.linkOpacity(link);
-    if (opacity === 1) return link.color;
-    return d3.interpolateRgb(this.host.config.backgroundColor, link.color)(opacity);
+    const background = this.host.config.backgroundColor;
+    const cached = this.linkColors.get(link);
+    if (cached?.color === link.color && cached.background === background && cached.opacity === opacity) return cached.output;
+    const output = opacity === 1 ? link.color : d3.interpolateRgb(background, link.color)(opacity);
+    this.linkColors.set(link, { color: link.color, background, opacity, output });
+    return output;
   }
 
   private createNodeObject(node: GraphNode): THREE.Object3D {
     const geometry = node.shape === "square"
-      ? new THREE.BoxGeometry(node.size * 2, node.size * 2, node.size * 2)
-      : new THREE.SphereGeometry(node.size, 24, 16);
+      ? this.boxGeometry
+      : this.sphereGeometry;
 
     const body = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial());
     const outline = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.BackSide }));
-    outline.scale.setScalar(SELECTED_OUTLINE_SCALE);
+    body.scale.setScalar(node.size);
+    outline.scale.setScalar(node.size * SELECTED_OUTLINE_SCALE);
 
     const group = new THREE.Group();
     group.add(body, outline);
 
-    const parts: NodeParts = { body, outline, label: null, labelText: "" };
+    const parts: NodeParts = { body, outline, label: null, labelText: "", labelRevision: -1, labelStyle: "", dirty: true };
     this.nodeParts.set(node, parts);
-    this.styleNode(node, parts);
+    this.updateFrustum();
+    this.syncNode(node, parts);
 
     return group;
   }
@@ -541,33 +1005,52 @@ export class Graph3D {
     const opacity = this.nodeOpacity(node);
     const { body, outline } = parts;
 
-    body.material.color.set(node.color);
-    body.material.opacity = opacity;
-    body.material.transparent = opacity < 1;
+    if (parts.color !== node.color) {
+      body.material.color.set(node.color);
+      parts.color = node.color;
+    }
 
     outline.visible = config.isNodeSelected?.(node) ?? false;
-    outline.material.color.set(node.borderColor ?? config.foregroundColor);
-    outline.material.opacity = opacity;
-    outline.material.transparent = opacity < 1;
+    const borderColor = node.borderColor ?? config.foregroundColor;
+    if (parts.borderColor !== borderColor) {
+      outline.material.color.set(borderColor);
+      parts.borderColor = borderColor;
+    }
+    if (parts.opacity !== opacity) {
+      body.material.opacity = outline.material.opacity = opacity;
+      body.material.transparent = outline.material.transparent = opacity < 1;
+      if (parts.label) parts.label.material.opacity = opacity;
+      parts.opacity = opacity;
+    }
 
+    if (parts.labelRevision === this.labelRevision) return;
+    parts.labelRevision = this.labelRevision;
     const text = this.host.data.nodes.length <= MAX_LABELED_ELEMENTS
       ? getNodeDisplayText(node, config.captionsKeys, config.showPropertyKeyPrefix)
       : "";
-    if (text !== parts.labelText) {
+    const labelStyle = JSON.stringify([node.size, config.nodeStyle.fontWeightUnselected, config.nodeStyle.fontFamily,
+      config.backgroundColor, config.interaction.contrastThreshold]);
+    if (text !== parts.labelText || labelStyle !== parts.labelStyle) {
       if (parts.label) {
         parts.label.removeFromParent();
-        disposeSprite(parts.label);
+        // Textures can be shared by other labels; only this sprite's material
+        // belongs to the outgoing caption.
+        const texture = parts.label.material.map;
+        if (texture && !this.cachedTextures.has(texture)) texture.dispose();
+        parts.label.material.dispose();
       }
-      parts.label = createTextSprite(text, {
+      parts.label = this.createTextSprite(text, {
         height: Math.max(node.size * 0.6, 3),
         font: `${config.nodeStyle.fontWeightUnselected} ${LABEL_TEXTURE_HEIGHT * 0.8}px ${config.nodeStyle.fontFamily}`,
         color: getContrastTextColor(config.backgroundColor, config.interaction.contrastThreshold),
       });
       parts.labelText = text;
+      parts.labelStyle = labelStyle;
       if (parts.label) {
         // Under the node: inside it, the caption would be hidden by the surface.
         parts.label.position.y = -(node.size * SELECTED_OUTLINE_SCALE + parts.label.scale.y / 2);
         body.parent?.add(parts.label);
+        parts.label.visible = this.details.nodes;
       }
     }
     if (parts.label) parts.label.material.opacity = opacity;
@@ -577,7 +1060,7 @@ export class Graph3D {
     const { config } = this.host;
     if (this.host.data.links.length > MAX_LABELED_ELEMENTS) return new THREE.Object3D();
 
-    const sprite = createTextSprite(link.relationship, {
+    const sprite = this.createTextSprite(link.relationship, {
       height: (link.fontSize ?? LINK_FONT_SIZE) * 0.6,
       font: `${config.linkStyle.fontWeightUnselected} ${LABEL_TEXTURE_HEIGHT * 0.8}px ${config.linkStyle.fontFamily}`,
       color: getContrastTextColor(config.backgroundColor, config.interaction.contrastThreshold),
@@ -586,7 +1069,64 @@ export class Graph3D {
     if (!sprite) return new THREE.Object3D();
 
     sprite.material.opacity = this.linkOpacity(link);
+    sprite.visible = this.details.links;
     this.linkLabels.set(link, sprite);
+    return sprite;
+  }
+
+  private createTextSprite(
+    text: string,
+    options: { height: number; font: string; color: string; background?: string },
+  ): THREE.Sprite | null {
+    if (!text) return null;
+
+    const key = JSON.stringify([text, options.font, options.color, options.background]);
+    let texture = this.labelTextures.get(key);
+    if (texture) {
+      this.labelTextures.delete(key);
+      this.labelTextures.set(key, texture);
+    }
+    if (!texture) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+
+      const padding = options.background ? LABEL_TEXTURE_HEIGHT * 0.2 : 0;
+      ctx.font = options.font;
+      canvas.width = Math.min(Math.max(Math.ceil(ctx.measureText(text).width + padding * 2), 1), MAX_LABEL_TEXTURE_WIDTH);
+      canvas.height = LABEL_TEXTURE_HEIGHT;
+
+      if (options.background) {
+        ctx.fillStyle = options.background;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.font = options.font;
+      ctx.fillStyle = options.color;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width - padding * 2);
+
+      texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      // Evict old captions so unique node names cannot starve recurring
+      // relationship labels. Live sprites retain their texture and Three.js
+      // re-uploads it if disposal invalidated a buffer they still need.
+      const pixels = canvas.width * canvas.height;
+      while (this.labelTextures.size >= MAX_CACHED_LABELS || this.cachedLabelPixels + pixels > MAX_CACHED_LABEL_PIXELS) {
+        const oldest = this.labelTextures.entries().next().value;
+        if (!oldest) break;
+        this.labelTextures.delete(oldest[0]);
+        this.cachedTextures.delete(oldest[1]);
+        this.cachedLabelPixels -= oldest[1].image.width * oldest[1].image.height;
+        oldest[1].dispose();
+      }
+      this.labelTextures.set(key, texture);
+      this.cachedTextures.add(texture);
+      this.cachedLabelPixels += pixels;
+    }
+
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+    sprite.scale.set((options.height * texture.image.width) / LABEL_TEXTURE_HEIGHT, options.height, 1);
     return sprite;
   }
 }
@@ -604,6 +1144,9 @@ function place3D(node: Node3D, x: number, y: number, z: number) {
 
 /** Fix `node` where it is, in all three axes. */
 function pin3D(node: Node3D) {
+  node.x ??= 0;
+  node.y ??= 0;
+  node.z ??= 0;
   node.fx = node.x;
   node.fy = node.y;
   node.fz = node.z;
@@ -613,46 +1156,4 @@ function unpin3D(node: Node3D) {
   delete node.fx;
   delete node.fy;
   delete node.fz;
-}
-
-/**
- * A camera-facing text label `height` world units tall, or null when there is
- * nothing to draw or no 2D context to draw it with (e.g. a headless browser).
- */
-function createTextSprite(
-  text: string,
-  options: { height: number; font: string; color: string; background?: string },
-): THREE.Sprite | null {
-  if (!text) return null;
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-
-  const padding = options.background ? LABEL_TEXTURE_HEIGHT * 0.2 : 0;
-  ctx.font = options.font;
-  canvas.width = Math.max(Math.ceil(ctx.measureText(text).width + padding * 2), 1);
-  canvas.height = LABEL_TEXTURE_HEIGHT;
-
-  // Resizing the canvas reset its state, the font included.
-  if (options.background) {
-    ctx.fillStyle = options.background;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-  ctx.font = options.font;
-  ctx.fillStyle = options.color;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  sprite.scale.set((options.height * canvas.width) / canvas.height, options.height, 1);
-  return sprite;
-}
-
-function disposeSprite(sprite: THREE.Sprite) {
-  sprite.material.map?.dispose();
-  sprite.material.dispose();
 }

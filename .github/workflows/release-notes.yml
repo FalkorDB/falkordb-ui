@@ -1,0 +1,38 @@
+name: Polish release notes
+
+permissions:
+  contents: read
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to rewrite (v0.3.0 or canvas-v0.3.4), or the newest one of a range"
+        required: true
+      from_tag:
+        description: "Oldest release tag of a range; leave empty for tag alone"
+        required: false
+        default: ""
+      dry_run:
+        description: "Print the new notes without updating the release"
+        type: boolean
+        default: false
+
+jobs:
+  polish:
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+    uses: FalkorDB/.github/.github/workflows/release-notes.yml@7d9aa6cc66efe49b6f946cd3f567a0187be61ae5
+    with:
+      product: FalkorDB UI and Canvas
+      product-description: independently released React UI components and a 2D/3D graph canvas for FalkorDB applications; the release tag identifies the package
+      tag: ${{ inputs.tag || github.event.release.tag_name }}
+      from-tag: ${{ inputs.from_tag }}
+      dry-run: ${{ inputs.dry_run || false }}
+    secrets:
+      AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}

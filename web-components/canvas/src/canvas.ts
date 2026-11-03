@@ -80,6 +80,7 @@ const DEFAULT_SIMULATION: Required<SimulationConfig> = {
   velocityDecay: 0.4,
   alphaMin: 0.05,
   warmupTicks: 300,
+  workerLayout: true,
   chargeDistanceMax: Infinity,
   disableCollisionAbove: 0,
 };
@@ -103,6 +104,7 @@ const DEFAULT_LARGE_GRAPH: Required<LargeGraphConfig> = {
   skipLabelsAtLowZoom: true,
   skipArrowsAtLowZoom: true,
   skipLinkLabelsAtLowZoom: true,
+  nodeInstancing: true,
 };
 
 /** A node as the 3D renderer leaves it: positioned, moving and pinned in depth too. */
@@ -289,7 +291,7 @@ class FalkorDBCanvas extends HTMLElement {
       node.displayName = ["" , ""];
     }
     // 3D captions are textures drawn once, with whatever font was loaded then.
-    this.graph3d?.rebuild();
+    this.graph3d?.rebuild(true);
     this.triggerRender();
   };
 
@@ -982,7 +984,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     if (this.graph3d) {
       // Sizes and shapes are built into the 3D objects.
-      this.graph3d.rebuild();
+      this.graph3d.refresh();
       return;
     }
 
@@ -1273,7 +1275,7 @@ class FalkorDBCanvas extends HTMLElement {
   }
 
   private triggerRender() {
-    // three.js redraws every frame; the objects only need to follow the config.
+    // Restyle also wakes an idle 3D renderer for the updated objects.
     if (this.graph3d) {
       this.graph3d.restyle();
       return;

@@ -486,6 +486,40 @@ describe("link rendering", () => {
     resetForceGraphMockState();
   });
 
+  it.each([
+    { curve: 0, loop: false, selected: false },
+    { curve: 0.5, loop: false, selected: false },
+    { curve: 0.5, loop: false, selected: true },
+    { curve: 0.5, loop: true, selected: false },
+    { curve: 0.5, loop: true, selected: true },
+  ])("ends the 2D stroke behind its arrow tip: %o", ({ curve, loop, selected }) => {
+    const canvas = createCanvas();
+    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 }, isLinkSelected: () => selected });
+    canvas.setData({
+      nodes: [
+        { id: 1, labels: ["A"], visible: true, color: "#f00", data: {} },
+        { id: 2, labels: ["A"], visible: true, color: "#f00", data: {} },
+      ],
+      links: [{ id: 1, relationship: "", source: 1, target: loop ? 1 : 2, visible: true, color: "#888", data: {} }],
+    });
+    const link = canvas.getGraphData().links[0];
+    Object.assign(link.source, { x: 0, y: 0 });
+    if (!loop) Object.assign(link.target, { x: 500, y: 0 });
+    link.curve = curve;
+    const ctx = createCtxSpy();
+    getLastInstance().callbacks.linkCanvasObject!(link, ctx, 2);
+    const stroke = loop ? ctx.bezierCurveTo.mock.calls[0] : ctx.quadraticCurveTo.mock.calls[0];
+    const [x, y] = stroke.slice(-2) as number[];
+    const [tipX, tipY] = ctx.moveTo.mock.calls.at(-1)! as number[];
+    const [backX, backY] = ctx.lineTo.mock.calls.at(-2)! as number[];
+    const dx = tipX - backX;
+    const dy = tipY - backY;
+    const back = Math.hypot(dx, dy);
+    const behind = ((tipX - x) * dx + (tipY - y) * dy) / back;
+    expect(behind).toBeGreaterThan(back * 0.8);
+    if (!curve) expect(behind).toBeCloseTo(back);
+  });
+
   it("draws a straight line for simple link", () => {
     const canvas = createCanvas();
     canvas.setConfig({ width: 800, height: 600 });

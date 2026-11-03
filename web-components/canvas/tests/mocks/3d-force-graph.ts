@@ -1,3 +1,5 @@
+import { PerspectiveCamera, Scene } from "three";
+
 type Vec3 = { x: number; y: number; z: number };
 
 type Callback = (...args: unknown[]) => unknown;
@@ -15,9 +17,29 @@ export class MockForceGraph3DInstance {
 
   public cameraPos: Vec3 = { x: 0, y: 0, z: 1000 };
 
-  public controlsState = { target: { x: 0, y: 0, z: 0 } };
+  private controlChanges = new Set<() => void>();
+
+  public controlsState = {
+    target: { x: 0, y: 0, z: 0 },
+    addEventListener: (_name: string, callback: () => void) => { this.controlChanges.add(callback); },
+    removeEventListener: (_name: string, callback: () => void) => { this.controlChanges.delete(callback); },
+  };
+
+  controlsChanged() {
+    for (const callback of this.controlChanges) callback();
+  }
 
   public destroyed = false;
+
+  public contextLost = false;
+
+  private readonly sceneObject = new Scene();
+
+  scene() { return this.sceneObject; }
+
+  renderer() {
+    return { forceContextLoss: () => { this.contextLost = true; } };
+  }
 
   public linkForce = {
     distanceAccessor: undefined as unknown,
@@ -96,16 +118,15 @@ export class MockForceGraph3DInstance {
   }
 
   /** The perspective camera: field of view, aspect, and the up vector dragging can roll. */
-  public cameraObject = {
-    fov: 40,
-    aspect: 1.5,
-    up: {
-      x: 0, y: 1, z: 0,
-      set(x: number, y: number, z: number) { Object.assign(this, { x, y, z }); return this; },
-    },
-  };
+  public cameraObject = new PerspectiveCamera(40, 1.5, 0.1, 100000);
 
   camera() {
+    this.cameraObject.position.copy(this.cameraPos);
+    const target = this.controlsState.target;
+    this.cameraObject.lookAt(target.x, target.y, target.z);
+    this.cameraObject.aspect = this.width() / this.height();
+    this.cameraObject.updateProjectionMatrix();
+    this.cameraObject.updateMatrixWorld();
     return this.cameraObject;
   }
 

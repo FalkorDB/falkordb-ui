@@ -74,6 +74,13 @@ export interface SimulationConfig {
   /** Number of warmup ticks for force simulation. Default: 300 */
   warmupTicks?: number;
   /**
+   * Run 3D force physics in a module worker at 1,000+ nodes. Tree/radial and
+   * 2D layouts are unchanged. Unsupported browsers use local physics; load or
+   * runtime errors log and fall back to local physics for the mounted renderer.
+   * Default: `true`.
+   */
+  workerLayout?: boolean;
+  /**
    * Maximum distance for charge force interaction. Nodes beyond this distance don't repel.
    * - `number`: fixed value (e.g. 1500)
    * - `"auto"`: automatically calculated based on node count (sqrt(nodeCount) * 30)
@@ -121,9 +128,17 @@ export interface InteractionConfig {
 export interface LargeGraphConfig {
   /**
    * Master switch. When `true` (default) viewport culling and low-zoom
-   * optimisations are active.
+   * optimisations are active. In 3D, offscreen node styling/caption work and
+   * caption visibility are culled without removing graph data or simulation.
    */
   enabled?: boolean;
+
+  /**
+   * Batch opaque 3D node bodies for graphs with at least 1,000 nodes.
+   * Captions, selected/transparent nodes and links retain their usual renderer.
+   * Has no effect in 2D. Default: `true`.
+   */
+  nodeInstancing?: boolean;
 
   /**
    * Extra padding added around the visible viewport (in world-space units) when

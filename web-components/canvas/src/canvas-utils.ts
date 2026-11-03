@@ -197,12 +197,12 @@ export function dataToGraphData(
 
 /**
  * Converts GraphData format to Data format
- * Removes runtime properties (x, y, layoutTargetX, layoutTargetY, vx, vy, fx, fy, displayName, curve)
+ * Removes runtime properties (x/y/z, layoutTargetX/Y, vx/vy/vz, fx/fy/fz, displayName, curve)
  * Preserves the expand boolean so the state survives round-trips through dataToGraphData.
  */
 export function graphDataToData(graphData: GraphData): Data {
-  const nodes: Node[] = graphData.nodes.map((node) => {
-    const { x, y, layoutTargetX, layoutTargetY, vx, vy, fx, fy, displayName, expand, ...rest } = node;
+  const nodes: Node[] = graphData.nodes.map((node: GraphNode & { z?: number; vz?: number; fz?: number }) => {
+    const { x, y, z, layoutTargetX, layoutTargetY, vx, vy, vz, fx, fy, fz, displayName, expand, ...rest } = node;
     return { ...rest, expand: expand[0] };
   });
 
