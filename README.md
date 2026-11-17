@@ -38,7 +38,7 @@ Import them once, at your app's entry point. No Tailwind setup is needed.
 import "@falkordb/ui/styles.css";
 ```
 
-Already on Tailwind v4? You can [build from the theme source](./docs/getting-started.md#option-2--tailwind-v4-source) instead.
+This file holds only the utility classes the components use. To write your own Tailwind classes, [build from the theme source](./docs/getting-started.md#option-2--tailwind-v4-source) with Tailwind v4 instead.
 
 ### 3. Use the components
 

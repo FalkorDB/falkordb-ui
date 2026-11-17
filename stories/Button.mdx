@@ -32,6 +32,8 @@ import { Button, buttonVariants } from "@falkordb/ui";
 An icon-only button needs an accessible name: set `aria-label`. Add a `tooltip` for sighted users too; the button brings its own `TooltipProvider`, so it works without any setup higher in the tree.
 
 ```tsx
+import { Download } from "lucide-react";
+
 <Button
 	variant="none"
 	size="none"
@@ -40,7 +42,7 @@ An icon-only button needs an accessible name: set `aria-label`. Add a `tooltip` 
 	tooltip="Export graph as CSV"
 >
 	<Download />
-</Button>
+</Button>;
 ```
 
 ### Render as another element

@@ -95,11 +95,12 @@ const RULES = `## Rules for using this package
 
 - Install with \`npm install @falkordb/ui\`. React 18.3+ or 19 is a peer dependency.
 - Import components, hooks and helpers from the package root, for example \`import { Button } from "@falkordb/ui"\`. Deep imports such as \`@falkordb/ui/dist/...\` are not supported.
-- Import the styles once, at the app's entry point: \`import "@falkordb/ui/styles.css";\`. No Tailwind setup is needed. A Tailwind v4 app can import \`@falkordb/ui/theme.css\` instead; see Getting started.
+- Import the styles once, at the app's entry point: \`import "@falkordb/ui/styles.css";\`. No Tailwind setup is needed. It holds only the utility classes the components use, so Tailwind classes you add yourself may not exist. To write your own Tailwind classes, set up Tailwind v4 and import \`@falkordb/ui/theme.css\` instead; see Getting started.
 - Build multi-part components from their exported parts, as each page's Usage section shows, for example \`Dialog\` with \`DialogTrigger\` and \`DialogContent\`.
 - Some components need one provider near the app root: \`TooltipProvider\` for \`Tooltip\`, and \`Toaster\` for \`toast()\`. Each component's page says so.
 - Style a component that renders a DOM element with \`className\`. It is merged with \`cn()\`, so your Tailwind classes override the defaults. Root and provider components such as \`Dialog\`, \`TooltipProvider\` and \`ThemeProvider\` render no element and take no \`className\`; style their parts instead. Rebrand with the theme's CSS custom properties instead of copying components.
-- Dark mode follows a \`dark\` class on an ancestor. \`ThemeProvider\` can manage it.
+- Dark mode follows a \`dark\` class on an ancestor. \`ThemeProvider\` can manage it; \`ThemeToggle\` and \`useTheme()\` must render inside it.
+- The package exports no icons. Examples use [lucide-react](https://lucide.dev); add it to your own dependencies (\`npm install lucide-react\`) rather than relying on the copy installed with this package.
 - Give icon-only buttons an \`aria-label\`; a tooltip does not name a button.
 - FalkorDB products draw no focus outline. This is deliberate, so do not add focus rings.`;
 
