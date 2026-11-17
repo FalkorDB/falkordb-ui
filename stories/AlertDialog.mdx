@@ -1,0 +1,73 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+
+import * as AlertDialogStories from "./AlertDialog.stories";
+
+<Meta of={AlertDialogStories} />
+
+# AlertDialog
+
+A modal that asks the user to confirm or cancel an action, usually a destructive one.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/alert-dialog.tsx) · [Radix Alert Dialog](https://www.radix-ui.com/primitives/docs/components/alert-dialog)
+
+<Canvas of={AlertDialogStories.Default} />
+
+## Import
+
+```tsx
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+	Button,
+} from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+<AlertDialog>
+	<AlertDialogTrigger asChild>
+		<Button variant="destructive">Delete graph</Button>
+	</AlertDialogTrigger>
+	<AlertDialogContent>
+		<AlertDialogHeader>
+			<AlertDialogTitle>Delete social-network?</AlertDialogTitle>
+			<AlertDialogDescription>This removes every node and edge. It cannot be undone.</AlertDialogDescription>
+		</AlertDialogHeader>
+		<AlertDialogFooter>
+			<AlertDialogCancel>Cancel</AlertDialogCancel>
+			<AlertDialogAction onClick={deleteGraph}>Delete</AlertDialogAction>
+		</AlertDialogFooter>
+	</AlertDialogContent>
+</AlertDialog>
+```
+
+## Parts
+
+| Part                                         | Description                                                                               |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `AlertDialog`                                | Root. Holds `open`, `onOpenChange` and `defaultOpen`.                                     |
+| `AlertDialogTrigger`                         | The element that opens it.                                                                |
+| `AlertDialogContent`                         | The window. Portalled, with a backdrop. Takes `overlayClassName`.                         |
+| `AlertDialogHeader`, `AlertDialogFooter`     | Layout rows for the text and the actions.                                                 |
+| `AlertDialogTitle`, `AlertDialogDescription` | What is being confirmed, and its consequences.                                            |
+| `AlertDialogAction`                          | Confirms and closes. Styled as the default [Button](?path=/docs/primitives-button--docs). |
+| `AlertDialogCancel`                          | Cancels and closes. Styled as the `cancel` Button.                                        |
+| `AlertDialogOverlay`, `AlertDialogPortal`    | Lower-level pieces, for building custom content.                                          |
+
+Each part accepts the props of the matching [Radix Alert Dialog](https://www.radix-ui.com/primitives/docs/components/alert-dialog#api-reference) part.
+
+## Accessibility
+
+Unlike [Dialog](?path=/docs/primitives-dialog--docs), clicking the backdrop does not close it: the user has to choose. Escape cancels. Focus starts on Cancel, so pressing Enter by accident is harmless.
+
+## Related
+
+[Dialog](?path=/docs/primitives-dialog--docs) for tasks · [Toast](?path=/docs/primitives-toast--docs) to report the result.

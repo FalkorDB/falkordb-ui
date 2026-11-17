@@ -1,0 +1,39 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+
+import * as ControlsStories from "./Controls.stories";
+
+<Meta title="Primitives/Progress" />
+
+# Progress
+
+A horizontal bar showing how far a task has got.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/progress.tsx) · [Radix Progress](https://www.radix-ui.com/primitives/docs/components/progress)
+
+<Canvas of={ControlsStories.ProgressBar} />
+
+## Import
+
+```tsx
+import { Progress } from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+<Progress value={uploaded} aria-label="Upload progress" />
+```
+
+`value` is a percentage from 0 to 100. The bar always fills on that scale, so leave `max` at its default of 100.
+
+## Props
+
+Accepts the props of [Radix Progress](https://www.radix-ui.com/primitives/docs/components/progress#api-reference) (`value`, `getValueLabel`, …), plus:
+
+| Prop                 | Type     | Description                                                 |
+| -------------------- | -------- | ----------------------------------------------------------- |
+| `indicatorClassName` | `string` | Classes for the filled bar, which `className` cannot reach. |
+
+## Related
+
+[Skeleton](?path=/docs/primitives-skeleton--docs) for loading without a known amount · [Slider](?path=/docs/primitives-slider--docs) for an editable value.

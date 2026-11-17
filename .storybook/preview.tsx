@@ -3,17 +3,33 @@ import type { Decorator, Preview } from "@storybook/react";
 
 import "./storybook.css";
 
-function ThemeFrame({ theme, children }: { theme: "light" | "dark"; children: ReactNode }) {
+function ThemeFrame({
+	theme,
+	fullHeight,
+	children,
+}: {
+	theme: "light" | "dark";
+	fullHeight: boolean;
+	children: ReactNode;
+}) {
 	useEffect(() => {
 		document.documentElement.classList.toggle("dark", theme === "dark");
 		document.documentElement.style.colorScheme = theme;
 	}, [theme]);
 
-	return <div className="min-h-svh bg-background p-8 font-sans text-foreground">{children}</div>;
+	return (
+		<div className={`${fullHeight ? "min-h-svh " : ""}bg-background p-8 font-sans text-foreground`}>
+			{children}
+		</div>
+	);
 }
 
 const withTheme: Decorator = (Story, context) => (
-	<ThemeFrame theme={context.globals.theme === "dark" ? "dark" : "light"}>
+	// Docs pages render stories inline, where a full-viewport frame leaves a tall blank canvas.
+	<ThemeFrame
+		theme={context.globals.theme === "dark" ? "dark" : "light"}
+		fullHeight={context.viewMode !== "docs"}
+	>
 		<Story />
 	</ThemeFrame>
 );

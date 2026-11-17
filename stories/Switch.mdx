@@ -1,0 +1,40 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+
+import * as SwitchStories from "./Switch.stories";
+
+<Meta of={SwitchStories} />
+
+# Switch
+
+An on/off toggle for a setting that applies immediately.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/switch.tsx) · [Radix Switch](https://www.radix-ui.com/primitives/docs/components/switch)
+
+<Canvas of={SwitchStories.Default} />
+
+## Import
+
+```tsx
+import { Label, Switch } from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+<div className="flex items-center gap-2">
+	<Switch id="3d" checked={is3d} onCheckedChange={setIs3d} />
+	<Label htmlFor="3d">3D view</Label>
+</div>
+```
+
+## Props
+
+Accepts the props of [Radix Switch](https://www.radix-ui.com/primitives/docs/components/switch#api-reference) (`checked`, `defaultChecked`, `onCheckedChange`, `disabled`, `name`, …), plus:
+
+| Prop             | Type     | Description                    |
+| ---------------- | -------- | ------------------------------ |
+| `thumbClassName` | `string` | Classes for the sliding thumb. |
+
+## Related
+
+[Checkbox](?path=/docs/primitives-checkbox--docs) · [Label](?path=/docs/primitives-label--docs)

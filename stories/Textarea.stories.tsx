@@ -5,7 +5,6 @@ import { Textarea } from "@/components/textarea";
 const meta = {
 	title: "Primitives/Textarea",
 	component: Textarea,
-	tags: ["autodocs"],
 	args: { placeholder: "MATCH (n) RETURN n LIMIT 25" },
 	decorators: [
 		(Story) => (

@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const meta = {
 	title: "Primitives/Tooltip",
 	component: Tooltip,
-	tags: ["autodocs"],
 	decorators: [
 		(Story) => (
 			<TooltipProvider>

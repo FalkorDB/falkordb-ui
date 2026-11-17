@@ -30,7 +30,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
 
 const meta = {
 	title: "Primitives/Overlays",
-	tags: ["autodocs"],
 } satisfies Meta;
 
 export default meta;

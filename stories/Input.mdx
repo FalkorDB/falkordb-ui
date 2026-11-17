@@ -1,0 +1,41 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+
+import * as InputStories from "./Input.stories";
+
+<Meta of={InputStories} />
+
+# Input
+
+A single-line text field.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/input.tsx)
+
+<Canvas of={InputStories.Default} />
+
+## Import
+
+```tsx
+import { Input, Label } from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+<Label htmlFor="host">Host</Label>
+<Input id="host" placeholder="localhost" value={host} onChange={(event) => setHost(event.target.value)} />
+```
+
+## Props
+
+Accepts every `<input>` attribute. There are no extra props.
+
+## States
+
+- **Invalid:** set `aria-invalid` and the border turns destructive.
+- **Disabled:** `disabled` dims the field and shows a not-allowed cursor.
+
+For a labelled field with validation and error messages, use [Form](?path=/docs/primitives-form--docs), which also adds a show/hide toggle to password fields.
+
+## Related
+
+[Textarea](?path=/docs/primitives-textarea--docs) · [Label](?path=/docs/primitives-label--docs) · [Form](?path=/docs/primitives-form--docs)

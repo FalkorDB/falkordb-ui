@@ -1,0 +1,180 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+
+import * as FormStories from "./Form.stories";
+
+<Meta of={FormStories} />
+
+# Form
+
+A labelled, validated stack of fields with a submit button, built from a list of field configs. Its parts can also be used on their own to build a custom layout.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/form.tsx)
+
+<Canvas of={FormStories.Default} />
+
+## Import
+
+```tsx
+import { Form, type FieldConfig } from "@falkordb/ui";
+```
+
+## Usage
+
+Fields stay controlled by you: pass each `value` and update it in `onChange`.
+
+```tsx
+const fields: FieldConfig[] = [
+	{
+		name: "host",
+		label: "Host",
+		value: host,
+		onChange: setHost,
+		required: true,
+		errors: [{ message: "Host is required", condition: (value) => value.trim() === "" }],
+	},
+	{
+		name: "password",
+		type: "password",
+		label: "Password",
+		value: password,
+		onChange: setPassword,
+	},
+	{
+		name: "tls",
+		type: "select",
+		label: "TLS",
+		value: tls,
+		onChange: setTls,
+		options: [
+			{ value: "off", label: "Off" },
+			{ value: "on", label: "On" },
+		],
+	},
+];
+
+<Form fields={fields} submitLabel="Connect" onSubmit={connect} error={connectError} />;
+```
+
+`onSubmit` runs only when every field passes its `errors` rules. It can be async; the submit button shows a spinner until it settles.
+
+## Field types
+
+Set `type` on each field config. All types share the [base options](#base-field-options).
+
+| `type`                                             | Control                                           | Extra options                                              |
+| -------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------- |
+| `"text"` (default), `"email"`, `"number"`, `"url"` | [Input](?path=/docs/primitives-input--docs)       | `onChange(value)`                                          |
+| `"password"`                                       | Input with a show/hide toggle                     | `onChange(value)`                                          |
+| `"textarea"`                                       | [Textarea](?path=/docs/primitives-textarea--docs) | `onChange(value)`                                          |
+| `"select"`                                         | [Select](?path=/docs/primitives-select--docs)     | `onChange(value)`, `options`                               |
+| `"tag"`                                            | Tag input                                         | `tags`, `onAddTag(tag)`, `onRemoveTag(index)`, `normalize` |
+| `"custom"`                                         | Anything you render                               | `render({ id, invalid, onValueChange })`                   |
+
+### Tag fields
+
+- Enter, a comma, or leaving the field adds the typed text as a tag. Text containing commas becomes several tags when it is added.
+- Duplicates are skipped. `normalize` (for example `(tag) => tag.toLowerCase()`) is applied before the check.
+- Backspace in an empty input removes the last tag.
+- Adding or removing a tag does not re-check the field's `errors`; they are checked on submit.
+
+### Custom fields
+
+For a control the form does not ship, such as a searchable picker. Put `id` on the control so the label points at it, and call `onValueChange` with the new value so the field is re-checked:
+
+```tsx
+{
+	name: "graph",
+	type: "custom",
+	label: "Graph",
+	value: graph,
+	render: ({ id, invalid, onValueChange }) => (
+		<GraphPicker id={id} aria-invalid={invalid} value={graph} onChange={(next) => { setGraph(next); onValueChange(next); }} />
+	),
+}
+```
+
+## Base field options
+
+| Option           | Type                                                           | Description                                                                                                  |
+| ---------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `name`           | `string`                                                       | Required. Unique key used to track and validate the field.                                                   |
+| `label`          | `ReactNode`                                                    | Required.                                                                                                    |
+| `value`          | `string`                                                       | Required. The current value. For tag fields, pass the tags joined, e.g. `tags.join(",")`; `errors` check it. |
+| `id`             | `string`                                                       | The control's id. Generated when omitted.                                                                    |
+| `required`       | `boolean`                                                      | Shows an asterisk. It does not validate; add an `errors` rule for that.                                      |
+| `placeholder`    | `string`                                                       |                                                                                                              |
+| `description`    | `ReactNode`                                                    | Help text under the control.                                                                                 |
+| `info`           | `ReactNode`                                                    | Help text behind an info icon beside the label.                                                              |
+| `disabled`       | `boolean`                                                      |                                                                                                              |
+| `errors`         | `{ message: string; condition: (value, values) => boolean }[]` | Validation rules. `condition` returns `true` when invalid; the first match is shown.                         |
+| `revalidateWith` | `string[]`                                                     | Names of other fields whose changes re-check this one, for rules such as "passwords match".                  |
+| `link`           | `{ label: string; url: string }`                               | A link under the control, opened in a new tab.                                                               |
+
+### Validation
+
+A field's `errors` are checked when its value changes (except tag fields; see [Tag fields](#tag-fields)), when the form is submitted, and when the set of fields changes (for example, a login form switching mode). They are not checked on mount, so an untouched form starts clean.
+
+A field with `errors` reserves a line for its message, so the layout does not jump when one appears.
+
+Cross-field rule:
+
+```tsx
+{
+	name: "confirm",
+	type: "password",
+	label: "Confirm password",
+	value: confirm,
+	onChange: setConfirm,
+	revalidateWith: ["password"],
+	errors: [{ message: "Passwords do not match", condition: (value, values) => value !== values.password }],
+}
+```
+
+## `Form` props
+
+Accepts every `<form>` attribute except `onSubmit`, plus:
+
+| Prop             | Type                                                                  | Default    | Description                                                                          |
+| ---------------- | --------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------ |
+| `fields`         | `FieldConfig[]`                                                       | —          | Required. The fields, in order.                                                      |
+| `onSubmit`       | `(event) => void \| Promise<void>`                                    | —          | Runs when every field is valid.                                                      |
+| `error`          | `ReactNode`                                                           | —          | A form-level error, shown above the footer in a reserved line.                       |
+| `submitLabel`    | `string`                                                              | `"Submit"` | Submit button text.                                                                  |
+| `submitDisabled` | `boolean`                                                             | `false`    | Disables the submit button.                                                          |
+| `submitProps`    | `Omit<ButtonProps, "type" \| "isLoading" \| "disabled">`              | —          | Extra props for the default submit button, such as an `id`.                          |
+| `renderSubmit`   | `({ isLoading, disabled, label }) => ReactNode`                       | —          | Replaces the submit button. Yours must stay `type="submit"`.                         |
+| `renderInfo`     | `(info, field) => ReactNode`                                          | —          | Replaces the default info hint, for example with a tap-to-open one on touch screens. |
+| `actions`        | `ReactNode`                                                           | —          | Footer content to the left of the submit button, such as a Cancel button.            |
+| `children`       | `ReactNode`                                                           | —          | Content between the fields and the form-level error.                                 |
+| `classNames`     | `{ field, label, control, description, message, error, footer, tag }` | —          | Classes for the inner parts.                                                         |
+
+## Building a custom layout
+
+The parts that `Form` is made of are exported too:
+
+```tsx
+import { FormControl, FormDescription, FormField, FormLabel, FormMessage, Input } from "@falkordb/ui";
+
+<FormField error={nameError}>
+	<FormLabel required>Graph name</FormLabel>
+	<FormControl>
+		<Input value={name} onChange={(event) => setName(event.target.value)} />
+	</FormControl>
+	<FormDescription>Letters, digits and underscores.</FormDescription>
+	<FormMessage />
+</FormField>;
+```
+
+| Part              | Description                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `FormField`       | Wraps one field. `error` marks it invalid and is what `FormMessage` shows. `controlId` sets the control's id. |
+| `FormLabel`       | The label. Takes `required`, `info`, `renderInfo` and `rowClassName`.                                         |
+| `FormControl`     | Wires its single child to the field's id, description and error (`id`, `aria-describedby`, `aria-invalid`).   |
+| `FormDescription` | Help text, linked to the control.                                                                             |
+| `FormMessage`     | Shows the field's error with `role="alert"`. Outside a field, it shows its own children.                      |
+| `FormFooter`      | The row for the actions.                                                                                      |
+| `useFormField()`  | Returns the enclosing field's `{ controlId, descriptionId, messageId, error }`, or `null` outside one.        |
+
+## Accessibility
+
+Errors are announced (`role="alert"`) and the control gets `aria-invalid`. Standard controls are also linked to their error and description with `aria-describedby`; tag and custom fields are not, so a custom renderer must add that linkage itself.

@@ -8,7 +8,6 @@ import { toast } from "@/hooks/use-toast";
 const meta = {
 	title: "Primitives/Toast",
 	component: Toaster,
-	tags: ["autodocs"],
 	parameters: {
 		docs: {
 			description: {

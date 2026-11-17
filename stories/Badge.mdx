@@ -1,0 +1,44 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+
+import * as BadgeStories from "./Badge.stories";
+
+<Meta of={BadgeStories} />
+
+# Badge
+
+A small pill for a status, count or tag.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/badge.tsx)
+
+<Canvas of={BadgeStories.Default} />
+
+## Import
+
+```tsx
+import { Badge, badgeVariants } from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+import { Tag } from "lucide-react";
+
+<Badge>Person</Badge>
+<Badge variant="success">Connected</Badge>
+<Badge variant="outline">
+	<Tag />
+	label
+</Badge>
+```
+
+Icons inside a badge are sized to fit automatically.
+
+## Props
+
+Accepts every `<span>` attribute, plus:
+
+| Prop      | Type                                                                               | Default     |
+| --------- | ---------------------------------------------------------------------------------- | ----------- |
+| `variant` | `"default" \| "secondary" \| "outline" \| "destructive" \| "success" \| "warning"` | `"default"` |
+
+`badgeVariants({ variant })` returns the class string, for styling another element as a badge.

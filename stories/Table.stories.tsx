@@ -21,7 +21,6 @@ const rows = [
 const meta = {
 	title: "Primitives/Table",
 	component: Table,
-	tags: ["autodocs"],
 } satisfies Meta<typeof Table>;
 
 export default meta;
