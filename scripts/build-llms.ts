@@ -50,6 +50,9 @@ export const GUIDES: Page[] = [
 	),
 ];
 
+// Not for apps using the package: the docs index, and how maintainers publish it.
+export const EXCLUDED_DOCS = ["docs/README.md", "docs/releasing.md"];
+
 // Same order as the component table in README.md. Every stories/*.mdx page must be listed.
 export const COMPONENTS: Page[] = [
 	component("Button"),
@@ -95,7 +98,7 @@ const RULES = `## Rules for using this package
 - Import the styles once, at the app's entry point: \`import "@falkordb/ui/styles.css";\`. No Tailwind setup is needed. A Tailwind v4 app can import \`@falkordb/ui/theme.css\` instead; see Getting started.
 - Build multi-part components from their exported parts, as each page's Usage section shows, for example \`Dialog\` with \`DialogTrigger\` and \`DialogContent\`.
 - Some components need one provider near the app root: \`TooltipProvider\` for \`Tooltip\`, and \`Toaster\` for \`toast()\`. Each component's page says so.
-- Style a component with \`className\`. It is merged with \`cn()\`, so your Tailwind classes override the defaults. Rebrand with the theme's CSS custom properties instead of copying components.
+- Style a component that renders a DOM element with \`className\`. It is merged with \`cn()\`, so your Tailwind classes override the defaults. Root and provider components such as \`Dialog\`, \`TooltipProvider\` and \`ThemeProvider\` render no element and take no \`className\`; style their parts instead. Rebrand with the theme's CSS custom properties instead of copying components.
 - Dark mode follows a \`dark\` class on an ancestor. \`ThemeProvider\` can manage it.
 - Give icon-only buttons an \`aria-label\`; a tooltip does not name a button.
 - FalkorDB products draw no focus outline. This is deliberate, so do not add focus rings.`;
@@ -105,8 +108,13 @@ const RELATED = `## Related packages
 - [@falkordb/canvas](${REPO_URL}/blob/main/web-components/canvas/README.md): \`<falkordb-canvas>\`, a force-directed graph web component for any framework, or none. Its README ships in its own npm package.`;
 
 const FENCE = /^\s*(```|~~~)/;
-// MDX-only lines that mean nothing to a reader of plain Markdown.
-const MDX_ONLY = [/^import\s.*;\s*$/, /^<(Meta|Canvas)\b[^>]*\/>\s*$/];
+// Storybook blocks that render live examples; the Usage sections already show the code.
+const STORYBOOK_BLOCK = /^<(Meta|Canvas)\b[^>]*\/>\s*$/;
+// An MDX import can span lines; it ends at its module specifier, with or without a semicolon.
+const IMPORT_START = /^import\b/;
+const IMPORT_END = /(^import|\bfrom)\s*["'][^"']+["']\s*;?\s*$/;
+// JSX, MDX expressions and exports, once code spans are removed.
+const UNSUPPORTED = /^\s*export\s|<[A-Z]|\{/;
 
 /** Splits Markdown into lines, flagging those inside fenced code blocks. */
 function scan(markdown: string): { line: string; code: boolean }[] {
@@ -120,19 +128,29 @@ function scan(markdown: string): { line: string; code: boolean }[] {
 	});
 }
 
-/** Turns an MDX page into plain Markdown, failing on any JSX it does not know how to drop. */
+/** Turns an MDX page into plain Markdown, failing on any MDX syntax it does not know how to drop. */
 export function stripMdx(mdx: string, source: string): string {
-	const lines = scan(mdx)
-		.filter(({ line, code }) => code || !MDX_ONLY.some((pattern) => pattern.test(line)))
-		.map(({ line, code }) => {
-			if (!code && /^\s*(<[A-Za-z]|\{)/.test(line)) {
-				throw new Error(
-					`${source}: unsupported MDX outside a code block: "${line.trim()}". Use plain Markdown, or teach scripts/build-llms.ts to drop it.`,
-				);
-			}
-			return line;
-		});
-	return tidy(lines.join("\n"));
+	const kept: string[] = [];
+	let inImport = false;
+	for (const { line, code } of scan(mdx)) {
+		if (code) {
+			kept.push(line);
+			continue;
+		}
+		if (inImport || IMPORT_START.test(line)) {
+			inImport = !IMPORT_END.test(line);
+			continue;
+		}
+		if (STORYBOOK_BLOCK.test(line)) continue;
+		if (UNSUPPORTED.test(line.replace(/(`+)[\s\S]*?\1/g, ""))) {
+			throw new Error(
+				`${source}: unsupported MDX: "${line.trim()}". Use plain Markdown, or teach scripts/build-llms.ts to drop it.`,
+			);
+		}
+		kept.push(line);
+	}
+	if (inImport) throw new Error(`${source}: an import never reaches its module specifier.`);
+	return tidy(kept.join("\n"));
 }
 
 function tidy(markdown: string): string {
@@ -190,17 +208,23 @@ function demoteHeadings(markdown: string): string {
 		.join("\n");
 }
 
-/** Generated files keyed by their path relative to the output directory. */
-export function buildLlms(rootDir: string): Record<string, string> {
-	const listed = new Set(COMPONENTS.map((page) => page.source));
-	// Recursive, like the stories glob in .storybook/main.ts.
-	const unlisted = readdirSync(join(rootDir, "stories"), { recursive: true, encoding: "utf8" })
-		.filter((file) => file.endsWith(".mdx"))
-		.map((file) => `stories/${file.split(sep).join("/")}`)
+/** Fails when a page in `dir` is in neither `pages` nor EXCLUDED_DOCS, so none is left out by accident. */
+function requireListed(rootDir: string, dir: string, extension: string, pages: Page[], listName: string) {
+	const listed = new Set([...pages.map((page) => page.source), ...EXCLUDED_DOCS]);
+	const unlisted = readdirSync(join(rootDir, dir), { recursive: true, encoding: "utf8" })
+		.filter((file) => file.endsWith(extension))
+		.map((file) => `${dir}/${file.split(sep).join("/")}`)
 		.filter((source) => !listed.has(source));
 	if (unlisted.length > 0) {
-		throw new Error(`Add ${unlisted.join(", ")} to COMPONENTS in scripts/build-llms.ts.`);
+		throw new Error(`Add ${unlisted.join(", ")} to ${listName} in scripts/build-llms.ts.`);
 	}
+}
+
+/** Generated files keyed by their path relative to the output directory. */
+export function buildLlms(rootDir: string): Record<string, string> {
+	// Recursive, like the stories glob in .storybook/main.ts.
+	requireListed(rootDir, "stories", ".mdx", COMPONENTS, "COMPONENTS");
+	requireListed(rootDir, "docs", ".md", GUIDES, "GUIDES or EXCLUDED_DOCS");
 
 	const pages = [...GUIDES, ...COMPONENTS];
 	const markdown = new Map(

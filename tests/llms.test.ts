@@ -30,6 +30,11 @@ describe("build-llms", () => {
 	it("drops MDX-only lines but keeps JSX inside code blocks", () => {
 		const mdx = [
 			'import { Meta } from "@storybook/addon-docs/blocks";',
+			"import {",
+			"\tButton,",
+			"\tCard,",
+			'} from "@falkordb/ui"',
+			"import * as Stories from './X.stories'",
 			"<Meta title='Primitives/X' />",
 			"# X",
 			"<Canvas of={Stories.Default} />",
@@ -40,9 +45,18 @@ describe("build-llms", () => {
 		expect(stripMdx(mdx, "X.mdx")).toBe("# X\n```tsx\n<X />\n```\n");
 	});
 
-	it("fails on JSX it cannot drop", () => {
+	it("fails on MDX syntax it cannot drop, but allows it in code spans", () => {
 		expect(() => stripMdx("# X\n\n<ArgTypes of={X} />\n", "stories/X.mdx")).toThrow(
-			'stories/X.mdx: unsupported MDX outside a code block: "<ArgTypes of={X} />"',
+			'stories/X.mdx: unsupported MDX: "<ArgTypes of={X} />"',
+		);
+		expect(() => stripMdx("Use <Thing /> here.\n", "X.mdx")).toThrow(
+			'unsupported MDX: "Use <Thing /> here."',
+		);
+		expect(() => stripMdx("Total: {count}\n", "X.mdx")).toThrow("unsupported MDX");
+		expect(() => stripMdx("export const meta = {};\n", "X.mdx")).toThrow("unsupported MDX");
+		expect(() => stripMdx("import {\n\tX,\n# X\n", "X.mdx")).toThrow("never reaches its module specifier");
+		expect(stripMdx("Wrap it in `<Dialog>` with `{ open }`.\n", "X.mdx")).toBe(
+			"Wrap it in `<Dialog>` with `{ open }`.\n",
 		);
 	});
 
@@ -52,6 +66,18 @@ describe("build-llms", () => {
 			mkdirSync(join(dir, "stories", "patterns"), { recursive: true });
 			writeFileSync(join(dir, "stories", "patterns", "Widget.mdx"), "# Widget\n");
 			expect(() => buildLlms(dir)).toThrow("Add stories/patterns/Widget.mdx to COMPONENTS");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("fails when a guide is neither registered nor excluded", () => {
+		const dir = mkdtempSync(join(tmpdir(), "llms-"));
+		try {
+			mkdirSync(join(dir, "stories"));
+			mkdirSync(join(dir, "docs"));
+			writeFileSync(join(dir, "docs", "migrating.md"), "# Migrating\n");
+			expect(() => buildLlms(dir)).toThrow("Add docs/migrating.md to GUIDES or EXCLUDED_DOCS");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -78,8 +104,15 @@ describe("build-llms", () => {
 				"[Fonts](#fonts)",
 			].join("\n"),
 		);
-		expect(rewriteLinks(markdown, theming, pages, "full")).toMatch(
-			/^\[Button\]\(#button\)\n\[Card\]\(#card\)\n.*\n\[Setup\]\(#install\)/,
+		expect(rewriteLinks(markdown, theming, pages, "full")).toBe(
+			[
+				"[Button](#button)",
+				"[Card](#card)",
+				"[Tokens](https://falkordb.github.io/falkordb-ui/?path=/docs/theme-tokens--docs)",
+				"[Setup](#install)",
+				"[Theme](https://github.com/FalkorDB/falkordb-ui/blob/main/src/theme/theme.css)",
+				"[Fonts](#fonts)",
+			].join("\n"),
 		);
 	});
 });
