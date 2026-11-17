@@ -1,346 +1,98 @@
-# @falkordb/ui
+# FalkorDB UI
 
 [![CI](https://github.com/FalkorDB/falkordb-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/FalkorDB/falkordb-ui/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui)
+[![Storybook](https://img.shields.io/badge/Storybook-live-ff4785?logo=storybook&logoColor=white)](https://falkordb.github.io/falkordb-ui/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-The shared FalkorDB design system. One themeable set of React primitives so every
-FalkorDB product — Browser, QueryWeaver, GraphRAG, Code Graph — renders buttons,
-inputs and dialogs the same way.
+FalkorDB's shared UI toolkit: themeable, accessible components used across FalkorDB products such as Browser, QueryWeaver, GraphRAG and Code Graph, so every product looks and behaves the same.
 
-Built on [Radix UI](https://www.radix-ui.com) primitives and
-[Tailwind CSS](https://tailwindcss.com) v4, in the shadcn/ui style: unstyled,
-accessible behaviour underneath, FalkorDB's palette on top.
+**[Documentation](./docs/README.md)** · **[Storybook](https://falkordb.github.io/falkordb-ui/)** · **[npm](https://www.npmjs.com/package/@falkordb/ui)**
 
 ## Packages
 
-This repository publishes two npm packages, each versioned and released on its own. The badges show each package's current `latest` on npm.
+This repository publishes several npm packages, each versioned and released on its own. The badges show each package's current `latest` on npm.
 
-| Package                                       | Latest                                                                                                  | What it is                                      |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| [`@falkordb/ui`](#install)                    | [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui)         | React primitives and theme (this page)          |
-| [`@falkordb/canvas`](./web-components/canvas) | [![npm](https://img.shields.io/npm/v/@falkordb/canvas)](https://www.npmjs.com/package/@falkordb/canvas) | `<falkordb-canvas>` force-directed graph canvas |
+| Package                                       | Latest                                                                                                  | What it is                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [`@falkordb/ui`](#quick-start)                | [![npm](https://img.shields.io/npm/v/@falkordb/ui)](https://www.npmjs.com/package/@falkordb/ui)         | React components and theme                             |
+| [`@falkordb/canvas`](./web-components/canvas) | [![npm](https://img.shields.io/npm/v/@falkordb/canvas)](https://www.npmjs.com/package/@falkordb/canvas) | `<falkordb-canvas>` force-directed graph web component |
 
-## Install
+## Quick start
 
-```bash
-npm install @falkordb/ui
-```
+`@falkordb/ui` is a set of React components built on [Radix UI](https://www.radix-ui.com) and [Tailwind CSS](https://tailwindcss.com) v4, in the shadcn/ui style: accessible behaviour underneath, FalkorDB's look on top.
 
-React 18.3+ or 19 is a peer dependency.
+1. Install it. React 18.3+ or 19 is a peer dependency.
 
-## Setup
+   ```bash
+   npm install @falkordb/ui
+   ```
 
-Pick the option that matches your project. Both give identical output.
+2. Import the styles once, at your app's entry point. No Tailwind setup is needed.
 
-### Option 1 — prebuilt CSS (no Tailwind required)
+   ```ts
+   import "@falkordb/ui/styles.css";
+   ```
 
-Works on any stack, including Tailwind v3 projects.
+   Already on Tailwind v4? You can [build from the theme source](./docs/getting-started.md#option-2--tailwind-v4-source) instead.
 
-```ts
-import "@falkordb/ui/styles.css";
-```
+3. Use the components.
 
-### Option 2 — Tailwind v4 source
+   ```tsx
+   import { Button, Card, CardContent, CardHeader, CardTitle } from "@falkordb/ui";
 
-Use this if you want to build your own utilities from the same tokens.
+   export function GraphCard() {
+   	return (
+   		<Card>
+   			<CardHeader>
+   				<CardTitle>social-network</CardTitle>
+   			</CardHeader>
+   			<CardContent>
+   				<Button onClick={run}>Run query</Button>
+   			</CardContent>
+   		</Card>
+   	);
+   }
+   ```
 
-```css
-@import "tailwindcss";
-@import "@falkordb/ui/theme.css";
-
-/* Tailwind cannot see inside node_modules by default. */
-@source "../node_modules/@falkordb/ui/dist";
-```
-
-### Base rules only
-
-Both options include FalkorDB's base rules: nothing draws a focus outline. An
-app that keeps its own design tokens can import only those rules:
-
-```css
-@import "@falkordb/ui/base.css";
-```
-
-### Dark mode
-
-The theme is driven by a `dark` class on an ancestor element. Either manage it
-yourself, or let `ThemeProvider` do it:
-
-```tsx
-import { ThemeProvider, ThemeToggle } from "@falkordb/ui";
-
-export function App() {
-	return (
-		<ThemeProvider defaultTheme="system">
-			<ThemeToggle />
-		</ThemeProvider>
-	);
-}
-```
-
-`ThemeProvider` persists the choice to `localStorage` (pass `storageKey={null}`
-to opt out) and follows the OS setting while the theme is `"system"`.
-
-## Usage
-
-```tsx
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@falkordb/ui";
-
-export function GraphCard() {
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>social-network</CardTitle>
-			</CardHeader>
-			<CardContent>
-				<Button onClick={run}>Run query</Button>
-			</CardContent>
-		</Card>
-	);
-}
-```
+Next: [Getting started](./docs/getting-started.md) covers dark mode and the conventions every component shares.
 
 ## Components
 
-| Component    | Exports                                                                                                                                                                                                                                                                                                                           |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Button       | `Button`, `buttonVariants`                                                                                                                                                                                                                                                                                                        |
-| Input        | `Input`                                                                                                                                                                                                                                                                                                                           |
-| Textarea     | `Textarea`                                                                                                                                                                                                                                                                                                                        |
-| Label        | `Label`                                                                                                                                                                                                                                                                                                                           |
-| Select       | `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`, `SelectGroup`, `SelectLabel`, `SelectSeparator`                                                                                                                                                                                                          |
-| Checkbox     | `Checkbox`                                                                                                                                                                                                                                                                                                                        |
-| Switch       | `Switch`                                                                                                                                                                                                                                                                                                                          |
-| RadioGroup   | `RadioGroup`, `RadioGroupItem`                                                                                                                                                                                                                                                                                                    |
-| Slider       | `Slider`                                                                                                                                                                                                                                                                                                                          |
-| Form         | `Form`, `FormField`, `FormLabel`, `FormControl`, `FormDescription`, `FormMessage`, `FormFooter`, `useFormField`                                                                                                                                                                                                                   |
-| Badge        | `Badge`, `badgeVariants`                                                                                                                                                                                                                                                                                                          |
-| Card         | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`                                                                                                                                                                                                                                                 |
-| Progress     | `Progress`                                                                                                                                                                                                                                                                                                                        |
-| Skeleton     | `Skeleton`                                                                                                                                                                                                                                                                                                                        |
-| Tooltip      | `Tooltip`, `TooltipProvider`, `TooltipTrigger`, `TooltipContent`                                                                                                                                                                                                                                                                  |
-| HintTip      | `HintTip`                                                                                                                                                                                                                                                                                                                         |
-| Popover      | `Popover`, `PopoverTrigger`, `PopoverContent`, `PopoverAnchor`, `PopoverClose`                                                                                                                                                                                                                                                    |
-| DropdownMenu | `DropdownMenu`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuCheckboxItem`, `DropdownMenuRadioGroup`, `DropdownMenuRadioItem`, `DropdownMenuLabel`, `DropdownMenuSeparator`, `DropdownMenuShortcut`, `DropdownMenuGroup`, `DropdownMenuSub`, `DropdownMenuSubTrigger`, `DropdownMenuSubContent` |
-| Dialog       | `Dialog`, `DialogTrigger`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogFooter`, `DialogClose`                                                                                                                                                                                                     |
-| AlertDialog  | `AlertDialog`, `AlertDialogTrigger`, `AlertDialogContent`, `AlertDialogHeader`, `AlertDialogTitle`, `AlertDialogDescription`, `AlertDialogFooter`, `AlertDialogAction`, `AlertDialogCancel`                                                                                                                                       |
-| Drawer       | `Drawer`, `DrawerTrigger`, `DrawerContent`, `DrawerHeader`, `DrawerTitle`, `DrawerDescription`, `DrawerFooter`, `DrawerClose`                                                                                                                                                                                                     |
-| Toast        | `Toaster`, `toast`, `useToast`, `dismiss`, `ToastAction`                                                                                                                                                                                                                                                                          |
-| Table        | `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableRow`, `TableHead`, `TableCell`, `TableCaption`                                                                                                                                                                                                                          |
-| Chat         | `Chat`, `ChatHeader`, `ChatTitle`, `ChatMessages`, `ChatMessage`, `ChatAvatar`, `ChatInput`, `ChatInputField`, `ChatSendButton`, `ChatFooter`                                                                                                                                                                                     |
-| Tabs         | `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`                                                                                                                                                                                                                                                                                  |
-| Resizable    | `ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle`                                                                                                                                                                                                                                                                        |
-| Theme        | `ThemeProvider`, `useTheme`, `ThemeToggle`                                                                                                                                                                                                                                                                                        |
+Each component has a reference page with usage, props and accessibility notes, and a live Storybook page.
 
-Plus the `cn()` class-merging helper.
-
-### Buttons and tooltips
-
-`Button` comes in FalkorDB's looks:
-
-- **`variant`:** `default` (filled primary), `secondary`, `cancel` and `destructive` (outlined), `link`, and `none`.
-- **`size`:** `default`, `wide` (for the outlined pair) and `none`.
-
-`none` on both axes leaves the geometry to your own classes.
-
-Icon-only buttons need an accessible name. Pass `tooltip` and the button supplies
-its own `TooltipProvider`, so it works without any setup in the surrounding tree:
-
-```tsx
-<Button variant="none" size="none" className="rounded-md p-2 hover:bg-accent" tooltip="Export graph as CSV">
-	<Download />
-</Button>
-```
-
-`isLoading` swaps the content for a spinner, and `label` adds truncating trailing text. Both also work with `asChild`, where they render inside your element.
-
-### Forms
-
-`Form` takes a `fields` array and renders the whole stack — labels, info
-hints, descriptions, controls, per-field errors, a form-level error and a
-submit footer. Values stay controlled by you; validation is declared per field
-as `errors`, and each rule's `condition` receives the field's value plus every
-other field's value, so cross-field rules are just a lookup:
-
-```tsx
-<Form
-	fields={[
-		{
-			name: "host",
-			label: "Host",
-			value: host,
-			onChange: setHost,
-			required: true,
-			info: "Defaults to localhost.",
-			errors: [{ message: "Host is required", condition: (value) => value === "" }],
-		},
-		{
-			name: "password",
-			label: "Password",
-			type: "password",
-			value: password,
-			onChange: setPassword,
-			link: { label: "Managing credentials", url: "https://docs.falkordb.com" },
-		},
-		{
-			name: "confirm",
-			label: "Confirm password",
-			type: "password",
-			value: confirm,
-			onChange: setConfirm,
-			// Re-check this field whenever `password` changes, too.
-			revalidateWith: ["password"],
-			errors: [
-				{
-					message: "Passwords do not match",
-					condition: (value, values) => value !== values.password,
-				},
-			],
-		},
-	]}
-	error={connectionError}
-	submitLabel="Connect"
-	onSubmit={connect}
-	actions={
-		<Button variant="cancel" onClick={close}>
-			Cancel
-		</Button>
-	}
-/>
-```
-
-When fields are checked:
-
-- A field is checked as it changes, and so is every field that lists it in
-  `revalidateWith`.
-- Every field is checked on submit. A failing field blocks `onSubmit`, and the
-  submit button shows a spinner while an async `onSubmit` runs.
-- Every field is checked again when the set of fields changes, for example when
-  a login form switches mode. This does not happen on mount, so an untouched
-  form starts clean.
-
-`required` only draws the asterisk. Whether an empty value is an error is up to
-the field's `errors`, so a field can be marked required and still fall back to
-a default. Declaring `errors` also reserves the line the message appears on, so
-the layout does not jump when one shows up.
-
-Field `type` is `text` by default and can be:
-
-- any text-like input type
-- `password`
-- `textarea`
-- `select`, with `options`
-- `tag`, with `tags`, `onAddTag`, `onRemoveTag` and an optional `normalize`
-- `custom`, whose `render({ id, invalid, onValueChange })` draws a control the
-  form does not ship, such as a searchable picker
-
-Set `id` on a field to fix the control's id; otherwise one is generated.
-
-Layout:
-
-- `children` render between the fields and the form-level error. Use them for
-  an optional section.
-- `actions` render in the footer, to the left of the submit button.
-- `submitDisabled` and `submitProps` adjust the default submit button, and
-  `renderSubmit` replaces it.
-- `renderInfo` replaces the default info hint.
-- `classNames` reaches the parts `className` cannot: `field`, `label`,
-  `control`, `description`, `message`, `error`, `footer` and `tag`.
-
-For a layout `fields` cannot express, the parts are exported too:
-
-- `FormField` generates the ids and owns the error state.
-- `FormControl` wires them onto whichever control you put inside it.
-- `FormMessage` renders its children as a form-level error when used outside a
-  `FormField`.
-
-### Hints
-
-`HintTip` is an info glyph that reveals a hint. Radix tooltips never open on
-touch, so pass `mode="popover"` on a touch layout and the hint opens on tap
-instead:
-
-```tsx
-<HintTip mode={isTouch ? "popover" : "tooltip"}>Defaults to localhost.</HintTip>
-```
-
-Where the trigger is a real control, use that control's `tooltip` instead.
-
-### Overlays and menus
-
-- `DropdownMenuContent` and `DropdownMenuSubContent` take `preventOutsideClose`.
-  It keeps a menu open through outside clicks and Escape, for example while a
-  guided walkthrough points at it.
-- `AlertDialogContent` takes `overlayClassName`, like `DialogContent`.
-- `DrawerContent` takes `side` (`bottom`, `left` or `right`), `handleClassName`
-  and `overlayClassName`. It pads itself for safe-area insets.
-
-### Tables
-
-`Table` wraps its `<table>` in a scrolling `<div>`. A virtualised or infinitely
-scrolling table needs that wrapper's ref and scroll events, so `containerProps`
-passes props through to it:
-
-```tsx
-<Table containerProps={{ ref: scrollRef, onScroll: loadMoreNearBottom, className: "h-96" }}>…</Table>
-```
-
-### Sliders and progress
-
-- `Slider` renders one thumb per value.
-- `renderThumb(thumb, index)` wraps each thumb, for example in a tooltip that
-  reads out the value.
-- `thumbClassName` styles the thumbs.
-- `Progress` takes `indicatorClassName` for its filled bar.
-
-### Chat
-
-The chat parts lay the conversation out, and the host supplies what each message says, markdown included:
-
-- **Order:** `ChatMessages` lists messages oldest first. It stays on the newest one as messages arrive, unless the reader has scrolled up to read an earlier one.
-- **Sides:** `ChatMessage` puts `from="user"` on the right and `from="assistant"` on the left, with its `avatar` on the outer side of the bubble. `variant="error"` outlines the bubble.
-- **Input row:** `ChatInput` is a `<form>`, so Enter in `ChatInputField` submits it. `ChatSendButton` is disabled while `canSend` is false or `isLoading` is true.
-
-```tsx
-<Chat>
-	<ChatHeader>
-		<ChatTitle>Chat</ChatTitle>
-	</ChatHeader>
-	<ChatMessages>
-		{messages.map((m) => (
-			<ChatMessage key={m.id} from={m.role} avatar={<ChatAvatar>{m.role === "user" ? "U" : "F"}</ChatAvatar>}>
-				<Markdown text={m.content} />
-			</ChatMessage>
-		))}
-	</ChatMessages>
-	<ChatInput onSubmit={send}>
-		<ChatInputField
-			aria-label="Message"
-			value={text}
-			onChange={(e) => setText(e.target.value)}
-			placeholder="Ask about your graph"
-		/>
-		<ChatSendButton canSend={text.trim() !== ""} isLoading={sending} />
-	</ChatInput>
-</Chat>
-```
-
-### Toasts
-
-Mount `<Toaster />` once near the root; `toast()` then works from anywhere,
-including outside React:
-
-```tsx
-import { Toaster, toast } from "@falkordb/ui";
-
-toast({ variant: "destructive", title: "Query failed", description: error.message });
-```
+| Component    | Description                                           | Docs                                       | Storybook                                                                                          |
+| ------------ | ----------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Button       | Variants, loading state, trailing label and tooltip   | [Docs](./docs/components/button.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-button--docs)                 |
+| Input        | Single-line text field                                | [Docs](./docs/components/input.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-input--docs)                  |
+| Textarea     | Multi-line text field                                 | [Docs](./docs/components/textarea.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-textarea--docs)               |
+| Label        | Accessible label for a control                        | [Docs](./docs/components/label.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--radios)            |
+| Select       | Dropdown for choosing one value                       | [Docs](./docs/components/select.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-select--docs)                 |
+| Checkbox     | Checkbox with an indeterminate state                  | [Docs](./docs/components/checkbox.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-checkbox--docs)               |
+| Switch       | On/off toggle                                         | [Docs](./docs/components/switch.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-switch--docs)                 |
+| RadioGroup   | Pick exactly one option                               | [Docs](./docs/components/radio-group.md)   | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--radios)            |
+| Slider       | Draggable value or range                              | [Docs](./docs/components/slider.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--slider-with-value) |
+| Form         | Validated field stack built from a config             | [Docs](./docs/components/form.md)          | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-form--docs)                   |
+| Badge        | Pill for a status, count or tag                       | [Docs](./docs/components/badge.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-badge--docs)                  |
+| Card         | Bordered surface for grouped content                  | [Docs](./docs/components/card.md)          | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-card--docs)                   |
+| Table        | Styled table with a scrolling wrapper                 | [Docs](./docs/components/table.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-table--docs)                  |
+| Progress     | Progress bar                                          | [Docs](./docs/components/progress.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--loading)           |
+| Skeleton     | Pulsing loading placeholder                           | [Docs](./docs/components/skeleton.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--loading)           |
+| Tooltip      | Short label on hover or focus                         | [Docs](./docs/components/tooltip.md)       | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-tooltip--docs)                |
+| HintTip      | Info icon that reveals a hint, also on touch          | [Docs](./docs/components/hint-tip.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-overlays--hints)             |
+| Popover      | Floating panel anchored to a trigger                  | [Docs](./docs/components/popover.md)       | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-overlays--popover-panel)     |
+| DropdownMenu | Menu of actions, with checkboxes and submenus         | [Docs](./docs/components/dropdown-menu.md) | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-overlays--menu)              |
+| Dialog       | Modal window for a focused task                       | [Docs](./docs/components/dialog.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-dialog--docs)                 |
+| AlertDialog  | Confirm or cancel a destructive action                | [Docs](./docs/components/alert-dialog.md)  | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-alertdialog--docs)            |
+| Drawer       | Draggable panel from the screen edge                  | [Docs](./docs/components/drawer.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-overlays--bottom-drawer)     |
+| Toast        | Non-blocking notification, callable from anywhere     | [Docs](./docs/components/toast.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-toast--docs)                  |
+| Tabs         | Switch between views in the same space                | [Docs](./docs/components/tabs.md)          | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-tabs--docs)                   |
+| Resizable    | Panels with draggable dividers                        | [Docs](./docs/components/resizable.md)     | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--panels)            |
+| Chat         | Header, conversation, input row and footer for a chat | [Docs](./docs/components/chat.md)          | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/patterns-chat--docs)                     |
 
 ## Theming
 
-Every colour is a CSS custom property, so a product can rebrand without forking a
-component:
+Every colour, radius and font is a CSS custom property, so a product can rebrand without forking a component:
 
 ```css
 :root {
@@ -348,25 +100,29 @@ component:
 }
 ```
 
-| Group    | Tokens                                                                      |
-| -------- | --------------------------------------------------------------------------- |
-| Surfaces | `--background`, `--card`, `--popover`, `--secondary`, `--muted`, `--accent` |
-| Intent   | `--primary`, `--destructive`, `--success`, `--warning`                      |
-| Chrome   | `--border`, `--input`, `--ring`, `--radius`                                 |
-| Brand    | `--brand-coral`, `--brand-orchid`, `--brand-violet`, `--brand-gradient`     |
-| Type     | `--font-sans`, `--font-mono`                                                |
-
-Each surface and intent token has a matching `-foreground` pair.
+Dark mode follows a `dark` class on an ancestor; `ThemeProvider` and `ThemeToggle` can manage it for you. See [Theming](./docs/theming.md) for every token, dark mode and `cn()`.
 
 ## Web components
 
-Self-contained components for any framework, or none at all. Each one renders in its own shadow DOM and ships as a separate npm package from [`web-components/`](./web-components):
+Self-contained components for any framework, or none at all. Each renders in its own shadow DOM and ships as a separate npm package from [`web-components/`](./web-components):
 
 | Package                                       | Element             | What it is                  |
 | --------------------------------------------- | ------------------- | --------------------------- |
 | [`@falkordb/canvas`](./web-components/canvas) | `<falkordb-canvas>` | Force-directed graph canvas |
 
+See the [web components overview](./web-components/README.md) for how they differ from the React components.
+
+## Documentation
+
+- [Getting started](./docs/getting-started.md)
+- [Theming](./docs/theming.md)
+- [Component reference](./docs/README.md#components)
+- [Storybook](https://falkordb.github.io/falkordb-ui/), published from `main`
+- [Releasing](./docs/releasing.md), for maintainers
+
 ## Development
+
+The repository is an npm workspace. The root is `@falkordb/ui`, and each folder in `web-components/` is its own package with its own build, lint and test scripts.
 
 ```bash
 npm install
@@ -377,50 +133,12 @@ npm run coverage      # enforces 100% coverage of src/
 npm run typecheck
 npm run lint
 npm run format
-```
 
-Storybook is published from `main` to GitHub Pages.
-
-The repository is an npm workspace. The root is `@falkordb/ui`, and each folder in `web-components/` is its own package with its own build, lint and test scripts:
-
-```bash
 npm run build:web-components
 npm run test:web-components
 npm run build -w web-components/canvas   # a single package
 ```
 
-## Releasing
-
-Publishing runs when a GitHub Release is created and uses npm OIDC trusted publishing, so the repository holds no npm tokens. The release tag chooses the package:
-
-| Tag                 | Publishes          |
-| ------------------- | ------------------ |
-| `v<version>`        | `@falkordb/ui`     |
-| `canvas-v<version>` | `@falkordb/canvas` |
-
-The tag is also where the version comes from. Every `package.json` in the repository holds the placeholder `0.0.0-dev`, and the workflow sets the version from the tag before building and publishing. So releasing is only a matter of creating a release with the new tag; there is no version to bump or keep in sync.
-
-Each package must list this repository's `release.yml` as a trusted publisher on npmjs.com.
-
-Published releases also call the organization's shared
-[release-notes polisher](./.github/workflows/release-notes.yml), which rewrites
-generated notes for users while preserving the original notes underneath.
-It pins the shared workflow to a reviewed commit; update that SHA deliberately
-when adopting changes to the polisher. Enable this
-repository's access to the organization `AZURE_OPENAI_API_KEY` secret and
-`AZURE_OPENAI_ENDPOINT` variable (optionally `AZURE_OPENAI_DEPLOYMENT`).
-The workflow can also be run manually with a release tag, an optional oldest
-tag for a range, and `dry_run` to preview without editing releases. Both
-`v<version>` and `canvas-v<version>` tags are supported; use ranges within one
-package's release series. Polishing does not publish an npm package.
-
-GitHub shows only one "Latest" release per repository, so it belongs to `@falkordb/ui`:
-
-- **`v<version>` releases:** tick "Set as the latest release".
-- **Web-component releases:** leave it unticked. Each package's own latest is its `latest` tag on npm, shown in the [Packages](#packages) table.
-
-Ticking "pre-release" on GitHub does not change npm: every release becomes that package's `latest` there.
-
 ## License
 
-MIT
+[MIT](./LICENSE)

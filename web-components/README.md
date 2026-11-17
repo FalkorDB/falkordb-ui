@@ -12,7 +12,7 @@ Framework-agnostic components published from this repository, next to `@falkordb
 | --- | --- | --- |
 | Import | `@falkordb/ui` | one package per component |
 | Requires React | Yes | No |
-| Requires Tailwind | Yes | No |
+| Requires Tailwind | No (prebuilt `styles.css`), or Tailwind v4 | No |
 | Works in Angular/Vue | With wrappers | Natively |
 | Styled by host app | Tailwind classes and theme tokens | CSS variables, slots and `::part` |
 | Data passed via | Props | JS methods and attributes |
