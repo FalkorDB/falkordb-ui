@@ -2,10 +2,20 @@ import { resolve } from "node:path";
 
 import tailwindcss from "@tailwindcss/vite";
 import type { StorybookConfig } from "@storybook/react-vite";
+import remarkGfm from "remark-gfm";
 
 const config: StorybookConfig = {
-	stories: ["../stories/**/*.stories.@(ts|tsx)"],
-	addons: ["@storybook/addon-essentials", "@storybook/addon-a11y"],
+	stories: ["../stories/**/*.mdx", "../stories/**/*.stories.@(ts|tsx)"],
+	addons: [
+		"@storybook/addon-essentials",
+		// Listed explicitly so the component pages' MDX can render GitHub-style tables;
+		// addon-essentials then skips its own copy of the docs addon.
+		{
+			name: "@storybook/addon-docs",
+			options: { mdxPluginOptions: { mdxCompileOptions: { remarkPlugins: [remarkGfm] } } },
+		},
+		"@storybook/addon-a11y",
+	],
 	framework: {
 		name: "@storybook/react-vite",
 		options: {},
