@@ -76,7 +76,7 @@ function ThemeLabel() {
 
 ### `ThemeToggle`
 
-A ready-made icon button that calls `toggleTheme`. It shows a sun in dark mode and a moon in light mode, and labels itself "Switch to light theme" or "Switch to dark theme". It accepts every [`Button`](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-button--docs) prop except `children` and `onClick`. With `variant` and `size` left at `"none"`, it adds a 36px square hit target, rounded corners and an accent hover.
+A ready-made icon button that calls `toggleTheme`. It shows a sun in dark mode and a moon in light mode, and labels itself "Switch to light theme" or "Switch to dark theme". It accepts every [`Button`](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-button--docs) prop except `children` and `onClick`. With `variant` and `size` left at `"none"`, it adds a 36px square hit target, rounded corners and an accent hover. Render it inside a `ThemeProvider`; like `useTheme()`, it throws outside one.
 
 ```tsx
 <ThemeToggle tooltip="Toggle theme" />

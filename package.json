@@ -48,9 +48,10 @@
 		"provenance": true
 	},
 	"scripts": {
-		"build": "npm run build:js && npm run build:css",
+		"build": "npm run build:js && npm run build:css && npm run build:llms",
 		"build:js": "vite build",
 		"build:css": "tailwindcss -i ./src/styles.css -o ./dist/styles.css --minify && cpy src/theme/theme.css src/theme/base.css dist --flat",
+		"build:llms": "node --experimental-strip-types scripts/build-llms.ts dist",
 		"prepare": "npm run build",
 		"dev": "vite build --watch",
 		"test": "vitest run",
@@ -62,7 +63,7 @@
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"storybook": "storybook dev -p 6006",
-		"build-storybook": "storybook build",
+		"build-storybook": "storybook build && node --experimental-strip-types scripts/build-llms.ts storybook-static",
 		"build:web-components": "npm run build --workspaces --if-present",
 		"test:web-components": "npm run test --workspaces --if-present",
 		"typecheck:web-components": "npm run typecheck --workspaces --if-present"

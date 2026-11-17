@@ -12,6 +12,10 @@ Guides and reference for [`@falkordb/ui`](../README.md). Component reference liv
 
 Each component's reference (usage, props and accessibility notes, with live examples) is in [Storybook](https://falkordb.github.io/falkordb-ui/). The [component list](../README.md#components) links to every page.
 
+## AI agents
+
+Every guide and component page is also built as plain Markdown for coding agents: `llms.txt` (an index with usage rules) and `llms-full.txt` (everything in one file). They ship in the npm package under `dist/` and are online at [falkordb.github.io/falkordb-ui/llms.txt](https://falkordb.github.io/falkordb-ui/llms.txt). See [AI agents](../README.md#ai-agents).
+
 ## Web components
 
 Framework-free web components, such as [`@falkordb/canvas`](../web-components/canvas/README.md), are documented in their own READMEs. See the [web components overview](../web-components/README.md).

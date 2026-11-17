@@ -12,11 +12,11 @@ React 18.3+ or 19 is a peer dependency.
 
 ## Add the styles
 
-Pick the option that matches your project. Both give identical output.
+Pick the option that matches your project. Both style the components identically.
 
 ### Option 1 — prebuilt CSS (no Tailwind required)
 
-Works on any stack, including Tailwind v3 projects. Import it once, at your app's entry point:
+Works on any stack, including Tailwind v3 projects. It holds only the utility classes the components use, so Tailwind classes you write in your own code may not exist; use Option 2 for those. Import it once, at your app's entry point:
 
 ```ts
 import "@falkordb/ui/styles.css";
