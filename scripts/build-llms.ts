@@ -4,7 +4,7 @@
 // Usage: node --experimental-strip-types scripts/build-llms.ts <outDir>
 
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, join, posix, resolve } from "node:path";
+import { dirname, join, posix, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -147,8 +147,9 @@ export function firstParagraph(markdown: string): string {
 
 /**
  * Rewrites links so they resolve outside Storybook and the repository: links to another page
- * point at its generated Markdown (`page`) or its section of llms-full.txt (`full`); other
- * relative links point at GitHub, and other Storybook links at the live site.
+ * point at its generated Markdown (`page`) or its section of llms-full.txt (`full`), whether
+ * written as a Storybook or a relative link; other relative links point at GitHub, and other
+ * Storybook links at the live site.
  */
 export function rewriteLinks(markdown: string, page: Page, pages: Page[], target: "page" | "full"): string {
 	const bySource = new Map(pages.map((other) => [other.source, other]));
@@ -163,10 +164,11 @@ export function rewriteLinks(markdown: string, page: Page, pages: Page[], target
 			code
 				? line
 				: line.replace(/\]\(([^)\s]+)\)/g, (match, href: string) => {
-						const storybook = /^\?path=\/docs\/([\w-]+)--docs(#.*)?$/.exec(href);
+						const query = href.startsWith(STORYBOOK_URL) ? href.slice(STORYBOOK_URL.length) : href;
+						const storybook = /^\?path=\/docs\/([\w-]+)--docs(#.*)?$/.exec(query);
 						if (storybook) {
 							const other = byStorybookId.get(storybook[1] ?? "");
-							return `](${other ? linkTo(other, storybook[2] ?? "") : `${STORYBOOK_URL}${href}`})`;
+							return `](${other ? linkTo(other, storybook[2] ?? "") : `${STORYBOOK_URL}${query}`})`;
 						}
 						if (/^([a-z]+:|#)/i.test(href)) return match;
 
@@ -191,9 +193,10 @@ function demoteHeadings(markdown: string): string {
 /** Generated files keyed by their path relative to the output directory. */
 export function buildLlms(rootDir: string): Record<string, string> {
 	const listed = new Set(COMPONENTS.map((page) => page.source));
-	const unlisted = readdirSync(join(rootDir, "stories"))
+	// Recursive, like the stories glob in .storybook/main.ts.
+	const unlisted = readdirSync(join(rootDir, "stories"), { recursive: true, encoding: "utf8" })
 		.filter((file) => file.endsWith(".mdx"))
-		.map((file) => `stories/${file}`)
+		.map((file) => `stories/${file.split(sep).join("/")}`)
 		.filter((source) => !listed.has(source));
 	if (unlisted.length > 0) {
 		throw new Error(`Add ${unlisted.join(", ")} to COMPONENTS in scripts/build-llms.ts.`);

@@ -49,9 +49,9 @@ describe("build-llms", () => {
 	it("fails when an MDX page is not registered", () => {
 		const dir = mkdtempSync(join(tmpdir(), "llms-"));
 		try {
-			mkdirSync(join(dir, "stories"));
-			writeFileSync(join(dir, "stories", "Widget.mdx"), "# Widget\n");
-			expect(() => buildLlms(dir)).toThrow("Add stories/Widget.mdx to COMPONENTS");
+			mkdirSync(join(dir, "stories", "patterns"), { recursive: true });
+			writeFileSync(join(dir, "stories", "patterns", "Widget.mdx"), "# Widget\n");
+			expect(() => buildLlms(dir)).toThrow("Add stories/patterns/Widget.mdx to COMPONENTS");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -61,6 +61,7 @@ describe("build-llms", () => {
 		const theming = GUIDES.find((page) => page.slug === "theming")!;
 		const markdown = [
 			"[Button](?path=/docs/primitives-button--docs)",
+			"[Card](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-card--docs)",
 			"[Tokens](?path=/docs/theme-tokens--docs)",
 			"[Setup](./getting-started.md#install)",
 			"[Theme](../src/theme/theme.css)",
@@ -70,6 +71,7 @@ describe("build-llms", () => {
 		expect(rewriteLinks(markdown, theming, pages, "page")).toBe(
 			[
 				"[Button](./button.md)",
+				"[Card](./card.md)",
 				"[Tokens](https://falkordb.github.io/falkordb-ui/?path=/docs/theme-tokens--docs)",
 				"[Setup](./getting-started.md#install)",
 				"[Theme](https://github.com/FalkorDB/falkordb-ui/blob/main/src/theme/theme.css)",
@@ -77,7 +79,7 @@ describe("build-llms", () => {
 			].join("\n"),
 		);
 		expect(rewriteLinks(markdown, theming, pages, "full")).toMatch(
-			/^\[Button\]\(#button\)\n.*\n\[Setup\]\(#install\)/,
+			/^\[Button\]\(#button\)\n\[Card\]\(#card\)\n.*\n\[Setup\]\(#install\)/,
 		);
 	});
 });
