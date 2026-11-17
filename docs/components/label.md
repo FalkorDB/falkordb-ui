@@ -7,7 +7,7 @@ An accessible label for a form control.
 ## Import
 
 ```tsx
-import { Label } from "@falkordb/ui";
+import { Checkbox, Label } from "@falkordb/ui";
 ```
 
 ## Usage

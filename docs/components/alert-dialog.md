@@ -17,6 +17,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 	AlertDialogTrigger,
+	Button,
 } from "@falkordb/ui";
 ```
 

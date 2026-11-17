@@ -83,7 +83,7 @@ Every component is a named export of `@falkordb/ui`. Browse them in the [compone
 
 ## Conventions shared by every component
 
-- **Styling.** Every component accepts `className`, merged with [`cn()`](./theming.md#merging-classes-with-cn) so your classes win over the defaults. Where an inner part cannot be reached with `className`, the component exposes a dedicated prop such as `thumbClassName` or `overlayClassName`.
-- **Refs.** Components forward their ref to the underlying DOM element.
-- **Composition.** Components built on [Radix UI](https://www.radix-ui.com/primitives) accept that primitive's props too, including `asChild`. Each component page links the Radix docs it builds on.
+- **Styling.** Components that render a DOM element accept `className`, merged with [`cn()`](./theming.md#merging-classes-with-cn) so your classes win over the defaults. Where an inner part cannot be reached with `className`, the component exposes a dedicated prop such as `thumbClassName` or `overlayClassName`. Root and provider components, such as `Dialog` or `ThemeProvider`, take only the props on their page.
+- **Refs.** Most components forward their ref to the underlying DOM element. Simple layout helpers such as `DialogHeader` and `DialogFooter`, and `ThemeToggle`, do not.
+- **Composition.** Components built on [Radix UI](https://www.radix-ui.com/primitives) accept that primitive's props too. `asChild` works on the parts whose Radix API lists it, such as triggers. Each component page links the Radix docs it builds on.
 - **No focus rings.** FalkorDB products draw no focus outline; this is deliberate.

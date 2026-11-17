@@ -15,9 +15,9 @@ import { Slider } from "@falkordb/ui";
 The value is always an array: one number per thumb.
 
 ```tsx
-const [timeout, setTimeout] = useState([30]);
+const [seconds, setSeconds] = useState([30]);
 
-<Slider value={timeout} onValueChange={setTimeout} max={60} />;
+<Slider value={seconds} onValueChange={setSeconds} max={60} />;
 ```
 
 A range slider passes two values and gets two thumbs:
@@ -31,6 +31,8 @@ A range slider passes two values and gets two thumbs:
 `renderThumb` wraps each thumb. The thumb must stay the trigger, so pass it through with `asChild`:
 
 ```tsx
+import { Slider, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@falkordb/ui";
+
 <TooltipProvider>
 	<Slider
 		value={value}
@@ -43,7 +45,7 @@ A range slider passes two values and gets two thumbs:
 			</Tooltip>
 		)}
 	/>
-</TooltipProvider>
+</TooltipProvider>;
 ```
 
 ## Props

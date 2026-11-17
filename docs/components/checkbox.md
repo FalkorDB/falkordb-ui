@@ -7,7 +7,7 @@ A checkbox with checked, unchecked and indeterminate states.
 ## Import
 
 ```tsx
-import { Checkbox } from "@falkordb/ui";
+import { Checkbox, Label } from "@falkordb/ui";
 ```
 
 ## Usage

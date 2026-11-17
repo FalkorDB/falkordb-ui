@@ -22,38 +22,42 @@ This repository publishes several npm packages, each versioned and released on i
 
 `@falkordb/ui` is a set of React components built on [Radix UI](https://www.radix-ui.com) and [Tailwind CSS](https://tailwindcss.com) v4, in the shadcn/ui style: accessible behaviour underneath, FalkorDB's look on top.
 
-1. Install it. React 18.3+ or 19 is a peer dependency.
+### 1. Install
 
-   ```bash
-   npm install @falkordb/ui
-   ```
+React 18.3+ or 19 is a peer dependency.
 
-2. Import the styles once, at your app's entry point. No Tailwind setup is needed.
+```bash
+npm install @falkordb/ui
+```
 
-   ```ts
-   import "@falkordb/ui/styles.css";
-   ```
+### 2. Import the styles
 
-   Already on Tailwind v4? You can [build from the theme source](./docs/getting-started.md#option-2--tailwind-v4-source) instead.
+Import them once, at your app's entry point. No Tailwind setup is needed.
 
-3. Use the components.
+```ts
+import "@falkordb/ui/styles.css";
+```
 
-   ```tsx
-   import { Button, Card, CardContent, CardHeader, CardTitle } from "@falkordb/ui";
+Already on Tailwind v4? You can [build from the theme source](./docs/getting-started.md#option-2--tailwind-v4-source) instead.
 
-   export function GraphCard() {
-   	return (
-   		<Card>
-   			<CardHeader>
-   				<CardTitle>social-network</CardTitle>
-   			</CardHeader>
-   			<CardContent>
-   				<Button onClick={run}>Run query</Button>
-   			</CardContent>
-   		</Card>
-   	);
-   }
-   ```
+### 3. Use the components
+
+```tsx
+import { Button, Card, CardContent, CardHeader, CardTitle } from "@falkordb/ui";
+
+export function GraphCard({ run }: { run: () => void }) {
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>social-network</CardTitle>
+			</CardHeader>
+			<CardContent>
+				<Button onClick={run}>Run query</Button>
+			</CardContent>
+		</Card>
+	);
+}
+```
 
 Next: [Getting started](./docs/getting-started.md) covers dark mode and the conventions every component shares.
 

@@ -21,17 +21,23 @@ import { Button, buttonVariants } from "@falkordb/ui";
 
 ### Icon-only buttons
 
-An icon-only button needs an accessible name. Pass `tooltip`: the button brings its own `TooltipProvider`, so it works without any setup higher in the tree.
+An icon-only button needs an accessible name: set `aria-label`. Add a `tooltip` for sighted users too; the button brings its own `TooltipProvider`, so it works without any setup higher in the tree.
 
 ```tsx
-<Button variant="none" size="none" className="rounded-md p-2 hover:bg-accent" tooltip="Export graph as CSV">
+<Button
+	variant="none"
+	size="none"
+	className="rounded-md p-2 hover:bg-accent"
+	aria-label="Export graph as CSV"
+	tooltip="Export graph as CSV"
+>
 	<Download />
 </Button>
 ```
 
 ### Render as another element
 
-`asChild` renders the button's styles and behaviour onto its single child, for example a link. `isLoading` and `label` still work and render inside that element.
+`asChild` renders the button's styles and behaviour onto its single child, for example a link. `isLoading` shows the spinner inside that element, and `label` renders inside it when not loading. `type` is not applied, so set it on the child yourself.
 
 ```tsx
 <Button asChild variant="link">
@@ -43,18 +49,18 @@ An icon-only button needs an accessible name. Pass `tooltip`: the button brings 
 
 Accepts every `<button>` attribute, plus:
 
-| Prop             | Type                                                                        | Default     | Description                                                                    |
-| ---------------- | --------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------ |
-| `variant`        | `"default" \| "secondary" \| "cancel" \| "destructive" \| "link" \| "none"` | `"default"` | Visual style. See [Variants](#variants).                                       |
-| `size`           | `"default" \| "wide" \| "none"`                                             | `"default"` | Padding. `wide` suits the outlined variants.                                   |
-| `isLoading`      | `boolean`                                                                   | `false`     | Replaces the content with a spinner and disables the button.                   |
-| `loaderSize`     | `number`                                                                    | —           | Spinner size in pixels.                                                        |
-| `label`          | `ReactNode`                                                                 | —           | Trailing text that truncates instead of widening the button.                   |
-| `labelClassName` | `string`                                                                    | —           | Classes for the label.                                                         |
-| `tooltip`        | `ReactNode`                                                                 | —           | Wraps the button in a tooltip. Always set it on icon-only buttons.             |
-| `tooltipSide`    | `"top" \| "right" \| "bottom" \| "left"`                                    | —           | Which side the tooltip opens on.                                               |
-| `asChild`        | `boolean`                                                                   | `false`     | Renders onto the single child element instead of a `<button>`.                 |
-| `type`           | `string`                                                                    | `"button"`  | Defaults to `"button"`, so a button inside a form does not submit by accident. |
+| Prop             | Type                                                                        | Default     | Description                                                                                                |
+| ---------------- | --------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------- |
+| `variant`        | `"default" \| "secondary" \| "cancel" \| "destructive" \| "link" \| "none"` | `"default"` | Visual style. See [Variants](#variants).                                                                   |
+| `size`           | `"default" \| "wide" \| "none"`                                             | `"default"` | Padding. `wide` suits the outlined variants.                                                               |
+| `isLoading`      | `boolean`                                                                   | `false`     | Replaces the content with a spinner and disables the button.                                               |
+| `loaderSize`     | `number`                                                                    | —           | Spinner size in pixels.                                                                                    |
+| `label`          | `ReactNode`                                                                 | —           | Trailing text that truncates instead of widening the button.                                               |
+| `labelClassName` | `string`                                                                    | —           | Classes for the label.                                                                                     |
+| `tooltip`        | `ReactNode`                                                                 | —           | Wraps the button in a tooltip. It does not name the button; use `aria-label`.                              |
+| `tooltipSide`    | `"top" \| "right" \| "bottom" \| "left"`                                    | —           | Which side the tooltip opens on.                                                                           |
+| `asChild`        | `boolean`                                                                   | `false`     | Renders onto the single child element instead of a `<button>`.                                             |
+| `type`           | `string`                                                                    | `"button"`  | Defaults to `"button"`, so a button inside a form does not submit by accident. Not applied with `asChild`. |
 
 ## Variants
 

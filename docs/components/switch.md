@@ -7,7 +7,7 @@ An on/off toggle for a setting that applies immediately.
 ## Import
 
 ```tsx
-import { Switch } from "@falkordb/ui";
+import { Label, Switch } from "@falkordb/ui";
 ```
 
 ## Usage

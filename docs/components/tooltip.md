@@ -18,7 +18,7 @@ Mount one `TooltipProvider` near the root of your app, then wrap each tooltip:
 <TooltipProvider>
 	<Tooltip>
 		<TooltipTrigger asChild>
-			<span>social-network</span>
+			<span tabIndex={0}>social-network</span>
 		</TooltipTrigger>
 		<TooltipContent>1,204 nodes</TooltipContent>
 	</Tooltip>

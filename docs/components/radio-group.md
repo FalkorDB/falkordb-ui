@@ -7,7 +7,7 @@ A set of options where exactly one is selected.
 ## Import
 
 ```tsx
-import { RadioGroup, RadioGroupItem } from "@falkordb/ui";
+import { Label, RadioGroup, RadioGroupItem } from "@falkordb/ui";
 ```
 
 ## Usage

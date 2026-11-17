@@ -7,7 +7,7 @@ A single-line text field.
 ## Import
 
 ```tsx
-import { Input } from "@falkordb/ui";
+import { Input, Label } from "@falkordb/ui";
 ```
 
 ## Usage

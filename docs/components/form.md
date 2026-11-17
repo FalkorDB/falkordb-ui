@@ -89,7 +89,7 @@ For a control the form does not ship, such as a searchable picker. Put `id` on t
 
 | Option           | Type                                                           | Description                                                                                                  |
 | ---------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `name`           | `string`                                                       | Required. Unique key, and the `name` submitted with the control.                                             |
+| `name`           | `string`                                                       | Required. Unique key used to track and validate the field.                                                   |
 | `label`          | `ReactNode`                                                    | Required.                                                                                                    |
 | `value`          | `string`                                                       | Required. The current value. For tag fields, pass the tags joined, e.g. `tags.join(",")`; `errors` check it. |
 | `id`             | `string`                                                       | The control's id. Generated when omitted.                                                                    |
@@ -104,7 +104,7 @@ For a control the form does not ship, such as a searchable picker. Put `id` on t
 
 ### Validation
 
-A field's `errors` are checked when its value changes, when the form is submitted, and when the set of fields changes (for example, a login form switching mode). They are not checked on mount, so an untouched form starts clean.
+A field's `errors` are checked when its value changes (except tag fields; see [Tag fields](#tag-fields)), when the form is submitted, and when the set of fields changes (for example, a login form switching mode). They are not checked on mount, so an untouched form starts clean.
 
 A field with `errors` reserves a line for its message, so the layout does not jump when one appears.
 
@@ -169,4 +169,4 @@ import { FormControl, FormDescription, FormField, FormLabel, FormMessage } from 
 
 ## Accessibility
 
-Errors are announced (`role="alert"`) and linked to their control with `aria-describedby`, and the control gets `aria-invalid`.
+Errors are announced (`role="alert"`) and the control gets `aria-invalid`. Standard controls are also linked to their error and description with `aria-describedby`; tag and custom fields are not, so a custom renderer must add that linkage itself.

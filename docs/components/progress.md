@@ -16,11 +16,11 @@ import { Progress } from "@falkordb/ui";
 <Progress value={uploaded} aria-label="Upload progress" />
 ```
 
-`value` is a percentage from 0 to 100.
+`value` is a percentage from 0 to 100. The bar always fills on that scale, so leave `max` at its default of 100.
 
 ## Props
 
-Accepts the props of [Radix Progress](https://www.radix-ui.com/primitives/docs/components/progress#api-reference) (`value`, `max`, `getValueLabel`, …), plus:
+Accepts the props of [Radix Progress](https://www.radix-ui.com/primitives/docs/components/progress#api-reference) (`value`, `getValueLabel`, …), plus:
 
 | Prop                 | Type     | Description                                                 |
 | -------------------- | -------- | ----------------------------------------------------------- |

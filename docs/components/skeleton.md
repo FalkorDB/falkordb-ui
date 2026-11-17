@@ -28,6 +28,17 @@ Give it the size of the content it stands in for:
 
 Accepts every `<div>` attribute. There are no extra props.
 
+## Accessibility
+
+A skeleton is a bare `<div>` with no role, so screen readers get no signal that content is loading. Mark the loading region with `aria-busy` and add visually hidden status text:
+
+```tsx
+<div aria-busy="true">
+	<span className="sr-only">Loading graphs…</span>
+	<Skeleton className="h-4 w-48" aria-hidden />
+</div>
+```
+
 ## Related
 
 [Progress](./progress.md) for loading with a known amount.

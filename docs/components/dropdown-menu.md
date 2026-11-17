@@ -72,7 +72,7 @@ import {
 | `DropdownMenuSub`, `DropdownMenuSubTrigger`, `DropdownMenuSubContent` | A nested menu. `SubTrigger` takes `inset`; `SubContent` takes `preventOutsideClose`. |
 | `DropdownMenuPortal`                                                  | Portal for custom content.                                                           |
 
-Each part accepts the props of the matching [Radix Dropdown Menu](https://www.radix-ui.com/primitives/docs/components/dropdown-menu#api-reference) part.
+Each part accepts the props of the matching [Radix Dropdown Menu](https://www.radix-ui.com/primitives/docs/components/dropdown-menu#api-reference) part, except `DropdownMenuShortcut`, which takes `<span>` attributes.
 
 ### Extra props
 

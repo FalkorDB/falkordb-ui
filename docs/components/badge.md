@@ -13,6 +13,8 @@ import { Badge, badgeVariants } from "@falkordb/ui";
 ## Usage
 
 ```tsx
+import { Tag } from "lucide-react";
+
 <Badge>Person</Badge>
 <Badge variant="success">Connected</Badge>
 <Badge variant="outline">

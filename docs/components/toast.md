@@ -2,7 +2,7 @@
 
 A short, non-blocking notification that disappears on its own.
 
-[Storybook](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-toast--docs) · [Source](../../src/hooks/use-toast.ts) · [Radix Toast](https://www.radix-ui.com/primitives/docs/components/toast)
+[Storybook](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-toast--docs) · [Source](../../src/components/toast.tsx) · [Radix Toast](https://www.radix-ui.com/primitives/docs/components/toast)
 
 ## Import
 

@@ -7,7 +7,7 @@ A bordered surface that groups related content.
 ## Import
 
 ```tsx
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@falkordb/ui";
+import { Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@falkordb/ui";
 ```
 
 ## Usage
