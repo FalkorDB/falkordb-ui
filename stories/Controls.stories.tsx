@@ -54,10 +54,17 @@ export const SliderWithValue: Story = {
 	},
 };
 
-export const Loading: Story = {
+export const ProgressBar: Story = {
+	render: () => (
+		<div className="w-72">
+			<Progress value={62} />
+		</div>
+	),
+};
+
+export const SkeletonLines: Story = {
 	render: () => (
 		<div className="flex w-72 flex-col gap-4">
-			<Progress value={62} />
 			<Skeleton className="h-4 w-full" />
 			<Skeleton className="h-4 w-2/3" />
 		</div>
