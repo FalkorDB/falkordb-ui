@@ -106,6 +106,21 @@ Every colour, radius and font is a CSS custom property, so a product can rebrand
 
 Dark mode follows a `dark` class on an ancestor; `ThemeProvider` and `ThemeToggle` can manage it for you. See [Theming](./docs/theming.md) for every token, dark mode and `cn()`.
 
+## AI agents
+
+Coding agents such as Copilot, Claude Code and Cursor cannot read Storybook, so every guide and component page is also published as plain Markdown, following the [llms.txt](https://llmstxt.org) convention:
+
+| File            | Installed package                              | Online                                                                                               |
+| --------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `llms.txt`      | `node_modules/@falkordb/ui/dist/llms.txt`      | [falkordb.github.io/falkordb-ui/llms.txt](https://falkordb.github.io/falkordb-ui/llms.txt)           |
+| `llms-full.txt` | `node_modules/@falkordb/ui/dist/llms-full.txt` | [falkordb.github.io/falkordb-ui/llms-full.txt](https://falkordb.github.io/falkordb-ui/llms-full.txt) |
+
+`llms.txt` is a short index with the rules for using the package and a link to one Markdown page per guide and component, in `dist/llms/`. `llms-full.txt` holds every page in one file. To point your agent at them, add a line like this to your project's `AGENTS.md`:
+
+```md
+UI components come from `@falkordb/ui`. Read `node_modules/@falkordb/ui/dist/llms.txt` before using them.
+```
+
 ## Web components
 
 Self-contained components for any framework, or none at all. Each renders in its own shadow DOM and ships as a separate npm package from [`web-components/`](./web-components):
@@ -121,6 +136,7 @@ See the [web components overview](./web-components/README.md) for how they diffe
 - [Getting started](./docs/getting-started.md)
 - [Theming](./docs/theming.md)
 - [Component reference](#components)
+- [Docs for AI agents](#ai-agents)
 - [Storybook](https://falkordb.github.io/falkordb-ui/), published from `main`
 - [Releasing](./docs/releasing.md), for maintainers
 
@@ -143,7 +159,7 @@ npm run test:web-components
 npm run build -w web-components/canvas   # a single package
 ```
 
-Component docs live next to their stories as `stories/<Component>.mdx`. Update the page in the same change as the component.
+Component docs live next to their stories as `stories/<Component>.mdx`. Update the page in the same change as the component. `npm run build` and `npm run build-storybook` also turn the guides and these pages into the [docs for AI agents](#ai-agents); register a new page in [`scripts/build-llms.ts`](./scripts/build-llms.ts). Contributors' agents should read [AGENTS.md](./AGENTS.md).
 
 ## License
 
