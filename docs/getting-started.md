@@ -79,7 +79,7 @@ export function GraphCard({ run }: { run: () => void }) {
 }
 ```
 
-Every component is a named export of `@falkordb/ui`. Browse them in the [component index](./README.md#components) or try them live in [Storybook](https://falkordb.github.io/falkordb-ui/).
+Every component is a named export of `@falkordb/ui`. Browse the [component list](../README.md#components), or open each one's reference and live examples in [Storybook](https://falkordb.github.io/falkordb-ui/).
 
 ## Conventions shared by every component
 

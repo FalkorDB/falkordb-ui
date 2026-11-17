@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/tabs";
 const meta = {
 	title: "Primitives/Tabs",
 	component: Tabs,
-	tags: ["autodocs"],
 } satisfies Meta<typeof Tabs>;
 
 export default meta;

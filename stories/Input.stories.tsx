@@ -5,7 +5,6 @@ import { Input } from "@/components/input";
 const meta = {
 	title: "Primitives/Input",
 	component: Input,
-	tags: ["autodocs"],
 	args: { placeholder: "Graph name" },
 	decorators: [
 		(Story) => (

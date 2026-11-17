@@ -1,0 +1,40 @@
+import { Canvas, Meta } from "@storybook/blocks";
+
+import * as ControlsStories from "./Controls.stories";
+
+<Meta title="Primitives/Label" />
+
+# Label
+
+An accessible label for a form control.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/label.tsx) · [Radix Label](https://www.radix-ui.com/primitives/docs/components/label)
+
+<Canvas of={ControlsStories.Radios} />
+
+## Import
+
+```tsx
+import { Checkbox, Label } from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+<div className="flex items-center gap-2">
+	<Checkbox id="labels" />
+	<Label htmlFor="labels">Show labels</Label>
+</div>
+```
+
+## Props
+
+Accepts the props of [Radix Label](https://www.radix-ui.com/primitives/docs/components/label#api-reference), including `htmlFor` and `asChild`.
+
+## Notes
+
+When the control before it has the `peer` class and is disabled, the label dims too. [Checkbox](?path=/docs/primitives-checkbox--docs) and [Switch](?path=/docs/primitives-switch--docs) carry `peer` already.
+
+## Related
+
+[Form](?path=/docs/primitives-form--docs) has its own `FormLabel`, with a required marker and an info hint.

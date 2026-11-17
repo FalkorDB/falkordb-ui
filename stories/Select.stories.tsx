@@ -14,7 +14,6 @@ import {
 const meta = {
 	title: "Primitives/Select",
 	component: Select,
-	tags: ["autodocs"],
 	decorators: [
 		(Story) => (
 			<div className="max-w-xs">

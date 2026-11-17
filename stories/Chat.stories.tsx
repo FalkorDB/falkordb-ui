@@ -19,7 +19,6 @@ import {
 const meta = {
 	title: "Patterns/Chat",
 	component: Chat,
-	tags: ["autodocs"],
 	decorators: [
 		(Story) => (
 			<div className="h-[520px] max-w-md rounded-lg border border-border bg-background p-2">

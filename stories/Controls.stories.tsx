@@ -11,7 +11,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 const meta = {
 	title: "Primitives/Controls",
-	tags: ["autodocs"],
 } satisfies Meta;
 
 export default meta;

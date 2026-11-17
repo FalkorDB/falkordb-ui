@@ -7,7 +7,6 @@ import { Form, type FieldConfig } from "@/components/form";
 const meta = {
 	title: "Primitives/Form",
 	component: Form,
-	tags: ["autodocs"],
 	decorators: [
 		(Story) => (
 			<div className="max-w-md">

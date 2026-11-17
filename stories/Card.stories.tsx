@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 const meta = {
 	title: "Primitives/Card",
 	component: Card,
-	tags: ["autodocs"],
 	decorators: [
 		(Story) => (
 			<div className="max-w-sm">

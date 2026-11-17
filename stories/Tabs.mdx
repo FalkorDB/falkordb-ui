@@ -1,0 +1,51 @@
+import { Canvas, Meta } from "@storybook/blocks";
+
+import * as TabsStories from "./Tabs.stories";
+
+<Meta of={TabsStories} />
+
+# Tabs
+
+Switches between views that share the same space.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/tabs.tsx) · [Radix Tabs](https://www.radix-ui.com/primitives/docs/components/tabs)
+
+<Canvas of={TabsStories.Default} />
+
+## Import
+
+```tsx
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+<Tabs defaultValue="graph">
+	<TabsList>
+		<TabsTrigger value="graph">Graph</TabsTrigger>
+		<TabsTrigger value="table">Table</TabsTrigger>
+		<TabsTrigger value="metadata" disabled>
+			Metadata
+		</TabsTrigger>
+	</TabsList>
+	<TabsContent value="graph">The force-directed canvas renders here.</TabsContent>
+	<TabsContent value="table">Raw result rows render here.</TabsContent>
+	<TabsContent value="metadata">Query plan and timings render here.</TabsContent>
+</Tabs>
+```
+
+## Parts
+
+| Part          | Description                                                                     |
+| ------------- | ------------------------------------------------------------------------------- |
+| `Tabs`        | Root. Holds `value`, `defaultValue`, `onValueChange` and `orientation`.         |
+| `TabsList`    | The row of triggers.                                                            |
+| `TabsTrigger` | One tab. Needs a `value`. Icons inside it are sized to fit; `disabled` dims it. |
+| `TabsContent` | The panel shown when its `value` is active.                                     |
+
+Each part accepts the props of the matching [Radix Tabs](https://www.radix-ui.com/primitives/docs/components/tabs#api-reference) part.
+
+## Accessibility
+
+Arrow keys move between triggers and skip disabled ones.

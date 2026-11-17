@@ -1,0 +1,39 @@
+import { Canvas, Meta } from "@storybook/blocks";
+
+import * as TextareaStories from "./Textarea.stories";
+
+<Meta of={TextareaStories} />
+
+# Textarea
+
+A multi-line text field.
+
+[Source](https://github.com/FalkorDB/falkordb-ui/blob/main/src/components/textarea.tsx)
+
+<Canvas of={TextareaStories.Default} />
+
+## Import
+
+```tsx
+import { Textarea } from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+<Label htmlFor="query">Query</Label>
+<Textarea id="query" placeholder="MATCH (n) RETURN n" value={query} onChange={(event) => setQuery(event.target.value)} />
+```
+
+## Props
+
+Accepts every `<textarea>` attribute. There are no extra props.
+
+## States
+
+- **Invalid:** set `aria-invalid` and the border turns destructive.
+- **Disabled:** `disabled` dims the field and shows a not-allowed cursor.
+
+## Related
+
+[Input](?path=/docs/primitives-input--docs) · [Form](?path=/docs/primitives-form--docs), whose `textarea` field type renders this component.

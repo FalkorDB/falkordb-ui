@@ -63,36 +63,36 @@ Next: [Getting started](./docs/getting-started.md) covers dark mode and the conv
 
 ## Components
 
-Each component has a reference page with usage, props and accessibility notes, and a live Storybook page.
+Each component has a [Storybook](https://falkordb.github.io/falkordb-ui/) page with live examples, usage, props and accessibility notes.
 
-| Component    | Description                                           | Docs                                       | Storybook                                                                                          |
-| ------------ | ----------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| Button       | Variants, loading state, trailing label and tooltip   | [Docs](./docs/components/button.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-button--docs)                 |
-| Input        | Single-line text field                                | [Docs](./docs/components/input.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-input--docs)                  |
-| Textarea     | Multi-line text field                                 | [Docs](./docs/components/textarea.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-textarea--docs)               |
-| Label        | Accessible label for a control                        | [Docs](./docs/components/label.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--radios)            |
-| Select       | Dropdown for choosing one value                       | [Docs](./docs/components/select.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-select--docs)                 |
-| Checkbox     | Checkbox with an indeterminate state                  | [Docs](./docs/components/checkbox.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-checkbox--docs)               |
-| Switch       | On/off toggle                                         | [Docs](./docs/components/switch.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-switch--docs)                 |
-| RadioGroup   | Pick exactly one option                               | [Docs](./docs/components/radio-group.md)   | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--radios)            |
-| Slider       | Draggable value or range                              | [Docs](./docs/components/slider.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--slider-with-value) |
-| Form         | Validated field stack built from a config             | [Docs](./docs/components/form.md)          | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-form--docs)                   |
-| Badge        | Pill for a status, count or tag                       | [Docs](./docs/components/badge.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-badge--docs)                  |
-| Card         | Bordered surface for grouped content                  | [Docs](./docs/components/card.md)          | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-card--docs)                   |
-| Table        | Styled table with a scrolling wrapper                 | [Docs](./docs/components/table.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-table--docs)                  |
-| Progress     | Progress bar                                          | [Docs](./docs/components/progress.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--loading)           |
-| Skeleton     | Pulsing loading placeholder                           | [Docs](./docs/components/skeleton.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--loading)           |
-| Tooltip      | Short label on hover or focus                         | [Docs](./docs/components/tooltip.md)       | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-tooltip--docs)                |
-| HintTip      | Info icon that reveals a hint, also on touch          | [Docs](./docs/components/hint-tip.md)      | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-overlays--hints)             |
-| Popover      | Floating panel anchored to a trigger                  | [Docs](./docs/components/popover.md)       | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-overlays--popover-panel)     |
-| DropdownMenu | Menu of actions, with checkboxes and submenus         | [Docs](./docs/components/dropdown-menu.md) | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-overlays--menu)              |
-| Dialog       | Modal window for a focused task                       | [Docs](./docs/components/dialog.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-dialog--docs)                 |
-| AlertDialog  | Confirm or cancel a destructive action                | [Docs](./docs/components/alert-dialog.md)  | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-alertdialog--docs)            |
-| Drawer       | Draggable panel from the screen edge                  | [Docs](./docs/components/drawer.md)        | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-overlays--bottom-drawer)     |
-| Toast        | Non-blocking notification, callable from anywhere     | [Docs](./docs/components/toast.md)         | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-toast--docs)                  |
-| Tabs         | Switch between views in the same space                | [Docs](./docs/components/tabs.md)          | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-tabs--docs)                   |
-| Resizable    | Panels with draggable dividers                        | [Docs](./docs/components/resizable.md)     | [Live](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--panels)            |
-| Chat         | Header, conversation, input row and footer for a chat | [Docs](./docs/components/chat.md)          | [Live](https://falkordb.github.io/falkordb-ui/?path=/docs/patterns-chat--docs)                     |
+| Component                                                                                        | Description                                           |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| [Button](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-button--docs)             | Variants, loading state, trailing label and tooltip   |
+| [Input](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-input--docs)               | Single-line text field                                |
+| [Textarea](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-textarea--docs)         | Multi-line text field                                 |
+| [Label](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-label--docs)               | Accessible label for a control                        |
+| [Select](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-select--docs)             | Dropdown for choosing one value                       |
+| [Checkbox](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-checkbox--docs)         | Checkbox with an indeterminate state                  |
+| [Switch](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-switch--docs)             | On/off toggle                                         |
+| [RadioGroup](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-radiogroup--docs)     | Pick exactly one option                               |
+| [Slider](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-slider--docs)             | Draggable value or range                              |
+| [Form](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-form--docs)                 | Validated field stack built from a config             |
+| [Badge](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-badge--docs)               | Pill for a status, count or tag                       |
+| [Card](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-card--docs)                 | Bordered surface for grouped content                  |
+| [Table](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-table--docs)               | Styled table with a scrolling wrapper                 |
+| [Progress](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-progress--docs)         | Progress bar                                          |
+| [Skeleton](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-skeleton--docs)         | Pulsing loading placeholder                           |
+| [Tooltip](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-tooltip--docs)           | Short label on hover or focus                         |
+| [HintTip](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-hinttip--docs)           | Info icon that reveals a hint, also on touch          |
+| [Popover](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-popover--docs)           | Floating panel anchored to a trigger                  |
+| [DropdownMenu](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-dropdownmenu--docs) | Menu of actions, with checkboxes and submenus         |
+| [Dialog](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-dialog--docs)             | Modal window for a focused task                       |
+| [AlertDialog](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-alertdialog--docs)   | Confirm or cancel a destructive action                |
+| [Drawer](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-drawer--docs)             | Draggable panel from the screen edge                  |
+| [Toast](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-toast--docs)               | Non-blocking notification, callable from anywhere     |
+| [Tabs](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-tabs--docs)                 | Switch between views in the same space                |
+| [Resizable](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-resizable--docs)       | Panels with draggable dividers                        |
+| [Chat](https://falkordb.github.io/falkordb-ui/?path=/docs/patterns-chat--docs)                   | Header, conversation, input row and footer for a chat |
 
 ## Theming
 
@@ -120,7 +120,7 @@ See the [web components overview](./web-components/README.md) for how they diffe
 
 - [Getting started](./docs/getting-started.md)
 - [Theming](./docs/theming.md)
-- [Component reference](./docs/README.md#components)
+- [Component reference](#components)
 - [Storybook](https://falkordb.github.io/falkordb-ui/), published from `main`
 - [Releasing](./docs/releasing.md), for maintainers
 
@@ -130,7 +130,7 @@ The repository is an npm workspace. The root is `@falkordb/ui`, and each folder 
 
 ```bash
 npm install
-npm run storybook     # component workbench on :6006
+npm run storybook     # component docs and workbench on :6006
 npm run build         # dist/index.js + index.cjs + index.d.ts + styles.css
 npm run test          # Vitest + Testing Library (jsdom)
 npm run coverage      # enforces 100% coverage of src/
@@ -142,6 +142,8 @@ npm run build:web-components
 npm run test:web-components
 npm run build -w web-components/canvas   # a single package
 ```
+
+Component docs live next to their stories as `stories/<Component>.mdx`. Update the page in the same change as the component.
 
 ## License
 
