@@ -1,0 +1,39 @@
+# RadioGroup
+
+A set of options where exactly one is selected.
+
+[Storybook](https://falkordb.github.io/falkordb-ui/?path=/story/primitives-controls--radios) · [Source](../../src/components/radio-group.tsx) · [Radix Radio Group](https://www.radix-ui.com/primitives/docs/components/radio-group)
+
+## Import
+
+```tsx
+import { RadioGroup, RadioGroupItem } from "@falkordb/ui";
+```
+
+## Usage
+
+```tsx
+<RadioGroup value={mode} onValueChange={setMode} className="flex gap-6">
+	<div className="flex items-center gap-2">
+		<RadioGroupItem value="host" id="mode-host" />
+		<Label htmlFor="mode-host">Host and port</Label>
+	</div>
+	<div className="flex items-center gap-2">
+		<RadioGroupItem value="url" id="mode-url" />
+		<Label htmlFor="mode-url">Connection URL</Label>
+	</div>
+</RadioGroup>
+```
+
+## Parts
+
+| Part             | Description                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `RadioGroup`     | Root. Holds `value`, `defaultValue`, `onValueChange` and `disabled`. Lays items out in a grid by default. |
+| `RadioGroupItem` | One option. Needs a `value`.                                                                              |
+
+Both accept the props of the matching [Radix Radio Group](https://www.radix-ui.com/primitives/docs/components/radio-group#api-reference) part. Arrow keys move between items.
+
+## Related
+
+[Select](./select.md) for longer lists · [Label](./label.md)

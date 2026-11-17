@@ -1,0 +1,59 @@
+# Tooltip
+
+A short label that appears on hover or keyboard focus.
+
+[Storybook](https://falkordb.github.io/falkordb-ui/?path=/docs/primitives-tooltip--docs) · [Source](../../src/components/tooltip.tsx) · [Radix Tooltip](https://www.radix-ui.com/primitives/docs/components/tooltip)
+
+## Import
+
+```tsx
+import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from "@falkordb/ui";
+```
+
+## Usage
+
+Mount one `TooltipProvider` near the root of your app, then wrap each tooltip:
+
+```tsx
+<TooltipProvider>
+	<Tooltip>
+		<TooltipTrigger asChild>
+			<span>social-network</span>
+		</TooltipTrigger>
+		<TooltipContent>1,204 nodes</TooltipContent>
+	</Tooltip>
+</TooltipProvider>
+```
+
+### Shortcuts
+
+- For a tooltip on a button, use the [Button](./button.md)'s `tooltip` prop.
+- For an "ⓘ" hint next to text, use [HintTip](./hint-tip.md).
+
+Both bring their own provider.
+
+### Escaping clipped containers
+
+`TooltipContent` is not portalled. Inside a container with `overflow: hidden`, wrap it in `TooltipPortal`:
+
+```tsx
+<TooltipPortal>
+	<TooltipContent>…</TooltipContent>
+</TooltipPortal>
+```
+
+## Parts
+
+| Part              | Description                                                               |
+| ----------------- | ------------------------------------------------------------------------- |
+| `TooltipProvider` | Shares open and close delays between tooltips. Nesting providers is safe. |
+| `Tooltip`         | Root of one tooltip. Holds `open`, `onOpenChange` and `delayDuration`.    |
+| `TooltipTrigger`  | The element that opens it. Use `asChild` to keep your own element.        |
+| `TooltipContent`  | The bubble. `sideOffset` defaults to 4.                                   |
+| `TooltipPortal`   | Renders the content into `document.body`.                                 |
+
+Each part accepts the props of the matching [Radix Tooltip](https://www.radix-ui.com/primitives/docs/components/tooltip#api-reference) part.
+
+## Accessibility
+
+Tooltips never open on touch. Do not put information only in a tooltip on a touch layout: use [HintTip](./hint-tip.md) with `mode="popover"` or a [Popover](./popover.md).
