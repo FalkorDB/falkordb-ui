@@ -30,11 +30,11 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@falkordb/
 
 ## Parts
 
-| Part                  | Wraps       | Description                                                         |
-| --------------------- | ----------- | ------------------------------------------------------------------- |
-| `ResizablePanelGroup` | `Group`     | The container. Set `orientation` to `"horizontal"` or `"vertical"`. |
-| `ResizablePanel`      | `Panel`     | One panel. Takes `defaultSize`, `minSize`, `maxSize` and more.      |
-| `ResizableHandle`     | `Separator` | The divider between two panels.                                     |
+| Part                  | Wraps       | Description                                                                                      |
+| --------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| `ResizablePanelGroup` | `Group`     | The container. Use `orientation="horizontal"`; the handle is not yet styled for vertical groups. |
+| `ResizablePanel`      | `Panel`     | One panel. Takes `defaultSize`, `minSize`, `maxSize` and more.                                   |
+| `ResizableHandle`     | `Separator` | The divider between two panels.                                                                  |
 
 Each part accepts the props of the [react-resizable-panels](https://github.com/bvaughn/react-resizable-panels) component it wraps (version 4).
 

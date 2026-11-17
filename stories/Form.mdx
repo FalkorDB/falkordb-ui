@@ -72,7 +72,7 @@ Set `type` on each field config. All types share the [base options](#base-field-
 
 ### Tag fields
 
-- Enter, a comma, or leaving the field adds the typed text as a tag. Pasted text is split on commas.
+- Enter, a comma, or leaving the field adds the typed text as a tag. Text containing commas becomes several tags when it is added.
 - Duplicates are skipped. `normalize` (for example `(tag) => tag.toLowerCase()`) is applied before the check.
 - Backspace in an empty input removes the last tag.
 - Adding or removing a tag does not re-check the field's `errors`; they are checked on submit.
@@ -141,7 +141,7 @@ Accepts every `<form>` attribute except `onSubmit`, plus:
 | `error`          | `ReactNode`                                                           | —          | A form-level error, shown above the footer in a reserved line.                       |
 | `submitLabel`    | `string`                                                              | `"Submit"` | Submit button text.                                                                  |
 | `submitDisabled` | `boolean`                                                             | `false`    | Disables the submit button.                                                          |
-| `submitProps`    | `ButtonProps`                                                         | —          | Extra props for the default submit button, such as an `id`.                          |
+| `submitProps`    | `Omit<ButtonProps, "type" \| "isLoading" \| "disabled">`              | —          | Extra props for the default submit button, such as an `id`.                          |
 | `renderSubmit`   | `({ isLoading, disabled, label }) => ReactNode`                       | —          | Replaces the submit button. Yours must stay `type="submit"`.                         |
 | `renderInfo`     | `(info, field) => ReactNode`                                          | —          | Replaces the default info hint, for example with a tap-to-open one on touch screens. |
 | `actions`        | `ReactNode`                                                           | —          | Footer content to the left of the submit button, such as a Cancel button.            |
@@ -153,7 +153,7 @@ Accepts every `<form>` attribute except `onSubmit`, plus:
 The parts that `Form` is made of are exported too:
 
 ```tsx
-import { FormControl, FormDescription, FormField, FormLabel, FormMessage } from "@falkordb/ui";
+import { FormControl, FormDescription, FormField, FormLabel, FormMessage, Input } from "@falkordb/ui";
 
 <FormField error={nameError}>
 	<FormLabel required>Graph name</FormLabel>
