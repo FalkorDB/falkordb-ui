@@ -33,6 +33,6 @@ CI runs all of these on pull requests to `main`. Run them before you finish.
 - Merge class names with `cn()`, so a consumer's `className` overrides the defaults.
 - Forward refs and spread the remaining props onto the underlying element, as the existing components do.
 - Keep `src/` at 100% test coverage.
-- When you change a component's API or behaviour, update its `stories/<Component>.mdx` page in the same change. Write the page in plain Markdown: the agent docs build fails on MDX syntax other than imports and the `<Meta>` and `<Canvas>` lines.
+- When you change a component's API or behaviour, update its `stories/<Component>.mdx` page in the same change. Write the page in plain Markdown: outside code blocks and code spans, the agent docs build fails on JSX or HTML tags, `{...}` and `export`, except the imports and the `<Meta>` and `<Canvas>` lines.
 - When you add a component, also export it from `src/index.ts`, add a row to the component table in `README.md`, and register its MDX page in `COMPONENTS` in `scripts/build-llms.ts`. Register a new guide in `docs/` in `GUIDES`, or in `EXCLUDED_DOCS` if it is not about using the package.
 - Write commit messages as Conventional Commits, for example `feat(button): add a size` or `docs: fix the Tabs example`.

@@ -56,11 +56,12 @@ describe("build-llms", () => {
 			'unsupported MDX: "Use <Thing /> here."',
 		);
 		expect(() => stripMdx("Total: {count}\n", "X.mdx")).toThrow("unsupported MDX");
+		expect(() => stripMdx('<div className="hidden">Setup</div>\n', "X.mdx")).toThrow("unsupported MDX");
+		expect(() => stripMdx("<>Setup</>\n", "X.mdx")).toThrow("unsupported MDX");
 		expect(() => stripMdx("export const meta = {};\n", "X.mdx")).toThrow("unsupported MDX");
 		expect(() => stripMdx("import {\n\tX,\n# X\n", "X.mdx")).toThrow("never reaches its module specifier");
-		expect(stripMdx("Wrap it in `<Dialog>` with `{ open }`.\n", "X.mdx")).toBe(
-			"Wrap it in `<Dialog>` with `{ open }`.\n",
-		);
+		const allowed = "Wrap `<Dialog>` with `{ open }`. See <https://falkordb.com> or <team@falkordb.com>.\n";
+		expect(stripMdx(allowed, "X.mdx")).toBe(allowed);
 	});
 
 	it("fails when an MDX page is not registered", () => {

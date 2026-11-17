@@ -113,8 +113,10 @@ const STORYBOOK_BLOCK = /^<(Meta|Canvas)\b[^>]*\/>\s*$/;
 // An MDX import can span lines; it ends at its module specifier, with or without a semicolon.
 const IMPORT_START = /^import\b/;
 const IMPORT_END = /(^import|\bfrom)\s*["'][^"']+["']\s*;?\s*$/;
-// JSX, MDX expressions and exports, once code spans are removed.
-const UNSUPPORTED = /^\s*export\s|<[A-Z]|\{/;
+// Code spans and Markdown autolinks such as <https://example.com> or <team@example.com>.
+const SAFE_INLINE = /(`+)[\s\S]*?\1|<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>|<[^\s<>@]+@[^\s<>]+>/g;
+// Exports, MDX expressions, and JSX or HTML tags and fragments, once SAFE_INLINE is removed.
+const UNSUPPORTED = /^\s*export\s|\{|<\/?[A-Za-z>]/;
 
 /** Splits Markdown into lines, flagging those inside fenced code blocks. */
 function scan(markdown: string): { line: string; code: boolean }[] {
@@ -142,7 +144,7 @@ export function stripMdx(mdx: string, source: string): string {
 			continue;
 		}
 		if (STORYBOOK_BLOCK.test(line)) continue;
-		if (UNSUPPORTED.test(line.replace(/(`+)[\s\S]*?\1/g, ""))) {
+		if (UNSUPPORTED.test(line.replace(SAFE_INLINE, ""))) {
 			throw new Error(
 				`${source}: unsupported MDX: "${line.trim()}". Use plain Markdown, or teach scripts/build-llms.ts to drop it.`,
 			);
