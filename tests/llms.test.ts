@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { buildLlms, COMPONENTS, GUIDES, rewriteLinks, stripMdx } from "../scripts/build-llms.ts";
 
@@ -11,7 +11,10 @@ const rootDir = process.cwd();
 const pages = [...GUIDES, ...COMPONENTS];
 
 describe("build-llms", () => {
-	const files = buildLlms(rootDir);
+	let files: Record<string, string> = {};
+	beforeAll(() => {
+		files = buildLlms(rootDir);
+	});
 
 	it("links every page from llms.txt and generates each one", () => {
 		const links = [...files["llms.txt"]!.matchAll(/\]\((llms\/[\w-]+\.md)\)/g)].map((match) => match[1]);
