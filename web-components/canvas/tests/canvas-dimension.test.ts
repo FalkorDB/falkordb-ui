@@ -328,6 +328,27 @@ describe("3D camera state", () => {
     expect(canvas.threeD.getCameraState()).toEqual(state);
   });
 
+  it("refreshes frustum visibility after restoring the camera", async () => {
+    const canvas = await canvasIn3D();
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 10000, y: 0, z: 0 });
+    const factory = last3D().props.get("nodeThreeObject") as (current: GraphNode) => Group;
+    const group = factory(node);
+    group.position.set(10000, 0, 0);
+    last3D().scene().add(group);
+
+    expect(group.visible).toBe(false);
+
+    canvas.threeD.setCameraState({
+      position: { x: 10000, y: 0, z: 1000 },
+      target: { x: 10000, y: 0, z: 0 },
+      up: { x: 0, y: 1, z: 0 },
+    });
+
+    expect(group.visible).toBe(true);
+    expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(1);
+  });
+
   it("preserves camera state across dimension switches and reconnects", async () => {
     const canvas = await canvasIn3D();
     const state = {

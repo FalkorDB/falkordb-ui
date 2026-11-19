@@ -840,6 +840,8 @@ export class Graph3D {
       { ...state.target },
       0,
     );
+    this.updateDetailVisibility();
+    this.requestRender();
   }
 
   getCullingStats(): ThreeDCullingStats {
