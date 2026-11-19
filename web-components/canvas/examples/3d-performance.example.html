@@ -37,7 +37,7 @@
     <main>
       <falkordb-canvas id="canvas"></falkordb-canvas>
       <aside>
-        <p>Each view warms up for 120 animation frames and records 60 frames. The graph stays in the simulation for all views; only the camera moves. The 200-element caption limit keeps this body/link baseline independent of caption cost.</p>
+        <p>Keep this tab visible. Each view warms up for 120 rendered frames and records 60. Render time is CPU submission time, not GPU completion. The graph stays in the simulation for all views; only the camera moves. The 200-element caption limit keeps this body/link baseline independent of caption cost.</p>
         <button id="run">Run all views</button>
         <pre id="result">Preparing deterministic graph…</pre>
       </aside>
@@ -94,21 +94,31 @@
         return sorted[Math.floor(sorted.length / 2)];
       };
 
-      const waitFrames = (warmup, measured) => new Promise((resolve) => {
+      const waitFrames = (graph, warmup, measured) => new Promise((resolve) => {
         let frame = 0;
         let previousTime;
         const durations = [];
+        const renderTimes = [];
         const calls = [];
-        const renderer = canvas.threeD.getGraph().renderer();
+        const renderer = graph.renderer();
         const sample = (time) => {
+          renderer.info.reset();
+          const renderStart = performance.now();
+          renderer.render(graph.scene(), graph.camera());
+          const renderTime = performance.now() - renderStart;
           if (previousTime !== undefined && frame >= warmup) {
             durations.push(time - previousTime);
+            renderTimes.push(renderTime);
             calls.push(renderer.info.render.calls);
           }
           previousTime = time;
           frame++;
           if (frame < warmup + measured) requestAnimationFrame(sample);
-          else resolve({ medianFrameMs: median(durations), medianDrawCalls: median(calls) });
+          else resolve({
+            medianFrameMs: median(durations),
+            medianRenderMs: median(renderTimes),
+            medianDrawCalls: median(calls),
+          });
         };
         requestAnimationFrame(sample);
       });
@@ -119,11 +129,15 @@
           target: { x: targetX, y: 0, z: 0 },
           up: { x: 0, y: 1, z: 0 },
         });
-        const timing = await waitFrames(120, 60);
+        const timing = await waitFrames(canvas.threeD.getGraph(), 120, 60);
         return { view: name, ...timing, ...canvas.threeD.getCullingStats() };
       };
 
       const run = async () => {
+        if (document.visibilityState !== "visible") {
+          result.textContent = "Benchmark paused: bring this tab to the foreground to collect reliable frame timings.";
+          return;
+        }
         result.textContent = "Running benchmark…";
         try {
           await canvas.setDimension("3d");
@@ -145,7 +159,7 @@
           const views = [];
           for (const [name, targetX] of [
             ["mostly-visible", 0],
-            ["partial", extentX / 3],
+            ["partial", extentX * 0.7],
             ["mostly-offscreen", extentX * 4],
           ]) {
             views.push(await runView(name, targetX));
@@ -167,6 +181,7 @@
       document.querySelector("#run").addEventListener("click", run);
       await customElements.whenDefined("falkordb-canvas");
       result.textContent = `${nodes.length} nodes and ${links.length} links ready. Click “Run all views”.`;
+      if (new URLSearchParams(location.search).has("run")) await run();
     </script>
   </body>
 </html>
