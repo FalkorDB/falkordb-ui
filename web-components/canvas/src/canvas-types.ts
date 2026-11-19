@@ -1,8 +1,9 @@
 import { NodeObject } from "force-graph";
+import type { Object3D } from "three";
 
 // ─── Style & Behavior Sub-Configs ────────────────────────────────────────────
 
-/** Visual style for nodes */
+/** Node style fields shared by the 2D and 3D renderers. */
 export interface NodeStyleConfig {
   /** Font family for node labels. Default: 'SofiaSans' */
   fontFamily?: string;
@@ -10,6 +11,10 @@ export interface NodeStyleConfig {
   fontWeightUnselected?: number;
   /** Font weight when node is selected. Default: 700 */
   fontWeightSelected?: number;
+}
+
+/** Canvas-specific node style fields. */
+export interface TwoDNodeStyleConfig {
   /**
    * Fixed font size for node labels (world units).
    * When set, text uses this exact size (no auto-scaling).
@@ -39,7 +44,7 @@ export interface NodeStyleConfig {
   glowMaxOpacity?: number;
 }
 
-/** Visual style for links/edges */
+/** Link style fields shared by the 2D and 3D renderers. */
 export interface LinkStyleConfig {
   /** Font family for link labels. Default: 'SofiaSans' */
   fontFamily?: string;
@@ -47,6 +52,10 @@ export interface LinkStyleConfig {
   fontWeightUnselected?: number;
   /** Font weight when link is selected. Default: 700 */
   fontWeightSelected?: number;
+}
+
+/** Canvas-specific link style fields. */
+export interface TwoDLinkStyleConfig {
   /** Arrow width-to-height ratio. Default: 1.6 */
   arrowWidthRatio?: number;
   /** Arrow notch depth ratio. Default: 0.2 */
@@ -97,7 +106,7 @@ export interface SimulationConfig {
   disableCollisionAbove?: number;
 }
 
-/** Interaction / UX parameters */
+/** Interaction fields shared by the 2D and 3D renderers. */
 export interface InteractionConfig {
   /** Tooltip font size in px. Default: 12 */
   tooltipFontSize?: number;
@@ -111,34 +120,28 @@ export interface InteractionConfig {
   zoomToFitPadding?: number;
   /** Maximum zoom level after zoomToFit (prevents over-zoom on few nodes). Default: 8 */
   zoomToFitMaxZoom?: number;
-  /** Delay (ms) before zoom-to-fit after layout change. Default: 50 */
-  zoomToFitDelay?: number;
-  /** Link pointer hit-test width in screen px. Default: 10 */
-  linkHitWidth?: number;
   /** Luminance threshold for switching to dark text on light nodes. Default: 0.5 */
   contrastThreshold?: number;
 }
 
-
+/** Canvas-specific interaction fields. */
+export interface TwoDInteractionConfig {
+  /** Delay (ms) before zoom-to-fit after layout change. Default: 50 */
+  zoomToFitDelay?: number;
+  /** Link pointer hit-test width in screen px. Default: 10 */
+  linkHitWidth?: number;
+}
 
 /**
  * Configuration for large-graph rendering optimisations.
  * All options are optional; the feature is enabled by default (`enabled: true`).
  */
-export interface LargeGraphConfig {
+export interface TwoDLargeGraphConfig {
   /**
    * Master switch. When `true` (default) viewport culling and low-zoom
-   * optimisations are active. In 3D, offscreen node styling/caption work and
-   * caption visibility are culled without removing graph data or simulation.
+   * optimisations are active in the Canvas 2D renderer.
    */
   enabled?: boolean;
-
-  /**
-   * Batch opaque 3D node bodies for graphs with at least 1,000 nodes.
-   * Captions, selected/transparent nodes and links retain their usual renderer.
-   * Has no effect in 2D. Default: `true`.
-   */
-  nodeInstancing?: boolean;
 
   /**
    * Extra padding added around the visible viewport (in world-space units) when
@@ -210,10 +213,10 @@ export interface EventHandlers {
 }
 
 /**
- * Main configuration object for the FalkorDB Canvas graph visualization.
+ * Shared configuration for the FalkorDB Canvas graph visualization.
  * All properties are optional — unset values use sensible defaults.
  */
-export interface ForceGraphConfig {
+export interface CanvasConfig {
   // ─── Dimensions & Colors ─────────────────────────────────────────────────────
   /** Canvas width in pixels. Auto-detected from container if not set. */
   width?: number;
@@ -236,16 +239,14 @@ export interface ForceGraphConfig {
   layoutOptions?: LayoutOptions;
 
   // ─── Style Sub-Configs ───────────────────────────────────────────────────────
-  /** Node visual style configuration */
+  /** Node label style shared by both renderers */
   nodeStyle?: NodeStyleConfig;
-  /** Link/edge visual style configuration */
+  /** Link label style shared by both renderers */
   linkStyle?: LinkStyleConfig;
   /** Force simulation tuning */
   simulation?: SimulationConfig;
-  /** Interaction / UX parameters */
+  /** Interaction / UX fields shared by both renderers */
   interaction?: InteractionConfig;
-  /** Large-graph rendering optimisations (viewport culling and low-zoom draw skipping). */
-  largeGraph?: LargeGraphConfig;
 
   // ─── Display Options ─────────────────────────────────────────────────────────
   /** Enable/disable force simulation animation. When false, nodes are pinned in place. */
@@ -264,7 +265,7 @@ export interface ForceGraphConfig {
   /** When true, nodes stay pinned at their position after being dragged. Default: false */
   pinOnDragEnd?: boolean;
 
-  // ─── Selection & Custom Rendering ────────────────────────────────────────────
+  // ─── Selection ───────────────────────────────────────────────────────────────
   /** Predicate that returns true if a link should be rendered in its "selected" style */
   isLinkSelected?: (link: GraphLink) => boolean;
   /** Predicate that returns true if a node should be rendered in its "selected" style */
@@ -289,43 +290,128 @@ export interface ForceGraphConfig {
    * Set to `true` to activate focus mode dimming.
    */
   dimmed?: boolean;
-  /** Returns a dash pattern array for a given link (use [] for solid lines) */
-  linkLineDash?: (link: GraphLink) => number[];
-  /** Custom node rendering overrides. When provided, replaces the built-in node drawing. */
-  node?: {
-    /** Custom draw function for nodes on the canvas */
-    nodeCanvasObject: (node: GraphNode, ctx: CanvasRenderingContext2D) => void;
-    /** Custom hit-area painting for pointer detection on nodes */
-    nodePointerAreaPaint: (node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => void;
-  };
-  /** Custom link rendering overrides. When provided, replaces the built-in link drawing. */
-  link?: {
-    /** Custom draw function for links on the canvas */
-    linkCanvasObject: (link: GraphLink, ctx: CanvasRenderingContext2D, globalScale: number) => void;
-    /** Custom hit-area painting for pointer detection on links */
-    linkPointerAreaPaint: (link: GraphLink, color: string, ctx: CanvasRenderingContext2D) => void;
-  };
+
+  /** Canvas-only settings; retained while the 3D renderer is active. */
+  twoD?: TwoDConfig;
+  /** WebGL-only settings; retained while the 2D renderer is active. */
+  threeD?: ThreeDConfig;
 
   // ─── Event Handlers ──────────────────────────────────────────────────────────
   /** Event handler callbacks */
   eventHandlers?: EventHandlers;
 }
 
-export interface InternalForceGraphConfig extends Omit<ForceGraphConfig, 'backgroundColor' | 'foregroundColor' | 'captionsKeys' | 'showPropertyKeyPrefix' | 'dimension' | 'layoutMode' | 'layoutOptions' | 'pinOnDragEnd' | 'nodeStyle' | 'linkStyle' | 'simulation' | 'interaction' | 'largeGraph'> {
+/** Settings used only by the Canvas 2D renderer. */
+export interface TwoDConfig {
+  nodeStyle?: TwoDNodeStyleConfig;
+  linkStyle?: TwoDLinkStyleConfig;
+  interaction?: TwoDInteractionConfig;
+  largeGraph?: TwoDLargeGraphConfig;
+  /** Returns a dash pattern array for a given link (use [] for solid lines). */
+  linkLineDash?: (link: GraphLink) => number[];
+  /** Custom draw and pointer-area callbacks; replaces the built-in renderer. */
+  node?: {
+    nodeCanvasObject: (node: GraphNode, ctx: CanvasRenderingContext2D) => void;
+    nodePointerAreaPaint: (node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => void;
+  };
+  /** Custom draw and pointer-area callbacks; replaces the built-in renderer. */
+  link?: {
+    linkCanvasObject: (link: GraphLink, ctx: CanvasRenderingContext2D, globalScale: number) => void;
+    linkPointerAreaPaint: (link: GraphLink, color: string, ctx: CanvasRenderingContext2D) => void;
+  };
+}
+
+/** Large-graph controls for the 3D renderer. */
+export interface ThreeDLargeGraphConfig {
+  /**
+   * Enables CPU-side frustum checks, caption limits, low-zoom optimisations,
+   * and node instancing. Three.js native frustum culling remains active.
+   * Default: `true`.
+   */
+  enabled?: boolean;
+  /** Maximum node or link count for which individual captions are created. Default: 1000. */
+  maxLabeledElements?: number;
+  /** Batch opaque node bodies for graphs with at least 1,000 nodes. Default: `true`. */
+  nodeInstancing?: boolean;
+  /** World-unit padding for CPU-side offscreen bounds. Default: `0`. */
+  viewportPadding?: number;
+  /** Zoom level below which optional labels/arrows are hidden. Default: `1`. */
+  lowZoomThreshold?: number;
+  /** Skip node captions at low zoom. Default: `true`. */
+  skipLabelsAtLowZoom?: boolean;
+  /** Skip link arrowheads at low zoom. Default: `true`. */
+  skipArrowsAtLowZoom?: boolean;
+  /** Skip link captions at low zoom. Default: `true`. */
+  skipLinkLabelsAtLowZoom?: boolean;
+}
+
+/** Visual state supplied to custom 3D node and link factories. */
+export interface ThreeDRenderState {
+  selected: boolean;
+  dimmed: boolean;
+  opacity: number;
+}
+
+/** Settings used only by the Three.js renderer. */
+export interface ThreeDConfig {
+  largeGraph?: ThreeDLargeGraphConfig;
+  /** Unselected tube width in world units. Zero retains the current hairline default. */
+  linkWidth?: number;
+  /** Replaces a node's built-in body while retaining its caption and selection outline. */
+  nodeObject?: (node: GraphNode, state: ThreeDRenderState) => Object3D;
+  /** Replaces a link's built-in line while retaining its relationship label. */
+  linkObject?: (link: GraphLink, state: ThreeDRenderState) => Object3D;
+  /** Dash and gap lengths in world units; an empty pattern keeps the native solid link. */
+  linkDashPattern?: (link: GraphLink) => number[];
+  /** Updates a custom link visual with its current endpoints. */
+  linkObjectPositionUpdate?: (
+    object: Object3D,
+    coordinates: { start: CanvasVector3; end: CanvasVector3 },
+    link: GraphLink,
+  ) => void;
+}
+
+export interface InternalTwoDConfig {
+  nodeStyle: Required<TwoDNodeStyleConfig>;
+  linkStyle: Required<TwoDLinkStyleConfig>;
+  interaction: Required<TwoDInteractionConfig>;
+  largeGraph: Required<TwoDLargeGraphConfig>;
+  linkLineDash?: (link: GraphLink) => number[];
+  node?: TwoDConfig["node"];
+  link?: TwoDConfig["link"];
+}
+
+export interface InternalThreeDConfig {
+  largeGraph: Required<ThreeDLargeGraphConfig>;
+  linkWidth: number;
+  nodeObject?: ThreeDConfig["nodeObject"];
+  linkObject?: ThreeDConfig["linkObject"];
+  linkDashPattern?: ThreeDConfig["linkDashPattern"];
+  linkObjectPositionUpdate?: ThreeDConfig["linkObjectPositionUpdate"];
+}
+
+export interface InternalCanvasConfig extends Omit<CanvasConfig, 'backgroundColor' | 'foregroundColor' | 'captionsKeys' | 'showPropertyKeyPrefix' | 'dimension' | 'layoutMode' | 'layoutOptions' | 'pinOnDragEnd' | 'nodeStyle' | 'linkStyle' | 'simulation' | 'interaction' | 'twoD' | 'threeD'> {
   backgroundColor: string;
   foregroundColor: string;
-  /** Normalized from `ForceGraphConfig.captionsKeys` — bare strings become `[key, false]`. */
+  /** Normalized from `CanvasConfig.captionsKeys` — bare strings become `[key, false]`. */
   captionsKeys: [string, boolean][];
   showPropertyKeyPrefix: boolean;
   dimension: CanvasDimension;
   layoutMode: LayoutMode;
   layoutOptions: LayoutOptions;
   pinOnDragEnd: boolean;
-  nodeStyle: Required<NodeStyleConfig>;
-  linkStyle: Required<LinkStyleConfig>;
+  nodeStyle: Required<NodeStyleConfig & TwoDNodeStyleConfig>;
+  linkStyle: Required<LinkStyleConfig & TwoDLinkStyleConfig>;
   simulation: Required<SimulationConfig>;
-  interaction: Required<InteractionConfig>;
-  largeGraph: Required<LargeGraphConfig>;
+  interaction: Required<InteractionConfig & TwoDInteractionConfig>;
+  largeGraph: Required<TwoDLargeGraphConfig>;
+  linkLineDash?: TwoDConfig["linkLineDash"];
+  node?: TwoDConfig["node"];
+  link?: TwoDConfig["link"];
+  modeConfig: {
+    twoD: InternalTwoDConfig;
+    threeD: InternalThreeDConfig;
+  };
 }
 
 /** How the graph is drawn: flat on a 2D canvas, or in 3D with WebGL */
@@ -503,7 +589,7 @@ export interface Data {
 }
 
 /** Captured viewport state (zoom level and center position) for save/restore */
-export type ViewportState = {
+export type TwoDViewportState = {
   /** Current zoom level */
   zoom: number;
   /** X coordinate of the viewport center (world units) */
@@ -512,12 +598,37 @@ export type ViewportState = {
   centerY: number;
 } | undefined;
 
+/** A 3D vector used in camera snapshots. */
+export type CanvasVector3 = { x: number; y: number; z: number };
+
+/** Saved 3D camera position and orientation. */
+export interface CameraState {
+  position: CanvasVector3;
+  target: CanvasVector3;
+  up: CanvasVector3;
+}
+
+/** Camera-frustum counts for the actual 3D drawable objects. */
+export interface ThreeDCullingStats {
+  frustumVisibleNodeBodies: number;
+  totalNodeBodies: number;
+  frustumVisibleNodeCaptions: number;
+  totalNodeCaptions: number;
+  frustumVisibleLinks: number;
+  totalLinks: number;
+  frustumVisibleLinkLabels: number;
+  totalLinkLabels: number;
+  captionLimitEnabled: boolean;
+}
+
 /** D3 zoom transform: k = zoom scale, x/y = translation offset */
 export type Transform = { k: number, x: number, y: number };
 
 /** Custom rendering mode relative to the built-in drawing: 'before' (draw under), 'after' (draw over), or 'replace' (skip built-in) */
 export type CanvasRenderMode = 'before' | 'after' | 'replace';
 
-// Force graph instance type from force-graph library
-// The instance is created by calling ForceGraph as a function with a container element
-export type ForceGraphInstance = import("force-graph").default<GraphNode, GraphLink> | undefined;
+/** Initialized 2D renderer instance exposed for advanced customization. */
+export type TwoDGraphInstance = Exclude<import("force-graph").default<GraphNode, GraphLink>, undefined>;
+
+/** Initialized 3D renderer instance exposed for advanced customization. */
+export type ThreeDGraphInstance = import("3d-force-graph").ForceGraph3DInstance<GraphNode, GraphLink>;

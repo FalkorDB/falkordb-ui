@@ -6,8 +6,13 @@ import {
   GraphData,
   GraphLink,
   GraphNode,
-  InternalForceGraphConfig,
+  CanvasVector3,
+  CameraState,
+  InternalCanvasConfig,
+  ThreeDCullingStats,
+  ThreeDRenderState,
 } from "./canvas-types.js";
+import { ThreeDResourceTracker } from "./three-d-resource-tracker.js";
 import {
   ARROW_SIZE,
   LINK_DISTANCE,
@@ -37,12 +42,6 @@ const SELECTED_LINK_WIDTH = 1.5;
  * into world units. Higher is sharper and costs more texture memory.
  */
 const LABEL_TEXTURE_HEIGHT = 64;
-
-/**
- * Each caption is its own texture, so past this many elements captions are
- * left to the hover tooltip to keep large graphs responsive.
- */
-const MAX_LABELED_ELEMENTS = 1000;
 
 const MAX_CACHED_LABELS = 256;
 const MAX_CACHED_SHAFT_MATERIALS = 256;
@@ -78,6 +77,7 @@ type Node3D = GraphNode & { z?: number; vz?: number; fz?: number };
 
 /** The scene objects of one node, kept so a restyle can update them in place. */
 type NodeParts = {
+  group: THREE.Group;
   body: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>;
   outline: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   label: THREE.Sprite | null;
@@ -88,11 +88,34 @@ type NodeParts = {
   color?: string;
   borderColor?: string;
   opacity?: number;
+  customVisual: THREE.Object3D | null;
+  releaseCustomVisual: (() => void) | null;
+  renderState: ThreeDRenderState;
+  factory: InternalCanvasConfig["modeConfig"]["threeD"]["nodeObject"];
+  refreshCustomVisual: boolean;
+};
+
+type LinkParts = {
+  root: THREE.Object3D;
+  label: THREE.Sprite | null;
+  customVisual: THREE.Object3D | null;
+  dashedLine: THREE.LineSegments | null;
+  releaseCustomVisual: (() => void) | null;
+  renderState: ThreeDRenderState;
+  factory: InternalCanvasConfig["modeConfig"]["threeD"]["linkObject"];
+  dashPatternFactory: InternalCanvasConfig["modeConfig"]["threeD"]["linkDashPattern"];
+  dashPattern: number[];
+  shaft: LinkShaft | null;
+};
+
+type GraphSceneObject = THREE.Object3D & {
+  __graphObjType?: string;
+  __data?: GraphNode | GraphLink;
 };
 
 /** What the 3D renderer reads from the `<falkordb-canvas>` element that owns it. */
 export interface Graph3DHost {
-  readonly config: InternalForceGraphConfig;
+  readonly config: InternalCanvasConfig;
   readonly data: GraphData;
   log(...args: unknown[]): void;
   setEngineStatus(isRunning: boolean): void;
@@ -108,9 +131,13 @@ export interface Graph3DHost {
 export class Graph3D {
   readonly graph: Instance;
 
-  private nodeParts = new WeakMap<GraphNode, NodeParts>();
+  private nodeParts = new Map<GraphNode, NodeParts>();
 
-  private linkLabels = new WeakMap<GraphLink, THREE.Sprite>();
+  private linkParts = new Map<GraphLink, LinkParts>();
+
+  private readonly resourceTracker = new ThreeDResourceTracker();
+
+  private refreshingDashPatterns = false;
 
   private readonly linkShafts = new Map<GraphLink, LinkShaft>();
 
@@ -244,9 +271,10 @@ export class Graph3D {
   }
 
   private inView(position: { x?: number; y?: number; z?: number }, radius: number) {
-    if (!this.host.config.largeGraph.enabled) return true;
+    const largeGraph = this.host.config.modeConfig.threeD.largeGraph;
+    if (!largeGraph.enabled) return true;
     this.bounds.center.set(position.x ?? 0, position.y ?? 0, position.z ?? 0);
-    this.bounds.radius = radius + Math.max(0, this.host.config.largeGraph.viewportPadding);
+    this.bounds.radius = radius + Math.max(0, largeGraph.viewportPadding);
     return this.frustum.intersectsSphere(this.bounds);
   }
 
@@ -256,8 +284,20 @@ export class Graph3D {
     const radius = node.size * SELECTED_OUTLINE_SCALE * Math.sqrt(3) +
       height * (MAX_LABEL_TEXTURE_WIDTH / LABEL_TEXTURE_HEIGHT + 1);
     const visible = node.visible !== false && this.inView(node, radius);
+    parts.group.visible = visible;
     if (visible && parts.dirty) {
-      this.styleNode(node, parts);
+      const state = this.nodeRenderState(node);
+      const factory = this.host.config.modeConfig.threeD.nodeObject;
+      if (
+        parts.refreshCustomVisual
+        || !sameRenderState(state, parts.renderState)
+        || parts.factory !== factory
+      ) {
+        this.replaceNodeCustomVisual(node, parts, state);
+      }
+      parts.refreshCustomVisual = false;
+      parts.renderState = state;
+      this.styleNode(node, parts, state);
       parts.dirty = false;
     }
     if (parts.label) parts.label.visible = visible && this.details.nodes;
@@ -276,16 +316,16 @@ export class Graph3D {
       if (parts) this.syncNode(node, parts);
     }
     for (const link of this.host.data.links) {
-      const label = this.linkLabels.get(link);
+      const label = this.linkParts.get(link)?.label;
       if (label) this.syncLinkLabel(link, label);
     }
-    const { largeGraph } = this.host.config;
+    const { largeGraph } = this.host.config.modeConfig.threeD;
     const items = [];
     if (largeGraph.enabled && largeGraph.nodeInstancing && this.host.data.nodes.length >= LARGE_GRAPH_NODE_THRESHOLD) {
       for (const node of this.host.data.nodes as Node3D[]) {
         const parts = this.nodeParts.get(node);
         // Keep selected bodies with their shells to preserve contour depth.
-        if (!parts || node.visible === false || parts.outline.visible || parts.body.material.opacity !== 1) continue;
+        if (!parts || node.visible === false || parts.customVisual || parts.outline.visible || parts.body.material.opacity !== 1) continue;
         if (!this.inView(node, node.size * Math.sqrt(3))) continue;
         items.push({ body: parts.body, x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0, size: node.size });
       }
@@ -295,6 +335,8 @@ export class Graph3D {
 
   /** Selected link ids, as last applied — link widths only change with the selection. */
   private linkSelection = "";
+
+  private appliedUnselectedLinkWidth: number | undefined;
 
   /**
    * The library lays data out on a debounced update, so until the engine next
@@ -334,30 +376,10 @@ export class Graph3D {
       .linkOpacity(0.9)
       .linkCurvature("curve")
       .linkDirectionalArrowRelPos(1)
-      // Setting either factory again recreates every object, so they are set
-      // once here; restyle() updates the objects they build.
       .nodeThreeObject((node) => this.createNodeObject(node))
       .linkThreeObjectExtend(false)
-      .linkThreeObject((link) => {
-        this.linkShafts.get(link)?.dispose();
-        const shaft = new LinkShaft(this.createLinkLabel(link),
-          this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0, this.shaftMaterial(link));
-        this.linkShafts.set(link, shaft);
-        return shaft;
-      })
-      .linkPositionUpdate((obj, { start, end }, link) => {
-        const curve = (link as GraphLink & { __curve?: THREE.Curve<THREE.Vector3> | null }).__curve;
-        const mid = curve
-          ? curve.getPoint(0.5)
-          : { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 };
-        const shaft = obj as LinkShaft;
-        shaft.label.position.set(mid.x, mid.y, mid.z);
-        shaft.update(new THREE.Vector3(start.x, start.y, start.z ?? 0), new THREE.Vector3(end.x, end.y, end.z ?? 0),
-          curve ?? null, typeof link.target === "number" ? 0 : link.target.size, this.arrowLength(link));
-        const label = this.linkLabels.get(link);
-        if (label) this.syncLinkLabel(link, label);
-        return true;
-      })
+      .linkThreeObject((link) => this.createLinkObject(link))
+      .linkPositionUpdate((object, coordinates, link) => this.updateLinkObjectPosition(object, coordinates, link))
       .enableNodeDrag(true)
       // Graphs with cycles are the norm: level them as well as possible
       // instead of throwing.
@@ -435,7 +457,7 @@ export class Graph3D {
   }
 
   private updateDetailVisibility() {
-    const { largeGraph } = this.host.config;
+    const { largeGraph } = this.host.config.modeConfig.threeD;
     const lowZoom = largeGraph.enabled && this.getZoom() <= largeGraph.lowZoomThreshold;
     const next = {
       nodes: !(lowZoom && largeGraph.skipLabelsAtLowZoom),
@@ -452,35 +474,51 @@ export class Graph3D {
    * Bring every object in line with the current config: colours, selection
    * and dimming. Cheap enough to run on every hover.
    */
-  restyle() {
+  restyle(refreshCustomVisuals = false) {
     const { config } = this.host;
     const captionConfig = JSON.stringify([config.captionsKeys, config.showPropertyKeyPrefix]);
     if (captionConfig !== this.captionConfig) {
       this.captionConfig = captionConfig;
       this.labelRevision += 1;
     }
-    for (const node of this.host.data.nodes) {
-      const parts = this.nodeParts.get(node);
-      if (parts) parts.dirty = true;
+    for (const parts of this.nodeParts.values()) {
+      parts.dirty = true;
+      if (refreshCustomVisuals) parts.refreshCustomVisual = true;
     }
-    this.updateDetailVisibility();
 
     const liveLinks = new Set(this.host.data.links.filter(link => link.visible));
-    for (const [link, shaft] of this.linkShafts) {
+    for (const [link, parts] of this.linkParts) {
       if (liveLinks.has(link)) continue;
-      shaft.dispose();
+      this.disposeLinkParts(parts);
+      this.linkParts.delete(link);
       this.linkShafts.delete(link);
     }
     let colorsChanged = false;
     for (const link of this.host.data.links) {
       const before = this.linkColors.get(link);
       this.linkColor(link);
-      this.linkShafts.get(link)?.setStyle(
-        this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0,
-        this.shaftMaterial(link),
-      );
       if (before !== this.linkColors.get(link)) colorsChanged = true;
+      const parts = this.linkParts.get(link);
+      if (!parts) continue;
+      const state = this.linkRenderState(link);
+      const patternFactory = this.host.config.modeConfig.threeD.linkDashPattern;
+      if (
+        refreshCustomVisuals
+        || !sameRenderState(state, parts.renderState)
+        || parts.factory !== this.host.config.modeConfig.threeD.linkObject
+        || parts.dashPatternFactory !== patternFactory
+      ) {
+        this.replaceLinkVisual(link, parts, state);
+      } else if (parts.label?.visible) {
+        parts.label.material.opacity = state.opacity;
+      }
+      const linkWidth = this.isLinkSelected(link)
+        ? Math.max(link.width ?? LINK_WIDTH, config.modeConfig.threeD.linkWidth) * SELECTED_LINK_WIDTH
+        : config.modeConfig.threeD.linkWidth;
+      this.linkShafts.get(link)?.setStyle(linkWidth, this.shaftMaterial(link));
     }
+
+    this.updateDetailVisibility();
 
     // Colours are re-read when the accessors are set; that keeps the objects.
     if (colorsChanged) {
@@ -500,6 +538,7 @@ export class Graph3D {
     const linkForce = this.graph.d3Force("link");
     if (linkForce) wrapVisibleLinks(linkForce).links(this.host.data.links);
     if (this.workerActive && !this.startWorker(0)) this.applyLayout(false);
+    this.cleanupRemovedVisuals();
     this.rebuild();
   }
 
@@ -507,8 +546,17 @@ export class Graph3D {
   rebuild(fontsLoaded = false) {
     if (fontsLoaded) this.clearLabelTextures();
     this.labelRevision += 1;
-    this.graph.refresh();
+    this.refreshGraphObjects(!!this.host.config.modeConfig.threeD.linkDashPattern);
     this.restyle();
+  }
+
+  private refreshGraphObjects(refreshDashPatterns: boolean) {
+    this.refreshingDashPatterns = refreshDashPatterns;
+    try {
+      this.graph.refresh();
+    } finally {
+      this.refreshingDashPatterns = false;
+    }
   }
 
   setBackgroundColor(color: string) {
@@ -581,7 +629,11 @@ export class Graph3D {
         .cooldownTicks(animation && !pinOnDragEnd && !this.holdsLayout ? Infinity : 0);
     }
     this.graph.graphData({ nodes, links });
-    this.restyle();
+    // A data-dependent pattern can change a link between native and custom objects.
+    const refreshedObjects = !!this.host.config.modeConfig.threeD.linkDashPattern;
+    if (refreshedObjects) this.refreshGraphObjects(true);
+    this.cleanupRemovedVisuals();
+    this.restyle(!refreshedObjects);
   }
 
   /*
@@ -769,6 +821,142 @@ export class Graph3D {
     return distance > 0 ? ZOOM_REFERENCE_DISTANCE / distance : 1;
   }
 
+  getCameraState(): CameraState {
+    const position = this.graph.cameraPosition();
+    const target = this.cameraTarget();
+    const up = this.graph.camera().up;
+    return {
+      position: { x: position.x, y: position.y, z: position.z },
+      target: { ...target },
+      up: { x: up.x, y: up.y, z: up.z },
+    };
+  }
+
+  setCameraState(state: CameraState) {
+    const camera = this.graph.camera();
+    camera.up.set(state.up.x, state.up.y, state.up.z);
+    this.graph.cameraPosition(
+      { ...state.position },
+      { ...state.target },
+      0,
+    );
+  }
+
+  getCullingStats(): ThreeDCullingStats {
+    const camera = this.graph.camera() as THREE.PerspectiveCamera;
+    camera.updateMatrixWorld(true);
+    const scene = this.graph.scene();
+    scene.updateMatrixWorld(true);
+    const viewProjection = new THREE.Matrix4().multiplyMatrices(
+      camera.projectionMatrix,
+      camera.matrixWorldInverse,
+    );
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(viewProjection);
+
+    const visibleNodes = this.host.data.nodes.filter((node) => node.visible);
+    let frustumVisibleNodeBodies = 0;
+    let totalNodeCaptions = 0;
+    let frustumVisibleNodeCaptions = 0;
+    const largeGraph = this.host.config.modeConfig.threeD.largeGraph;
+    for (const node of visibleNodes) {
+      const parts = this.nodeParts.get(node);
+      const body = parts?.customVisual ?? parts?.body;
+      const instancedBody = !!parts
+        && !parts.customVisual
+        && largeGraph.enabled
+        && largeGraph.nodeInstancing
+        && visibleNodes.length >= LARGE_GRAPH_NODE_THRESHOLD
+        && !parts.outline.visible
+        && parts.body.material.opacity === 1;
+      const bodyInFrustum = body && (parts && instancedBody
+        ? this.drawableBoundsInFrustum(frustum, parts.body)
+        : this.drawableTreeInFrustum(frustum, body));
+      if (bodyInFrustum) {
+        frustumVisibleNodeBodies++;
+      }
+      if (parts?.label) {
+        totalNodeCaptions++;
+        if (this.intersectsFrustum(frustum, parts.label)) frustumVisibleNodeCaptions++;
+      }
+    }
+
+    const linkRoots = new Map<GraphLink, THREE.Object3D>();
+    scene.traverse((object) => {
+      const graphObject = object as GraphSceneObject;
+      if (graphObject.__graphObjType === "link" && graphObject.__data) {
+        linkRoots.set(graphObject.__data as GraphLink, graphObject);
+      }
+    });
+
+    const visibleLinks = this.host.data.links.filter((link) => link.visible);
+    let frustumVisibleLinks = 0;
+    let totalLinkLabels = 0;
+    let frustumVisibleLinkLabels = 0;
+    for (const link of visibleLinks) {
+      const root = linkRoots.get(link);
+      const label = this.linkParts.get(link)?.label ?? null;
+      if (label) {
+        totalLinkLabels++;
+        if (this.intersectsFrustum(frustum, label)) frustumVisibleLinkLabels++;
+      }
+      if (!root) continue;
+
+      let bodyInFrustum = false;
+      root.traverse((object) => {
+        if (object === root || object === label || bodyInFrustum) return;
+        if (this.isDrawableInFrustum(frustum, object)) bodyInFrustum = true;
+      });
+      if (bodyInFrustum) frustumVisibleLinks++;
+    }
+
+    return {
+      frustumVisibleNodeBodies,
+      totalNodeBodies: visibleNodes.length,
+      frustumVisibleNodeCaptions,
+      totalNodeCaptions,
+      frustumVisibleLinks,
+      totalLinks: visibleLinks.length,
+      frustumVisibleLinkLabels,
+      totalLinkLabels,
+      captionLimitEnabled: this.host.config.modeConfig.threeD.largeGraph.enabled,
+    };
+  }
+
+  private intersectsFrustum(frustum: THREE.Frustum, object: THREE.Object3D): boolean {
+    if (!this.isEffectivelyVisible(object)) return false;
+    if ((object as THREE.Sprite).isSprite) {
+      return frustum.intersectsSprite(object as THREE.Sprite);
+    }
+    return this.isDrawableInFrustum(frustum, object);
+  }
+
+  private drawableTreeInFrustum(frustum: THREE.Frustum, root: THREE.Object3D): boolean {
+    let intersects = false;
+    root.traverse((object) => {
+      if (!intersects && this.isDrawableInFrustum(frustum, object)) intersects = true;
+    });
+    return intersects;
+  }
+
+  private isDrawableInFrustum(frustum: THREE.Frustum, object: THREE.Object3D): boolean {
+    const drawable = object as THREE.Object3D & { geometry?: THREE.BufferGeometry };
+    return this.isEffectivelyVisible(object) && !!drawable.geometry && frustum.intersectsObject(object as THREE.Mesh);
+  }
+
+  private drawableBoundsInFrustum(frustum: THREE.Frustum, object: THREE.Object3D): boolean {
+    const drawable = object as THREE.Object3D & { geometry?: THREE.BufferGeometry };
+    return !!drawable.geometry && frustum.intersectsObject(object as THREE.Mesh);
+  }
+
+  private isEffectivelyVisible(object: THREE.Object3D): boolean {
+    let ancestor: THREE.Object3D | null = object;
+    while (ancestor) {
+      if (!ancestor.visible) return false;
+      ancestor = ancestor.parent;
+    }
+    return true;
+  }
+
   /** Move the camera towards or away from what it looks at; see ZOOM_REFERENCE_DISTANCE. */
   zoom(k: number, durationMs = 200) {
     if (!(k > 0)) return;
@@ -809,6 +997,10 @@ export class Graph3D {
     for (const shaft of this.linkShafts.values()) shaft.dispose();
     this.linkShafts.clear();
     this.graph._destructor();
+    for (const parts of this.nodeParts.values()) this.disposeNodeParts(parts);
+    for (const parts of this.linkParts.values()) this.disposeLinkParts(parts);
+    this.nodeParts.clear();
+    this.linkParts.clear();
     this.sphereGeometry.dispose();
     this.boxGeometry.dispose();
     for (const material of this.shaftMaterials.values()) material.dispose();
@@ -910,11 +1102,21 @@ export class Graph3D {
       .filter((link) => this.isLinkSelected(link))
       .map((link) => link.id)
       .join(",");
-    if (!force && selection === this.linkSelection) return;
+    const unselectedWidth = this.host.config.modeConfig.threeD.linkWidth;
+    if (
+      !force
+      && selection === this.linkSelection
+      && unselectedWidth === this.appliedUnselectedLinkWidth
+    ) return;
     this.linkSelection = selection;
+    this.appliedUnselectedLinkWidth = unselectedWidth;
 
     this.graph
-      .linkWidth((link) => (this.isLinkSelected(link) ? (link.width ?? LINK_WIDTH) * SELECTED_LINK_WIDTH : 0));
+      .linkWidth((link) => (
+        this.isLinkSelected(link)
+          ? Math.max(link.width ?? LINK_WIDTH, unselectedWidth) * SELECTED_LINK_WIDTH
+          : unselectedWidth
+      ));
     this.updateArrows();
   }
 
@@ -956,12 +1158,6 @@ export class Graph3D {
     return this.host.config.isLinkSelected?.(link) ?? false;
   }
 
-  private nodeOpacity(node: GraphNode): number {
-    const { config } = this.host;
-    const dimmed = config.dimmed === true && (config.isNodeDimmed?.(node) ?? false);
-    return dimmed ? config.dimOpacity ?? 0.15 : 1;
-  }
-
   private linkOpacity(link: GraphLink): number {
     const { config } = this.host;
     const dimmed = config.dimmed === true && (config.isLinkDimmed?.(link) ?? false);
@@ -979,7 +1175,26 @@ export class Graph3D {
     return output;
   }
 
+  private nodeRenderState(node: GraphNode): ThreeDRenderState {
+    const dimmed = this.host.config.dimmed === true && (this.host.config.isNodeDimmed?.(node) ?? false);
+    return {
+      selected: this.host.config.isNodeSelected?.(node) ?? false,
+      dimmed,
+      opacity: dimmed ? this.host.config.dimOpacity ?? 0.15 : 1,
+    };
+  }
+
+  private linkRenderState(link: GraphLink): ThreeDRenderState {
+    const dimmed = this.host.config.dimmed === true && (this.host.config.isLinkDimmed?.(link) ?? false);
+    return {
+      selected: this.isLinkSelected(link),
+      dimmed,
+      opacity: dimmed ? this.host.config.dimOpacity ?? 0.15 : 1,
+    };
+  }
+
   private createNodeObject(node: GraphNode): THREE.Object3D {
+    const previous = this.nodeParts.get(node);
     const geometry = node.shape === "square"
       ? this.boxGeometry
       : this.sphereGeometry;
@@ -992,25 +1207,69 @@ export class Graph3D {
     const group = new THREE.Group();
     group.add(body, outline);
 
-    const parts: NodeParts = { body, outline, label: null, labelText: "", labelRevision: -1, labelStyle: "", dirty: true };
+    const parts: NodeParts = {
+      group,
+      body,
+      outline,
+      label: null,
+      labelText: "",
+      labelRevision: -1,
+      labelStyle: "",
+      dirty: true,
+      customVisual: null,
+      releaseCustomVisual: null,
+      renderState: { selected: false, dimmed: false, opacity: 1 },
+      factory: undefined,
+      refreshCustomVisual: false,
+    };
     this.nodeParts.set(node, parts);
     this.updateFrustum();
     this.syncNode(node, parts);
+    if (previous) this.disposeNodeParts(previous, parts);
 
     return group;
   }
 
-  private styleNode(node: GraphNode, parts: NodeParts) {
+  private replaceNodeCustomVisual(node: GraphNode, parts: NodeParts, state: ThreeDRenderState) {
+    const factory = this.host.config.modeConfig.threeD.nodeObject;
+    const previousVisual = parts.customVisual;
+    const previousRelease = parts.releaseCustomVisual;
+
+    if (factory) {
+      const visual = factory(node, state);
+      if (!isThreeObject(visual)) {
+        throw new TypeError("[FalkorDBCanvas] threeD.nodeObject must return a Three.js Object3D");
+      }
+      const release = this.resourceTracker.acquire(visual);
+      parts.group.add(visual);
+      if (previousVisual && previousVisual !== visual) previousVisual.removeFromParent();
+      previousRelease?.();
+      parts.customVisual = visual;
+      parts.releaseCustomVisual = release;
+      parts.body.visible = false;
+    } else {
+      if (previousVisual) previousVisual.removeFromParent();
+      previousRelease?.();
+      parts.customVisual = null;
+      parts.releaseCustomVisual = null;
+      parts.body.visible = true;
+    }
+
+    parts.renderState = state;
+    parts.factory = factory;
+  }
+
+  private styleNode(node: GraphNode, parts: NodeParts, state: ThreeDRenderState) {
     const { config } = this.host;
-    const opacity = this.nodeOpacity(node);
     const { body, outline } = parts;
 
+    const opacity = state.opacity;
     if (parts.color !== node.color) {
       body.material.color.set(node.color);
       parts.color = node.color;
     }
 
-    outline.visible = config.isNodeSelected?.(node) ?? false;
+    outline.visible = state.selected;
     const borderColor = node.borderColor ?? config.foregroundColor;
     if (parts.borderColor !== borderColor) {
       outline.material.color.set(borderColor);
@@ -1025,7 +1284,9 @@ export class Graph3D {
 
     if (parts.labelRevision === this.labelRevision) return;
     parts.labelRevision = this.labelRevision;
-    const text = this.host.data.nodes.length <= MAX_LABELED_ELEMENTS
+    const largeGraph = config.modeConfig.threeD.largeGraph;
+    const showCaption = !largeGraph.enabled || this.host.data.nodes.length <= largeGraph.maxLabeledElements;
+    const text = showCaption
       ? getNodeDisplayText(node, config.captionsKeys, config.showPropertyKeyPrefix)
       : "";
     const labelStyle = JSON.stringify([node.size, config.nodeStyle.fontWeightUnselected, config.nodeStyle.fontFamily,
@@ -1049,16 +1310,60 @@ export class Graph3D {
       if (parts.label) {
         // Under the node: inside it, the caption would be hidden by the surface.
         parts.label.position.y = -(node.size * SELECTED_OUTLINE_SCALE + parts.label.scale.y / 2);
-        body.parent?.add(parts.label);
+        parts.group.add(parts.label);
         parts.label.visible = this.details.nodes;
       }
     }
-    if (parts.label) parts.label.material.opacity = opacity;
+    if (parts.label) parts.label.material.opacity = state.opacity;
+  }
+
+  private createLinkObject(link: GraphLink): THREE.Object3D {
+    const previous = this.linkParts.get(link);
+    const state = this.linkRenderState(link);
+    const factory = this.host.config.modeConfig.threeD.linkObject;
+    const dashPattern = factory ? [] : this.getDashPattern(link);
+    const customVisual = factory?.(link, state) ?? null;
+    if (factory && !isThreeObject(customVisual)) {
+      throw new TypeError("[FalkorDBCanvas] threeD.linkObject must return a Three.js Object3D");
+    }
+
+    const dashedLine = !factory && dashPattern.length ? this.createDashedLine(link) : null;
+    const labelObject = this.createLinkLabel(link);
+    const label = labelObject instanceof THREE.Sprite ? labelObject : null;
+    const width = state.selected
+      ? Math.max(link.width ?? LINK_WIDTH, this.host.config.modeConfig.threeD.linkWidth) * SELECTED_LINK_WIDTH
+      : this.host.config.modeConfig.threeD.linkWidth;
+    const shaft = new LinkShaft(labelObject, width, this.shaftMaterial(link));
+    const releaseCustomVisual = customVisual ? this.resourceTracker.acquire(customVisual) : null;
+    if (customVisual) shaft.add(customVisual);
+    if (dashedLine) shaft.add(dashedLine);
+    shaft.setShaftVisible(!customVisual && !dashedLine);
+
+    const parts: LinkParts = {
+      root: shaft,
+      label,
+      customVisual,
+      dashedLine,
+      releaseCustomVisual,
+      renderState: state,
+      factory,
+      dashPatternFactory: this.host.config.modeConfig.threeD.linkDashPattern,
+      dashPattern,
+      shaft,
+    };
+    if (previous) this.disposeLinkParts(previous, parts);
+    if (shaft) this.linkShafts.set(link, shaft);
+    else this.linkShafts.delete(link);
+    this.linkParts.set(link, parts);
+    return shaft;
   }
 
   private createLinkLabel(link: GraphLink): THREE.Object3D {
     const { config } = this.host;
-    if (this.host.data.links.length > MAX_LABELED_ELEMENTS) return new THREE.Object3D();
+    const largeGraph = config.modeConfig.threeD.largeGraph;
+    if (largeGraph.enabled && this.host.data.links.length > largeGraph.maxLabeledElements) {
+      return new THREE.Object3D();
+    }
 
     const sprite = this.createTextSprite(link.relationship, {
       height: (link.fontSize ?? LINK_FONT_SIZE) * 0.6,
@@ -1070,7 +1375,6 @@ export class Graph3D {
 
     sprite.material.opacity = this.linkOpacity(link);
     sprite.visible = this.details.links;
-    this.linkLabels.set(link, sprite);
     return sprite;
   }
 
@@ -1129,6 +1433,239 @@ export class Graph3D {
     sprite.scale.set((options.height * texture.image.width) / LABEL_TEXTURE_HEIGHT, options.height, 1);
     return sprite;
   }
+
+  private getDashPattern(link: GraphLink): number[] {
+    const factory = this.host.config.modeConfig.threeD.linkDashPattern;
+    const parts = this.linkParts.get(link);
+    if (!this.refreshingDashPatterns && parts && parts.dashPatternFactory === factory) return parts.dashPattern;
+    return this.computeDashPattern(link);
+  }
+
+  private computeDashPattern(link: GraphLink): number[] {
+    const pattern = this.host.config.modeConfig.threeD.linkDashPattern?.(link) ?? [];
+    if (pattern.length === 0) return [];
+    if (pattern.some((length) => !Number.isFinite(length) || length <= 0)) {
+      throw new TypeError("[FalkorDBCanvas] threeD.linkDashPattern must return positive finite lengths or an empty array");
+    }
+    return pattern.length % 2 === 0 ? [...pattern] : [...pattern, ...pattern];
+  }
+
+  private createDashedLine(link: GraphLink): THREE.LineSegments {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute([], 3));
+    const material = new THREE.LineBasicMaterial({
+      color: this.linkColor(link),
+      opacity: 0.9,
+      transparent: true,
+    });
+    return new THREE.LineSegments(geometry, material);
+  }
+
+  private updateLinkObjectPosition(
+    object: THREE.Object3D,
+    coordinates: { start: CanvasVector3; end: CanvasVector3 },
+    link: GraphLink,
+  ): boolean {
+    const parts = this.linkParts.get(link);
+    const curve = (link as GraphLink & { __curve?: THREE.Curve<THREE.Vector3> | null }).__curve;
+    const midpoint = curve
+      ? curve.getPoint(0.5)
+      : new THREE.Vector3(
+        (coordinates.start.x + coordinates.end.x) / 2,
+        (coordinates.start.y + coordinates.end.y) / 2,
+        (coordinates.start.z + coordinates.end.z) / 2,
+      );
+
+    const shaft = parts?.shaft ?? (object instanceof LinkShaft ? object : null);
+    if (shaft) {
+      if (parts?.dashedLine) {
+        updateDashedLine(parts.dashedLine, parts.dashPattern, coordinates, curve);
+        const material = parts.dashedLine.material as THREE.LineBasicMaterial;
+        material.color.set(this.linkColor(link));
+        material.opacity = 0.9;
+        material.transparent = true;
+        if (parts.label) parts.label.position.copy(midpoint);
+        object.position.set(0, 0, 0);
+        return true;
+      }
+
+      if (parts?.customVisual) {
+        const update = this.host.config.modeConfig.threeD.linkObjectPositionUpdate;
+        if (update) {
+          object.position.set(0, 0, 0);
+          update(parts.customVisual, coordinates, link);
+          if (parts.label) parts.label.position.copy(midpoint);
+        } else {
+          object.position.set(0, 0, 0);
+          parts.customVisual.position.copy(midpoint);
+          if (parts.label) parts.label.position.copy(midpoint);
+        }
+        return true;
+      }
+
+      shaft.label.position.copy(midpoint);
+      shaft.update(
+        new THREE.Vector3(coordinates.start.x, coordinates.start.y, coordinates.start.z ?? 0),
+        new THREE.Vector3(coordinates.end.x, coordinates.end.y, coordinates.end.z ?? 0),
+        curve ?? null,
+        typeof link.target === "number" ? 0 : link.target.size,
+        this.arrowLength(link),
+      );
+      if (parts?.label) this.syncLinkLabel(link, parts.label);
+      object.position.set(0, 0, 0);
+      return true;
+    }
+
+    object.position.copy(midpoint);
+    return false;
+  }
+
+  private replaceLinkVisual(link: GraphLink, parts: LinkParts, state: ThreeDRenderState) {
+    const factory = this.host.config.modeConfig.threeD.linkObject;
+    const dashPattern = factory ? [] : this.getDashPattern(link);
+    if (!factory && dashPattern.length === 0 && !parts.customVisual && !parts.dashedLine && parts.shaft) {
+      parts.renderState = state;
+      const width = state.selected
+        ? Math.max(link.width ?? LINK_WIDTH, this.host.config.modeConfig.threeD.linkWidth) * SELECTED_LINK_WIDTH
+        : this.host.config.modeConfig.threeD.linkWidth;
+      parts.shaft.setStyle(width, this.shaftMaterial(link));
+      if (parts.label?.visible) parts.label.material.opacity = state.opacity;
+      return;
+    }
+
+    const customVisual = factory?.(link, state) ?? null;
+    if (factory && !isThreeObject(customVisual)) {
+      throw new TypeError("[FalkorDBCanvas] threeD.linkObject must return a Three.js Object3D");
+    }
+    const dashedLine = !factory && dashPattern.length ? this.createDashedLine(link) : null;
+    const shaft = parts.shaft;
+    if (!shaft) throw new Error("[FalkorDBCanvas] Missing 3D link shaft while replacing its visual");
+    const releaseCustomVisual = customVisual ? this.resourceTracker.acquire(customVisual) : null;
+    if (customVisual) shaft.add(customVisual);
+    if (dashedLine) shaft.add(dashedLine);
+    const width = state.selected
+      ? Math.max(link.width ?? LINK_WIDTH, this.host.config.modeConfig.threeD.linkWidth) * SELECTED_LINK_WIDTH
+      : this.host.config.modeConfig.threeD.linkWidth;
+    shaft.setStyle(width, this.shaftMaterial(link));
+    shaft.setShaftVisible(!customVisual && !dashedLine);
+
+    const next: LinkParts = {
+      root: parts.root,
+      label: parts.label,
+      customVisual,
+      dashedLine,
+      releaseCustomVisual,
+      renderState: state,
+      factory,
+      dashPatternFactory: this.host.config.modeConfig.threeD.linkDashPattern,
+      dashPattern,
+      shaft,
+    };
+    this.disposeLinkParts(parts, next);
+    this.linkParts.set(link, next);
+    if (shaft) this.linkShafts.set(link, shaft);
+    else this.linkShafts.delete(link);
+  }
+
+  private cleanupRemovedVisuals() {
+    const nodes = new Set(this.host.data.nodes);
+    for (const [node, parts] of this.nodeParts) {
+      if (nodes.has(node)) continue;
+      this.disposeNodeParts(parts);
+      this.nodeParts.delete(node);
+    }
+
+    const links = new Set(this.host.data.links);
+    for (const [link, parts] of this.linkParts) {
+      if (links.has(link)) continue;
+      this.disposeLinkParts(parts);
+      this.linkParts.delete(link);
+      this.linkShafts.delete(link);
+    }
+  }
+
+  private disposeNodeParts(parts: NodeParts, replacement?: NodeParts) {
+    if (parts.customVisual && parts.customVisual !== replacement?.customVisual) {
+      parts.customVisual.removeFromParent();
+    }
+    parts.releaseCustomVisual?.();
+    parts.group.removeFromParent();
+  }
+
+  private disposeLinkParts(parts: LinkParts, replacement?: LinkParts) {
+    if (parts.customVisual && parts.customVisual !== replacement?.customVisual) {
+      parts.customVisual.removeFromParent();
+    }
+    parts.releaseCustomVisual?.();
+    if (parts.shaft && parts.shaft !== replacement?.shaft) {
+      parts.shaft.dispose();
+      parts.shaft.removeFromParent();
+    }
+    if (parts.dashedLine && parts.dashedLine !== replacement?.dashedLine) {
+      parts.dashedLine.geometry.dispose();
+      (parts.dashedLine.material as THREE.Material).dispose();
+      parts.dashedLine.removeFromParent();
+    }
+    if (!parts.shaft && parts.label && parts.label !== replacement?.label) {
+      parts.label.removeFromParent();
+      parts.label.material.dispose();
+    }
+    if (parts.root !== replacement?.root) parts.root.removeFromParent();
+  }
+}
+
+function sameRenderState(left: ThreeDRenderState, right: ThreeDRenderState): boolean {
+  return left.selected === right.selected && left.dimmed === right.dimmed && left.opacity === right.opacity;
+}
+
+function isThreeObject(value: unknown): value is THREE.Object3D {
+  return !!value
+    && typeof value === "object"
+    && "isObject3D" in value
+    && value.isObject3D === true
+    && "traverse" in value
+    && typeof value.traverse === "function";
+}
+
+function updateDashedLine(
+  line: THREE.LineSegments,
+  pattern: number[],
+  coordinates: { start: CanvasVector3; end: CanvasVector3 },
+  curve?: THREE.Curve<THREE.Vector3> | null,
+) {
+  const start = new THREE.Vector3(coordinates.start.x, coordinates.start.y, coordinates.start.z);
+  const end = new THREE.Vector3(coordinates.end.x, coordinates.end.y, coordinates.end.z);
+  curve?.updateArcLengths();
+  const length = curve?.getLength() ?? start.distanceTo(end);
+  const positions: number[] = [];
+  let distance = 0;
+  let patternIndex = 0;
+
+  while (distance < length && length > 0) {
+    const span = Math.min(pattern[patternIndex], length - distance);
+    if (patternIndex % 2 === 0) {
+      const segments = curve ? Math.max(1, Math.ceil(span / 2)) : 1;
+      for (let segment = 0; segment < segments; segment++) {
+        const segmentStart = distance + (span * segment) / segments;
+        const segmentEnd = distance + (span * (segment + 1)) / segments;
+        const from = curve ? curve.getPointAt(segmentStart / length) : start.clone().lerp(end, segmentStart / length);
+        const to = curve ? curve.getPointAt(segmentEnd / length) : start.clone().lerp(end, segmentEnd / length);
+        positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
+      }
+    }
+    distance += span;
+    patternIndex = (patternIndex + 1) % pattern.length;
+  }
+
+  const current = line.geometry.getAttribute("position");
+  if (current && current.array.length === positions.length) {
+    for (let index = 0; index < positions.length; index++) current.array[index] = positions[index];
+    current.needsUpdate = true;
+  } else {
+    line.geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  }
+  line.geometry.computeBoundingSphere();
+
 }
 
 /**

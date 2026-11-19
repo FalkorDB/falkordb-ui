@@ -274,19 +274,19 @@ describe("setConfig triggers render", () => {
       links: [],
     });
 
-    canvas.setConfig({ nodeStyle: { strokeWidthSelected: 3 } });
+    canvas.setConfig({ twoD: { nodeStyle: { strokeWidthSelected: 3 } } });
     const internalConfig = (canvas as any).config;
     expect(internalConfig.nodeStyle.strokeWidthSelected).toBe(3);
 
-    canvas.setConfig({ linkStyle: { arrowWidthRatio: 2 } });
+    canvas.setConfig({ twoD: { linkStyle: { arrowWidthRatio: 2 } } });
     expect(internalConfig.linkStyle.arrowWidthRatio).toBe(2);
   });
 
   it("setConfig before setData does not throw", () => {
     const canvas = createCanvas();
     canvas.setConfig({ width: 800, height: 600 });
-    canvas.setConfig({ nodeStyle: { fontSize: 4 } });
-    canvas.setConfig({ linkStyle: { edgeGap: 0.3 } });
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 4 } } });
+    canvas.setConfig({ twoD: { linkStyle: { edgeGap: 0.3 } } });
     canvas.setConfig({ simulation: { chargeStrength: -100 } });
 
     const internalConfig = (canvas as any).config;

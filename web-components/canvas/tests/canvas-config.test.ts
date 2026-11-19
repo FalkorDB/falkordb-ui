@@ -3,8 +3,10 @@ import {
   forceGraphMockState,
   resetForceGraphMockState,
 } from "./mocks/force-graph";
+import { resetForceGraph3DMockState } from "./mocks/3d-force-graph";
 
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
+vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
 import "../src/canvas";
 import type { CanvasTestElement } from "./test-types";
@@ -51,6 +53,7 @@ describe("setConfig deep merge", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     resetForceGraphMockState();
+    resetForceGraph3DMockState();
   });
 
   it("merges nodeStyle partially — unset fields preserved", () => {
@@ -58,9 +61,9 @@ describe("setConfig deep merge", () => {
     canvas.setConfig({ width: 800, height: 600 });
 
     // Set initial nodeStyle
-    canvas.setConfig({ nodeStyle: { fontSize: 5, textFillRatio: 0.7 } });
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 5, textFillRatio: 0.7 } } });
     // Update only fontSize — textFillRatio should remain
-    canvas.setConfig({ nodeStyle: { fontSize: 3 } });
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 3 } } });
 
     const internalConfig = (canvas as any).config;
     expect(internalConfig.nodeStyle.fontSize).toBe(3);
@@ -70,8 +73,8 @@ describe("setConfig deep merge", () => {
   it("merges linkStyle partially — unset fields preserved", () => {
     const canvas = createCanvas();
     canvas.setConfig({ width: 800, height: 600 });
-    canvas.setConfig({ linkStyle: { arrowWidthRatio: 5 } });
-    canvas.setConfig({ linkStyle: { edgeGap: 0.5 } });
+    canvas.setConfig({ twoD: { linkStyle: { arrowWidthRatio: 5 } } });
+    canvas.setConfig({ twoD: { linkStyle: { edgeGap: 0.5 } } });
 
     const internalConfig = (canvas as any).config;
     expect(internalConfig.linkStyle.arrowWidthRatio).toBe(5);
@@ -115,13 +118,61 @@ describe("setConfig deep merge", () => {
 
   it("top-level scalars are applied correctly", () => {
     const canvas = createCanvas();
-    canvas.setConfig({ width: 800, height: 600, linkStyle: { edgeGap: 5 } });
+    canvas.setConfig({ width: 800, height: 600, twoD: { linkStyle: { edgeGap: 5 } } });
     canvas.setData(SIMPLE_DATA);
     const instance = getLastInstance();
     expect(instance.widthValue).toBe(800);
     expect(instance.heightValue).toBe(600);
     const internalConfig = (canvas as any).config;
     expect(internalConfig.linkStyle.edgeGap).toBe(5);
+  });
+
+  it("rejects removed flat 2D configuration names with migration paths", () => {
+    const canvas = createCanvas();
+    const invalidConfigs = [
+      [{ largeGraph: { enabled: false } }, "twoD.largeGraph"],
+      [{ linkLineDash: () => [] }, "twoD.linkLineDash"],
+      [{ node: {} }, "twoD.node"],
+      [{ link: {} }, "twoD.link"],
+      [{ nodeStyle: { fontSize: 3 } }, "twoD.nodeStyle.fontSize"],
+      [{ linkStyle: { edgeGap: 3 } }, "twoD.linkStyle.edgeGap"],
+      [{ interaction: { linkHitWidth: 3 } }, "twoD.interaction.linkHitWidth"],
+    ];
+
+    for (const [config, destination] of invalidConfigs) {
+      expect(() => Reflect.apply(canvas.setConfig, canvas, [config])).toThrow(destination);
+    }
+  });
+
+  it("merges mode configs independently and preserves them across switches", async () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      twoD: {
+        nodeStyle: { fontSize: 5, textFillRatio: 0.7 },
+        largeGraph: { viewportPadding: 80 },
+      },
+      threeD: { linkWidth: 3 },
+    });
+    canvas.setConfig({
+      twoD: { nodeStyle: { fontSize: 4 } },
+      threeD: { largeGraph: { maxLabeledElements: 500 } },
+    });
+
+    const internalConfig = (canvas as any).config;
+    expect(internalConfig.modeConfig.twoD.nodeStyle).toMatchObject({
+      fontSize: 4,
+      textFillRatio: 0.7,
+    });
+    expect(internalConfig.modeConfig.twoD.largeGraph.viewportPadding).toBe(80);
+    expect(internalConfig.modeConfig.threeD).toMatchObject({
+      linkWidth: 3,
+      largeGraph: { maxLabeledElements: 500 },
+    });
+
+    await canvas.setDimension("3d");
+    await canvas.setDimension("2d");
+    expect(internalConfig.modeConfig.twoD.nodeStyle.fontSize).toBe(4);
+    expect(internalConfig.modeConfig.threeD.linkWidth).toBe(3);
   });
 });
 
@@ -153,7 +204,7 @@ describe("setConfig cache invalidation", () => {
     const data = (canvas as any).getGraphData();
     data.nodes[0].displayName = ["cached", ""];
 
-    canvas.setConfig({ nodeStyle: { fontSize: 4 } });
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 4 } } });
     expect(data.nodes[0].displayName).toEqual(["", ""]);
   });
 });
@@ -339,7 +390,7 @@ describe("setConfig immediate application", () => {
   it("zoomToFitDelay is used when calling zoomToFit after setData", () => {
     vi.useFakeTimers();
     const canvas = createCanvas();
-    canvas.setConfig({ width: 800, height: 600, interaction: { zoomToFitDelay: 200 } });
+    canvas.setConfig({ width: 800, height: 600, twoD: { interaction: { zoomToFitDelay: 200 } } });
     canvas.setData(SIMPLE_DATA);
     const instance = getLastInstance();
     instance.resetTracking();
@@ -502,14 +553,14 @@ describe("setConfig immediate application", () => {
     data.nodes[0].displayName = ["cached", "value"];
     data.nodes[1].displayName = ["also cached", ""];
 
-    canvas.setConfig({ nodeStyle: { fontSize: 8 } });
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 8 } } });
     expect(data.nodes[0].displayName).toEqual(["", ""]);
     expect(data.nodes[1].displayName).toEqual(["", ""]);
   });
 
   it("nodeStyle fontSize change clears font size cache immediately", () => {
     const canvas = createCanvas();
-    canvas.setConfig({ width: 800, height: 600, nodeStyle: { fontSize: 3 } });
+    canvas.setConfig({ width: 800, height: 600, twoD: { nodeStyle: { fontSize: 3 } } });
     canvas.setData(SIMPLE_DATA);
 
     // Access internal font size cache and seed it
@@ -518,7 +569,7 @@ describe("setConfig immediate application", () => {
     expect(internalCanvas.nodeDisplayFontSize.size).toBe(1);
 
     // Changing nodeStyle should clear the font size cache
-    canvas.setConfig({ nodeStyle: { fontSize: 6 } });
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 6 } } });
     expect(internalCanvas.nodeDisplayFontSize.size).toBe(0);
   });
 
@@ -534,7 +585,7 @@ describe("setConfig immediate application", () => {
     internalCanvas.relationshipsTextCache.set("test-key", { width: 50, height: 10 });
     expect(internalCanvas.relationshipsTextCache.size).toBe(1);
 
-    canvas.setConfig({ linkStyle: { arrowWidthRatio: 4 } });
+    canvas.setConfig({ twoD: { linkStyle: { arrowWidthRatio: 4 } } });
     expect(internalCanvas.relationshipsTextCache.size).toBe(0);
   });
 
@@ -617,18 +668,18 @@ describe("setConfig immediate application", () => {
     canvas.setConfig({ width: 800, height: 600 });
     canvas.setData(SIMPLE_DATA);
 
-    canvas.setConfig({ largeGraph: { enabled: true, skipLabelsAtLowZoom: true, lowZoomThreshold: 0.5 } });
-    const stats = canvas.getCullingStats();
+    canvas.setConfig({ twoD: { largeGraph: { enabled: true, skipLabelsAtLowZoom: true, lowZoomThreshold: 0.5 } } });
+    const stats = canvas.twoD.getCullingStats();
     expect(stats.enabled).toBe(true);
   });
 
   it("largeGraph disabled clears culling bounds immediately", () => {
     const canvas = createCanvas();
-    canvas.setConfig({ width: 800, height: 600, largeGraph: { enabled: true, skipLabelsAtLowZoom: true, lowZoomThreshold: 0.5 } });
+    canvas.setConfig({ width: 800, height: 600, twoD: { largeGraph: { enabled: true, skipLabelsAtLowZoom: true, lowZoomThreshold: 0.5 } } });
     canvas.setData(SIMPLE_DATA);
 
-    canvas.setConfig({ largeGraph: { enabled: false } });
-    const stats = canvas.getCullingStats();
+    canvas.setConfig({ twoD: { largeGraph: { enabled: false } } });
+    const stats = canvas.twoD.getCullingStats();
     expect(stats.enabled).toBe(false);
     expect(stats.bounds).toBeNull();
   });

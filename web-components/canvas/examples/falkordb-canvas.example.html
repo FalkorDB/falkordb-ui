@@ -793,8 +793,8 @@
         <tr><td><code>zoomToFit(padding?, filter?)</code></td><td>Fit all/filtered nodes in view</td></tr>
         <tr><td><code>zoom(level)</code></td><td>Set zoom level</td></tr>
         <tr><td><code>getZoom()</code></td><td>Get current zoom level</td></tr>
-        <tr><td><code>setViewport({zoom, centerX, centerY})</code></td><td>Set viewport position and zoom</td></tr>
-        <tr><td><code>getViewport()</code></td><td>Get current viewport state</td></tr>
+        <tr><td><code>twoD.setViewport({zoom, centerX, centerY})</code></td><td>Set the 2D viewport position and zoom</td></tr>
+        <tr><td><code>twoD.getViewport()</code></td><td>Get the current 2D viewport state</td></tr>
         <tr><td><code>setLayout(mode)</code></td><td>'force' | 'tree' | 'radial'</td></tr>
         <tr><td><code>setLayoutOptions(opts)</code></td><td>Update layout-specific options</td></tr>
         <tr><td><code>setAnimation(enabled)</code></td><td>Enable/disable simulation</td></tr>
@@ -802,40 +802,40 @@
         <tr><td><code>setWidth(w) / setHeight(h)</code></td><td>Set canvas dimensions</td></tr>
         <tr><td><code>setBackgroundColor(color)</code></td><td>Set background</td></tr>
         <tr><td><code>setForegroundColor(color)</code></td><td>Set stroke color</td></tr>
-        <tr><td><code>getGraph()</code></td><td>Access force-graph instance</td></tr>
-        <tr><td><code>getCullingStats()</code></td><td>Get viewport culling stats</td></tr>
+        <tr><td><code>twoD.getGraph()</code></td><td>Access the 2D force-graph instance</td></tr>
+        <tr><td><code>twoD.getCullingStats()</code></td><td>Get 2D viewport culling stats</td></tr>
         <tr><td><code>setDebug(enabled)</code></td><td>Enable/disable console debug logging</td></tr>
       </table>
 
-      <h4>Node Style (<code>nodeStyle</code>)</h4>
+      <h4>Shared <code>nodeStyle</code> and <code>twoD.nodeStyle</code></h4>
       <table>
         <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
-        <tr><td><code>fontFamily</code></td><td>string</td><td>'SofiaSans'</td><td>Font for node labels</td></tr>
-        <tr><td><code>fontWeightUnselected</code></td><td>number</td><td>400</td><td>Font weight (normal)</td></tr>
-        <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Font weight (selected)</td></tr>
-        <tr><td><code>fontSize</code></td><td>number</td><td>2</td><td>Base font size (world units)</td></tr>
-        <tr><td><code>textFillRatio</code></td><td>number</td><td>0.85</td><td>Fraction of node radius text fills</td></tr>
-        <tr><td><code>strokeWidthSelected</code></td><td>number</td><td>1</td><td>Border width (selected)</td></tr>
-        <tr><td><code>strokeWidthUnselected</code></td><td>number</td><td>0.5</td><td>Border width (normal)</td></tr>
-        <tr><td><code>glowDuration</code></td><td>number</td><td>10000</td><td>Glow duration in ms</td></tr>
-        <tr><td><code>glowSpread</code></td><td>number</td><td>12</td><td>Glow radius in px</td></tr>
-        <tr><td><code>glowSteps</code></td><td>number</td><td>16</td><td>Gradient rings in glow</td></tr>
-        <tr><td><code>glowColor</code></td><td>[r,g,b]</td><td>[59,130,246]</td><td>Glow RGB color</td></tr>
-        <tr><td><code>glowMaxOpacity</code></td><td>number</td><td>0.6</td><td>Max glow opacity (0-1)</td></tr>
+        <tr><td><code>fontFamily</code></td><td>string</td><td>'SofiaSans'</td><td>Shared node-label font</td></tr>
+        <tr><td><code>fontWeightUnselected</code></td><td>number</td><td>400</td><td>Shared unselected font weight</td></tr>
+        <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Shared selected font weight</td></tr>
+        <tr><td><code>twoD.nodeStyle.fontSize</code></td><td>number</td><td>2</td><td>2D base font size (world units)</td></tr>
+        <tr><td><code>twoD.nodeStyle.textFillRatio</code></td><td>number</td><td>0.85</td><td>2D fraction of node radius text fills</td></tr>
+        <tr><td><code>twoD.nodeStyle.strokeWidthSelected</code></td><td>number</td><td>1</td><td>2D selected border width</td></tr>
+        <tr><td><code>twoD.nodeStyle.strokeWidthUnselected</code></td><td>number</td><td>0.5</td><td>2D normal border width</td></tr>
+        <tr><td><code>twoD.nodeStyle.glowDuration</code></td><td>number</td><td>10000</td><td>2D glow duration in ms</td></tr>
+        <tr><td><code>twoD.nodeStyle.glowSpread</code></td><td>number</td><td>12</td><td>2D glow radius in px</td></tr>
+        <tr><td><code>twoD.nodeStyle.glowSteps</code></td><td>number</td><td>16</td><td>2D gradient rings in glow</td></tr>
+        <tr><td><code>twoD.nodeStyle.glowColor</code></td><td>[r,g,b]</td><td>[59,130,246]</td><td>2D glow RGB color</td></tr>
+        <tr><td><code>twoD.nodeStyle.glowMaxOpacity</code></td><td>number</td><td>0.6</td><td>2D max glow opacity (0-1)</td></tr>
       </table>
 
-      <h4>Link Style (<code>linkStyle</code>)</h4>
+      <h4>Shared <code>linkStyle</code> and <code>twoD.linkStyle</code></h4>
       <table>
         <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
-        <tr><td><code>fontFamily</code></td><td>string</td><td>'SofiaSans'</td><td>Font for link labels</td></tr>
-        <tr><td><code>fontWeightUnselected</code></td><td>number</td><td>400</td><td>Weight (normal)</td></tr>
-        <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Weight (selected)</td></tr>
-        <tr><td><code>arrowWidthRatio</code></td><td>number</td><td>1.6</td><td>Arrow width/height ratio</td></tr>
-        <tr><td><code>arrowNotchRatio</code></td><td>number</td><td>0.2</td><td>Arrow notch depth</td></tr>
-        <tr><td><code>selfLoopCurveFactor</code></td><td>number</td><td>11.67</td><td>Self-loop curvature</td></tr>
-        <tr><td><code>parallelEdgeCurveMultiplier</code></td><td>number</td><td>0.4</td><td>Parallel edge spread</td></tr>
-        <tr><td><code>labelBackgroundPadding</code></td><td>number</td><td>0.3</td><td>Label BG padding</td></tr>
-        <tr><td><code>edgeGap</code></td><td>number</td><td>2</td><td>Gap between edge and node</td></tr>
+        <tr><td><code>fontFamily</code></td><td>string</td><td>'SofiaSans'</td><td>Shared link-label font</td></tr>
+        <tr><td><code>fontWeightUnselected</code></td><td>number</td><td>400</td><td>Shared unselected font weight</td></tr>
+        <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Shared selected font weight</td></tr>
+        <tr><td><code>twoD.linkStyle.arrowWidthRatio</code></td><td>number</td><td>1.6</td><td>2D arrow width/height ratio</td></tr>
+        <tr><td><code>twoD.linkStyle.arrowNotchRatio</code></td><td>number</td><td>0.2</td><td>2D arrow notch depth</td></tr>
+        <tr><td><code>twoD.linkStyle.selfLoopCurveFactor</code></td><td>number</td><td>11.67</td><td>2D self-loop curvature</td></tr>
+        <tr><td><code>twoD.linkStyle.parallelEdgeCurveMultiplier</code></td><td>number</td><td>0.4</td><td>2D parallel edge spread</td></tr>
+        <tr><td><code>twoD.linkStyle.labelBackgroundPadding</code></td><td>number</td><td>0.3</td><td>2D label background padding</td></tr>
+        <tr><td><code>twoD.linkStyle.edgeGap</code></td><td>number</td><td>2</td><td>2D gap between edge and node</td></tr>
       </table>
 
       <h4>Simulation (<code>simulation</code>)</h4>
@@ -848,7 +848,7 @@
         <tr><td><code>warmupTicks</code></td><td>number</td><td>300</td><td>Pre-display ticks</td></tr>
       </table>
 
-      <h4>Interaction (<code>interaction</code>)</h4>
+      <h4>Shared <code>interaction</code> and <code>twoD.interaction</code></h4>
       <table>
         <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
         <tr><td><code>tooltipFontSize</code></td><td>number</td><td>12</td><td>Tooltip text size (px)</td></tr>
@@ -856,15 +856,15 @@
         <tr><td><code>tooltipBorderRadius</code></td><td>string</td><td>'4px'</td><td>Tooltip border radius</td></tr>
         <tr><td><code>tooltipZIndex</code></td><td>number</td><td>1000</td><td>Tooltip z-index</td></tr>
         <tr><td><code>zoomToFitPadding</code></td><td>number</td><td>0.1</td><td>Padding fraction for fit</td></tr>
-        <tr><td><code>zoomToFitDelay</code></td><td>number</td><td>50</td><td>Auto-fit delay (ms)</td></tr>
-        <tr><td><code>linkHitWidth</code></td><td>number</td><td>10</td><td>Link click area (px)</td></tr>
+        <tr><td><code>twoD.interaction.zoomToFitDelay</code></td><td>number</td><td>50</td><td>2D auto-fit delay (ms)</td></tr>
+        <tr><td><code>twoD.interaction.linkHitWidth</code></td><td>number</td><td>10</td><td>2D link click area (px)</td></tr>
         <tr><td><code>contrastThreshold</code></td><td>number</td><td>0.5</td><td>Text contrast threshold</td></tr>
       </table>
 
-      <h4>Large Graph (<code>largeGraph</code>)</h4>
+      <h4>2D Large Graph (<code>twoD.largeGraph</code>)</h4>
       <table>
         <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
-        <tr><td><code>enabled</code></td><td>boolean</td><td>true</td><td>Enable viewport culling</td></tr>
+        <tr><td><code>enabled</code></td><td>boolean</td><td>true</td><td>Enable 2D viewport culling</td></tr>
         <tr><td><code>viewportPadding</code></td><td>number</td><td>0</td><td>Extra cull padding (world units)</td></tr>
         <tr><td><code>lowZoomThreshold</code></td><td>number</td><td>1</td><td>Skip details at this zoom or below</td></tr>
         <tr><td><code>skipLabelsAtLowZoom</code></td><td>boolean</td><td>true</td><td>Skip node labels</td></tr>
@@ -885,7 +885,9 @@
         <tr><td><code>layoutMode</code></td><td>string</td><td>'force'</td><td>Layout algorithm</td></tr>
         <tr><td><code>isNodeSelected</code></td><td>function</td><td>undefined</td><td>(node) => boolean</td></tr>
         <tr><td><code>isLinkSelected</code></td><td>function</td><td>undefined</td><td>(link) => boolean</td></tr>
-        <tr><td><code>linkLineDash</code></td><td>function</td><td>undefined</td><td>(link) => number[]</td></tr>
+        <tr><td><code>twoD.linkLineDash</code></td><td>function</td><td>undefined</td><td>(link) => number[]</td></tr>
+        <tr><td><code>twoD</code></td><td>object</td><td>{}</td><td>2D styles, renderers, and culling</td></tr>
+        <tr><td><code>threeD</code></td><td>object</td><td>{}</td><td>3D Three.js renderers, diagnostics, and link styles</td></tr>
       </table>
 
       <h4>Layout Options (<code>layoutOptions</code>)</h4>
@@ -1105,7 +1107,7 @@
       if (isNaN(edgeGap)) edgeGap = 2;
       edgeGap = Math.max(+input.min, Math.min(+input.max, edgeGap));
       input.value = edgeGap;
-      canvas.setConfig({ linkStyle: { edgeGap } });
+      canvas.setConfig({ twoD: { linkStyle: { edgeGap } } });
     };
 
     window.toggleAnimation = () => {
@@ -1123,6 +1125,9 @@
           fontFamily: document.getElementById('ns-fontFamily').value,
           fontWeightUnselected: parseInt(document.getElementById('ns-fontWeightUnselected').value),
           fontWeightSelected: parseInt(document.getElementById('ns-fontWeightSelected').value),
+        },
+        twoD: {
+          nodeStyle: {
           fontSize: parseFloat(document.getElementById('ns-fontSize').value),
           textFillRatio: parseFloat(document.getElementById('ns-textFillRatio').value),
           strokeWidthSelected: parseFloat(document.getElementById('ns-strokeWidthSelected').value),
@@ -1132,7 +1137,8 @@
           glowSteps: parseInt(document.getElementById('ns-glowSteps').value),
           glowColor: hexToRgb(document.getElementById('ns-glowColor').value),
           glowMaxOpacity: parseFloat(document.getElementById('ns-glowMaxOpacity').value),
-        }
+          }
+        },
       });
     };
 
@@ -1142,12 +1148,16 @@
           fontFamily: document.getElementById('ls-fontFamily').value,
           fontWeightUnselected: parseInt(document.getElementById('ls-fontWeightUnselected').value),
           fontWeightSelected: parseInt(document.getElementById('ls-fontWeightSelected').value),
+        },
+        twoD: {
+          linkStyle: {
           arrowWidthRatio: parseFloat(document.getElementById('ls-arrowWidthRatio').value),
           arrowNotchRatio: parseFloat(document.getElementById('ls-arrowNotchRatio').value),
           selfLoopCurveFactor: parseFloat(document.getElementById('ls-selfLoopCurveFactor').value),
           parallelEdgeCurveMultiplier: parseFloat(document.getElementById('ls-parallelEdgeCurveMultiplier').value),
           labelBackgroundPadding: parseFloat(document.getElementById('ls-labelBackgroundPadding').value),
-        }
+          }
+        },
       });
     };
 
@@ -1171,23 +1181,29 @@
           tooltipBorderRadius: document.getElementById('int-tooltipBorderRadius').value,
           tooltipZIndex: parseInt(document.getElementById('int-tooltipZIndex').value),
           zoomToFitPadding: parseFloat(document.getElementById('int-zoomToFitPadding').value),
-          zoomToFitDelay: parseInt(document.getElementById('int-zoomToFitDelay').value),
-          linkHitWidth: parseInt(document.getElementById('int-linkHitWidth').value),
           contrastThreshold: parseFloat(document.getElementById('int-contrastThreshold').value),
-        }
+        },
+        twoD: {
+          interaction: {
+            zoomToFitDelay: parseInt(document.getElementById('int-zoomToFitDelay').value),
+            linkHitWidth: parseInt(document.getElementById('int-linkHitWidth').value),
+          }
+        },
       });
     };
 
     window.applyLargeGraph = () => {
       const enabled = document.getElementById('lg-enabled').checked;
       canvas.setConfig({
-        largeGraph: {
+        twoD: {
+          largeGraph: {
           enabled,
           viewportPadding: parseInt(document.getElementById('lg-viewportPadding').value),
           lowZoomThreshold: parseFloat(document.getElementById('lg-lowZoomThreshold').value),
           skipLabelsAtLowZoom: document.getElementById('lg-skipLabelsAtLowZoom').checked,
           skipArrowsAtLowZoom: document.getElementById('lg-skipArrowsAtLowZoom').checked,
           skipLinkLabelsAtLowZoom: document.getElementById('lg-skipLinkLabelsAtLowZoom').checked,
+          }
         }
       });
       if (enabled && !lgDebugInterval) {
@@ -1325,7 +1341,7 @@
     window.zoomToFit = () => { canvas.zoomToFit(); };
     window.zoomIn = () => { canvas.zoom(canvas.getZoom() * 1.5); };
     window.zoomOut = () => { canvas.zoom(canvas.getZoom() / 1.5); };
-    window.resetViewport = () => { canvas.setViewport({ zoom: 1, centerX: 0, centerY: 0 }); };
+    window.resetViewport = () => { canvas.twoD.setViewport({ zoom: 1, centerX: 0, centerY: 0 }); };
 
     // ===== Style Actions =====
     window.randomizeAllColors = () => {
@@ -1350,7 +1366,7 @@
     };
 
     window.reheatSim = () => {
-      const fg = canvas.getGraph();
+      const fg = canvas.twoD.getGraph();
       if (fg) {
         canvas.setAnimation(true);
         document.getElementById('animation-toggle').checked = true;
@@ -1368,7 +1384,7 @@
         return;
       }
       debugEl.classList.add('visible');
-      const stats = canvas.getCullingStats();
+      const stats = canvas.twoD.getCullingStats();
       const threshold = parseFloat(document.getElementById('lg-lowZoomThreshold').value) || 0.5;
       document.getElementById('lg-debug-zoom').textContent = stats.zoom.toFixed(3);
       document.getElementById('lg-debug-culling-zoom').textContent = stats.zoom.toFixed(3);

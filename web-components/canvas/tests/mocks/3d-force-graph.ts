@@ -29,11 +29,11 @@ export class MockForceGraph3DInstance {
     for (const callback of this.controlChanges) callback();
   }
 
+  public sceneObject = new Scene();
+
   public destroyed = false;
 
   public contextLost = false;
-
-  private readonly sceneObject = new Scene();
 
   scene() { return this.sceneObject; }
 
@@ -59,6 +59,9 @@ export class MockForceGraph3DInstance {
   public chargeForce = { strength: (_value: number) => this.chargeForce };
 
   constructor(public readonly container: HTMLElement) {
+    this.cameraObject.position.set(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
+    this.cameraObject.lookAt(0, 0, 0);
+    this.cameraObject.updateMatrixWorld(true);
     // The real one renders into a canvas of its own.
     container.appendChild(document.createElement("canvas"));
 
@@ -89,12 +92,16 @@ export class MockForceGraph3DInstance {
   width(value?: number) {
     if (value === undefined) return (this.props.get("width") as number) ?? 0;
     this.props.set("width", value);
+    this.cameraObject.aspect = value / (this.height() || 1);
+    this.cameraObject.updateProjectionMatrix();
     return this;
   }
 
   height(value?: number) {
     if (value === undefined) return (this.props.get("height") as number) ?? 0;
     this.props.set("height", value);
+    this.cameraObject.aspect = (this.width() || 1) / value;
+    this.cameraObject.updateProjectionMatrix();
     return this;
   }
 
@@ -134,13 +141,21 @@ export class MockForceGraph3DInstance {
   simulateDrag(position: Vec3, target: Vec3) {
     this.cameraPos = { ...position };
     this.controlsState.target = { ...target };
+    this.cameraObject.position.set(position.x, position.y, position.z);
+    this.cameraObject.lookAt(target.x, target.y, target.z);
+    this.cameraObject.updateMatrixWorld(true);
   }
 
   cameraPosition(position?: Partial<Vec3>, lookAt?: Vec3, transitionMs?: number) {
     if (position === undefined) return this.cameraPos;
     this.calls.push(["cameraPosition", [position, lookAt, transitionMs]]);
     this.cameraPos = { ...this.cameraPos, ...position };
-    if (lookAt) this.controlsState.target = { ...lookAt };
+    this.cameraObject.position.set(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
+    if (lookAt) {
+      this.controlsState.target = { ...lookAt };
+      this.cameraObject.lookAt(lookAt.x, lookAt.y, lookAt.z);
+    }
+    this.cameraObject.updateMatrixWorld(true);
     return this;
   }
 

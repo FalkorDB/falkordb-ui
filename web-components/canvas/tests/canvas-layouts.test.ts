@@ -355,7 +355,7 @@ describe("link force visibility", () => {
         return this;
       },
     };
-    (canvas.getGraph() as any).d3Force("link", hostForce);
+    (canvas.twoD.getGraph() as any).d3Force("link", hostForce);
 
     canvas.getGraphData().links[2].visible = false;
     canvas.refresh();

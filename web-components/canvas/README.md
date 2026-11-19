@@ -4,6 +4,10 @@
 
 A standalone web component for visualizing FalkorDB graphs using force-directed layouts.
 
+> **v1.0 is a breaking API release.** Renderer-specific settings and operations
+> are now grouped under `twoD` and `threeD`; legacy flat names are removed.
+> Follow the [v1 migration guide](./MIGRATION-v1.md) before upgrading.
+
 ## Features
 
 - 🎨 **Force-directed graph layout** - Automatic positioning using D3 force simulation with smart collision detection
@@ -122,7 +126,7 @@ function GraphVisualization() {
 | **getData**() | | Get the current graph data in the simplified format. |
 | **setGraphData**(*data*) | | Set graph data in the internal format (with computed properties). Use this for better performance when you already have GraphData format. |
 | **getGraphData**() | | Get the current graph data in the internal format with all computed properties (x, y, vx, vy, etc.). |
-| **setConfig**(*config*) | | Configure the graph visualization and behavior. Accepts a `ForceGraphConfig` object with styling, callbacks, and rendering options. |
+| **setConfig**(*config*) | | Configure the graph visualization and behavior. Accepts `CanvasConfig` with shared settings and `twoD` / `threeD` renderer settings. |
 | **setWidth**(*width*) | | Set canvas width in pixels. |
 | **setHeight**(*height*) | | Set canvas height in pixels. |
 | **setBackgroundColor**(*color*) | | Set background color (hex or CSS color). |
@@ -135,17 +139,29 @@ function GraphVisualization() {
 | **getDimension**() | | The dimension the graph is shown in, or is being switched to. |
 | **setDebug**(*enabled*) | `false` | Enable or disable debug logging to console. All log messages are prefixed with `[FalkorDBCanvas]`. |
 | **refresh**() | | Trigger a repaint after in-place property mutations (visibility, color, size). Recomputes positions for deterministic layouts. |
-| **getViewport**() | | Get current zoom and center position as `ViewportState`. After the element is disconnected, returns the viewport it was left at, so a host can save it while unmounting. 2D only: in 3D it returns `undefined`, connected or not. |
-| **setViewport**(*viewport*) | | Restore a previously saved viewport state. |
 | **getZoom**() | | Get current zoom level. |
 | **zoom**(*zoomLevel*) | | Set zoom level. |
 | **zoomToFit**(*paddingMultiplier*, *filter*) | `1.0`, `undefined` | Auto-fit all visible nodes in view. Optional padding multiplier and node filter function. |
-| **getGraph**() | | Get the underlying force-graph instance for advanced control. |
-| **getCullingStats**() | | Get 2D viewport culling statistics (bounds, visible vs total node/link counts); does not report the 3D camera frustum. |
+Renderer-specific operations use typed namespaces and throw a clear error if
+their renderer is not active:
+
+```typescript
+canvas.twoD.getViewport();
+canvas.twoD.setViewport(savedViewport);
+canvas.twoD.getGraph();             // force-graph instance
+canvas.twoD.getCullingStats();
+
+const camera = canvas.threeD.getCameraState();
+canvas.threeD.setCameraState(camera);
+canvas.threeD.getGraph();           // 3d-force-graph instance
+canvas.threeD.getCullingStats();
+```
 
 ### Configuration Options
 
-Configuration is passed to `setConfig()` as a `ForceGraphConfig` object. It is organized into sub-configs:
+Configuration is passed to `setConfig()` as a `CanvasConfig`. Shared settings
+stay at the top level; renderer-specific settings are nested under `twoD` and
+`threeD`. Partial updates preserve sibling settings in both groups.
 
 #### Top-Level Options
 
@@ -164,41 +180,44 @@ Configuration is passed to `setConfig()` as a `ForceGraphConfig` object. It is o
 | `pinOnDragEnd` | `false` | Pin nodes after dragging |
 | `isNodeSelected` | | Function: `(node: GraphNode) => boolean` |
 | `isLinkSelected` | | Function: `(link: GraphLink) => boolean` |
-| `linkLineDash` | | Function: `(link: GraphLink) => number[]` |
-| `node` | | Custom node rendering (see [Custom Rendering](#custom-rendering)) |
-| `link` | | Custom link rendering (see [Custom Rendering](#custom-rendering)) |
-| `largeGraph` | | Large-graph optimizations (see [Large-Graph Optimizations](#large-graph-optimizations)) |
+| `twoD` | | 2D-only styles, custom Canvas renderers, dash patterns, and large-graph controls |
+| `threeD` | | 3D-only custom Three.js renderers, link styling, and caption limits |
 
-#### `nodeStyle` — Node Visual Style
+`nodeStyle`, `linkStyle`, and `interaction` at the top level contain fields
+shared by both renderers. Their renderer-specific fields live under the
+corresponding `twoD` group. `simulation`, selection and dimming predicates,
+layout settings, captions, and event handlers remain shared.
+
+#### Shared `nodeStyle` and `twoD.nodeStyle`
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `fontFamily` | `'SofiaSans'` | Font family for node labels |
 | `fontWeightUnselected` | `400` | Font weight when not selected |
 | `fontWeightSelected` | `700` | Font weight when selected |
-| `fontSize` | `2` | Fixed font size (world units). Used when `textFillRatio` is 0 or unset |
-| `textFillRatio` | `0.85` | Auto-size: fraction of node radius that text fills (0–1). Takes precedence over `fontSize` |
-| `strokeWidthSelected` | `1` | Border width when selected |
-| `strokeWidthUnselected` | `0.5` | Border width when not selected |
-| `glowDuration` | `10000` | Glow effect duration (ms) after expand/collapse |
-| `glowSpread` | `12` | Glow spread radius (px) |
-| `glowSteps` | `16` | Number of gradient rings in glow |
-| `glowColor` | `[59, 130, 246]` | Glow color as `[r, g, b]` |
-| `glowMaxOpacity` | `0.6` | Maximum glow opacity (0–1) |
+| `twoD.nodeStyle.fontSize` | `2` | 2D fixed font size (world units). Used when `textFillRatio` is 0 or unset |
+| `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fraction of node radius that text fills (0–1). Takes precedence over `fontSize` |
+| `twoD.nodeStyle.strokeWidthSelected` | `1` | 2D border width when selected |
+| `twoD.nodeStyle.strokeWidthUnselected` | `0.5` | 2D border width when not selected |
+| `twoD.nodeStyle.glowDuration` | `10000` | 2D glow duration (ms) after expand/collapse |
+| `twoD.nodeStyle.glowSpread` | `12` | 2D glow spread radius (px) |
+| `twoD.nodeStyle.glowSteps` | `16` | 2D gradient rings in glow |
+| `twoD.nodeStyle.glowColor` | `[59, 130, 246]` | 2D glow color as `[r, g, b]` |
+| `twoD.nodeStyle.glowMaxOpacity` | `0.6` | 2D maximum glow opacity (0–1) |
 
-#### `linkStyle` — Link/Edge Visual Style
+#### Shared `linkStyle` and `twoD.linkStyle`
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `fontFamily` | `'SofiaSans'` | Font family for link labels |
 | `fontWeightUnselected` | `400` | Font weight when not selected |
 | `fontWeightSelected` | `700` | Font weight when selected |
-| `arrowWidthRatio` | `1.6` | Arrow width-to-height ratio |
-| `arrowNotchRatio` | `0.2` | Arrow notch depth ratio |
-| `selfLoopCurveFactor` | `11.67` | Self-loop curve factor |
-| `parallelEdgeCurveMultiplier` | `0.4` | Parallel edge curve multiplier |
-| `labelBackgroundPadding` | `0.3` | Label background padding (world units) |
-| `edgeGap` | `2` | Gap between edge tip and visible node border (px) |
+| `twoD.linkStyle.arrowWidthRatio` | `1.6` | 2D arrow width-to-height ratio |
+| `twoD.linkStyle.arrowNotchRatio` | `0.2` | 2D arrow notch depth ratio |
+| `twoD.linkStyle.selfLoopCurveFactor` | `11.67` | 2D self-loop curve factor |
+| `twoD.linkStyle.parallelEdgeCurveMultiplier` | `0.4` | 2D parallel-edge curve multiplier |
+| `twoD.linkStyle.labelBackgroundPadding` | `0.3` | 2D label background padding (world units) |
+| `twoD.linkStyle.edgeGap` | `2` | 2D gap between edge tip and visible node border (px) |
 
 #### `simulation` — Force Simulation Tuning
 
@@ -211,7 +230,7 @@ Configuration is passed to `setConfig()` as a `ForceGraphConfig` object. It is o
 | `warmupTicks` | `300` | Warmup ticks for force simulation |
 | `workerLayout` | `true` | Run 3D force physics in a module worker at 1,000+ nodes; `false` keeps local physics. No effect on 2D, tree or radial layouts. |
 
-#### `interaction` — Interaction / UX Parameters
+#### Shared `interaction` and `twoD.interaction`
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -220,9 +239,28 @@ Configuration is passed to `setConfig()` as a `ForceGraphConfig` object. It is o
 | `tooltipBorderRadius` | `'4px'` | Tooltip border radius CSS value |
 | `tooltipZIndex` | `1000` | Tooltip z-index |
 | `zoomToFitPadding` | `0.1` | Zoom-to-fit padding as fraction of smallest dimension |
-| `zoomToFitDelay` | `50` | Delay (ms) before zoom-to-fit after layout change |
-| `linkHitWidth` | `10` | Link pointer hit-test width (screen px) |
+| `twoD.interaction.zoomToFitDelay` | `50` | 2D delay (ms) before zoom-to-fit after layout change |
+| `twoD.interaction.linkHitWidth` | `10` | 2D link pointer hit-test width (screen px) |
 | `contrastThreshold` | `0.5` | Luminance threshold for text color contrast |
+
+#### Renderer-specific options
+
+- `twoD.largeGraph`: Canvas viewport culling and low-zoom drawing controls.
+- `twoD.linkLineDash(link)`: Canvas dash pattern returned as a `number[]`.
+- `twoD.node` / `twoD.link`: Canvas drawing and pointer-area callbacks.
+- `threeD.largeGraph`: controls CPU-side offscreen styling/caption work,
+  low-zoom detail skipping, and opaque node instancing. `maxLabeledElements`
+  defaults to `1000`; `viewportPadding` defaults to `0`; low-zoom options and
+  instancing default to enabled. Native Three.js frustum culling stays active
+  regardless of this group's `enabled` setting.
+- `threeD.linkWidth`: unselected 3D link width in world units; defaults to `0`
+  (the existing hairline). Selected links remain emphasized.
+- `threeD.linkDashPattern(link)`: alternating dash/gap lengths in world units;
+  return `[]` for a solid native link.
+- `threeD.nodeObject(node, state)` / `threeD.linkObject(link, state)`: return
+  custom `THREE.Object3D` visuals with `{ selected, dimmed, opacity }` state.
+- `threeD.linkObjectPositionUpdate(object, { start, end }, link)`: update a
+  custom link visual as its world-space endpoints move.
 
 #### `eventHandlers` — Event Callbacks
 
@@ -290,7 +328,7 @@ await canvas.setDimension('2d');
 
 The 3D renderer and three.js are loaded the first time 3D is used, so pages that stay in 2D never download them. Until the switch completes the current view stays up; `onDimensionChange` fires when it is done. Called before the element is connected, `setDimension` only records the dimension and its promise settles at once: the graph is shown in it when the element renders. For `'3d'`, `onDimensionChange` fires then; `'2d'` is how the canvas starts anyway, so no event fires. If 3D cannot be shown (the bundle will not load, or WebGL will not start), the promise rejects, the canvas stays in or falls back to 2D, and `onDimensionChange('2d')` fires.
 
-Switching lays the graph out afresh in the new dimension and fits it to the view. The data, selection, dimming, colors, captions and event handlers carry over. In 3D:
+Switching lays the graph out afresh in the new dimension and fits it to the view. The data, selection, dimming, colors, captions and event handlers carry over. `twoD` and `threeD` configuration are retained independently across switches. Mode-specific operations throw when their renderer is inactive or unavailable. In 3D:
 
 - Over empty space, left-drag to rotate, right-drag to pan without changing the viewing angle, and scroll to zoom. On touchscreens, one finger rotates; moving two fingers together pans, and pinching zooms. Start camera gestures away from nodes: dragging a node still moves that node. `zoom()` and `getZoom()` express the camera's distance as a zoom factor, so `zoom(getZoom() * 1.1)` zooms in as it does in 2D.
 - Edge shafts stop at the back of their arrowheads rather than continuing through the tip, including selected, curved and self-loop edges. When low-zoom settings hide arrows, shafts extend to the target node instead. 2D uses the same visual rule with its notched arrowheads.
@@ -298,12 +336,11 @@ Switching lays the graph out afresh in the new dimension and fits it to the view
 - Selected shafts reuse their geometry while their path, width and clipping inputs are unchanged. Shaft materials are shared by color and selection; cache eviction above 256 entries affects unused materials only, so graphs with more active colors do not churn materials on hover.
 - `tree` and `radial` keep their 2D positions, so face-on they read exactly as in 2D with no node over another, and each level sits one level distance further back than the one above it, the root nearest. Seen side-on the levels step back like stairs: a tree's levels each line up as one point, and a radial ring as one line. Both are pinned, so they hold still; picking a layout turns the view face-on again.
 - Pausing the animation or pinning stops a `force` layout's simulation.
-- Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Captions are left to the hover tooltip above 1,000 nodes or links.
+- Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Individual captions are limited when either node or link count exceeds `threeD.largeGraph.maxLabeledElements` (default `1000`); the renderer continues to use Three.js frustum culling independently.
 - A dragged node stays where it is dropped when `pinOnDragEnd` is on.
-- `getViewport()` returns `undefined` and `setViewport()` does nothing, since a 2D zoom and center do not describe a 3D camera. `getGraph()` returns `undefined`.
-- Custom `node` / `link` canvas renderers, `linkLineDash` and the expand glow apply to 2D only.
-- With `largeGraph.enabled`, 3D camera-frustum checks defer offscreen node styling and caption calculation, hide offscreen captions, and defer offscreen link-caption opacity updates. Camera movement, resize, simulation ticks and data/style changes refresh visibility; pending node changes are applied on re-entry. Bounds include caption extent and `viewportPadding` (world units) to avoid clipping edge labels. All nodes and links remain in the simulation. Native link styling, link-caption allocation and scene traversal are not culled by this optimization; Three.js handles mesh draw culling.
-- The existing `largeGraph` low-zoom settings also apply in 3D: labels and arrows hide at or below `lowZoomThreshold` and return when zooming in. `getZoom()` uses camera distance in 3D, not a 2D screen scale. Disable `largeGraph.enabled` or the individual `skip*AtLowZoom` settings to keep details visible. Hover tooltips remain available.
+- Custom `twoD.node` / `twoD.link` canvas renderers, `twoD.linkLineDash` and the expand glow apply to 2D only.
+- With 3D large-graph optimization enabled, offscreen node styling and caption calculations are deferred, offscreen captions are hidden, and offscreen link-caption opacity updates are deferred. Camera movement, resize, simulation ticks and data/style changes refresh visibility; pending node changes are applied on re-entry. Bounds include caption extent and `threeD.largeGraph.viewportPadding` (world units) to avoid clipping edge labels. All nodes and links remain in the simulation, and native Three.js frustum culling remains active.
+- `threeD.largeGraph` low-zoom settings hide labels and arrows at or below `lowZoomThreshold` and restore them when zooming in. `getZoom()` uses camera distance in 3D, not a 2D screen scale. Disable the relevant 3D optimization or `skip*AtLowZoom` setting to keep details visible. Hover tooltips remain available.
 
 Settled 3D scenes stop drawing after 150 ms without activity. Pointer input,
 camera controls, camera transitions, data/style updates and resizing wake the
@@ -329,8 +366,8 @@ Offscreen bodies are excluded using camera-frustum bounds. Existing node objects
 remain as raycast/drag targets; captions keep their current renderer. Selected
 nodes retain individual bodies and outlines to preserve their contour/depth
 behavior. Transparent/dimmed bodies retain individual meshes so Three.js can
-sort them for blending. Disable this path with `largeGraph.nodeInstancing: false`
-(or `largeGraph.enabled: false`). This is node-body instancing, not link batching:
+sort them for blending. Disable this path with `threeD.largeGraph.nodeInstancing: false`
+(or `threeD.largeGraph.enabled: false`). This is node-body instancing, not link batching:
 links, arrowheads and captions still have per-element draw costs, and physics and
 interaction-object counts do not shrink.
 
@@ -381,6 +418,10 @@ Its existing text caches, viewport culling and idle redraw address its own costs
 Large scenes still require per-element interaction objects. Hosts should
 warn or limit graph sizes before calling `setDimension`, `setData` or
 `setGraphData`; browser CPU/RAM hints cannot reliably predict free GPU memory.
+- Save and restore full camera orientation—including roll—with `threeD.getCameraState()` and `threeD.setCameraState(state)`. `threeD.getGraph()` exposes the typed underlying 3D graph instance.
+- 3D culling diagnostics are available through `threeD.getCullingStats()`. They traverse current scene drawables to count actual frustum intersections, including partial bounds; collect them on demand, not every frame.
+
+See [the interactive 3D example](./examples/3d-parity.example.html) for switching, camera persistence, custom visuals, dashed links, and culling diagnostics. See [the repeatable 3D performance check](./examples/3d-performance.example.html) for seeded visible, partial, and offscreen views.
 
 ### Data Types
 
@@ -407,13 +448,14 @@ warn or limit graph sizes before calling `setDimension`, `setData` or
 | `source` | *required* | Source node ID |
 | `target` | *required* | Target node ID |
 | `visible` | *required* | Whether the link is visible |
-| `width` | `1` | Line width in screen pixels (stays constant while zooming) |
+| `width` | `1` | 2D line width in screen pixels (stays constant while zooming) |
 | `fontSize` | `6` | Relationship caption font size (world units) |
 | `arrowSize` | `8` | Arrowhead length (world units) |
 | `data` | *required* | Link properties as key-value pairs |
 
-`width` and `arrowSize` are doubled while the link is selected, so selected
-links stay visually distinct.
+In 2D, `width` and `arrowSize` are doubled while the link is selected. In 3D,
+the selected link width is `1.5 × max(link.width, threeD.linkWidth)` and the
+arrow length is emphasized; unselected width comes from `threeD.linkWidth`.
 
 #### GraphNode
 Internal format with computed properties:
@@ -428,8 +470,14 @@ Internal format with computed properties:
   vy?: number;
   fx?: number;                    // Fixed position
   fy?: number;
+  z?: number;                     // 3D position
+  vz?: number;                    // 3D velocity
+  fz?: number;                    // Fixed 3D position
 }
 ```
+
+The typed instance returned by `canvas.threeD.getGraph()` includes the
+underlying 3D graph controls and 3D node coordinates for advanced use.
 
 #### GraphLink
 Internal format with resolved node references:
@@ -442,7 +490,7 @@ Internal format with resolved node references:
 }
 ```
 
-#### ViewportState
+#### TwoDViewportState
 ```typescript
 {
   zoom: number;
@@ -460,34 +508,77 @@ Internal format with resolved node references:
 }
 ```
 
-## Custom Rendering
+## Custom 2D Rendering
 
-You can provide custom rendering functions for nodes and links:
+2D Canvas renderers and pointer areas are configured under `twoD`:
 
 ```typescript
 canvas.setConfig({
-  node: {
-    nodeCanvasObject: (node: GraphNode, ctx: CanvasRenderingContext2D) => {
-      // Custom node drawing logic
-      ctx.fillStyle = node.color;
-      ctx.fillRect(node.x! - 5, node.y! - 5, 10, 10);
+  twoD: {
+    node: {
+      nodeCanvasObject: (node: GraphNode, ctx: CanvasRenderingContext2D) => {
+        ctx.fillStyle = node.color;
+        ctx.fillRect(node.x! - 5, node.y! - 5, 10, 10);
+      },
+      nodePointerAreaPaint: (node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(node.x! - 5, node.y! - 5, 10, 10);
+      },
     },
-    nodePointerAreaPaint: (node: GraphNode, color: string, ctx: CanvasRenderingContext2D) => {
-      // Define clickable area
-      ctx.fillStyle = color;
-      ctx.fillRect(node.x! - 5, node.y! - 5, 10, 10);
-    }
+    link: {
+      linkCanvasObject: (link: GraphLink, ctx: CanvasRenderingContext2D) => {
+        // Custom link drawing logic
+      },
+      linkPointerAreaPaint: (link: GraphLink, color: string, ctx: CanvasRenderingContext2D) => {
+        // Define clickable area for link
+      },
+    },
   },
-  link: {
-    linkCanvasObject: (link: GraphLink, ctx: CanvasRenderingContext2D) => {
-      // Custom link drawing logic
-    },
-    linkPointerAreaPaint: (link: GraphLink, color: string, ctx: CanvasRenderingContext2D) => {
-      // Define clickable area for link
-    }
-  }
 });
 ```
+
+### Custom 3D Rendering and Resource Ownership
+
+3D factories return Three.js objects and receive the current visual state.
+Canvas keeps the built-in node caption and selection outline around a custom
+node object, and the relationship label around a custom link object.
+
+```typescript
+import * as THREE from 'three';
+
+const sharedGeometry = new THREE.IcosahedronGeometry(8, 1);
+const sharedMaterial = new THREE.MeshStandardMaterial({ color: '#3b82f6' });
+
+canvas.setConfig({
+  threeD: {
+    nodeObject: (node, state) => {
+      const material = sharedMaterial.clone();
+      material.opacity = state.opacity;
+      material.transparent = state.opacity < 1;
+      const mesh = new THREE.Mesh(sharedGeometry, material);
+      mesh.userData.nodeId = node.id;
+      return mesh;
+    },
+    linkDashPattern: (link) => link.relationship === 'KNOWS' ? [12, 6] : [],
+    linkWidth: 0.75,
+  },
+});
+await canvas.setDimension('3d');
+```
+
+Factories run when data or visual state changes, not on every animation frame.
+Use `linkObjectPositionUpdate(object, { start, end }, link)` to update custom
+link geometry as endpoints move. A custom `linkObject` takes precedence over
+the built-in dashed line. Dash/gap lengths and `linkWidth` are world units.
+
+Canvas reference-counts each distinct geometry, material, and reachable texture
+across active custom visuals. A replacement acquires its new resources before
+releasing the old visual's lease; Canvas calls `dispose()` once the final active
+visual releases a resource. Graph-engine cleanup cannot dispose a still-leased
+resource early. References outside active Canvas visuals are not tracked: do
+not reuse a resource after its last visual releases it. If application code
+needs the resource afterward, retain an independent copy. Resources hidden
+outside the returned object's material/geometry graph remain caller-owned.
 
 ## Utility Functions
 
@@ -599,30 +690,44 @@ while (true) {
 
 1. **Large graphs**: Disable animation (`setAnimation(false)`) once the layout stabilizes
 2. **Static graphs**: Use a deterministic layout (`setLayout('tree')`) to avoid simulation overhead
-3. **Custom rendering**: Optimize your custom `nodeCanvasObject` and `linkCanvasObject` functions
-4. **Viewport**: Use `getViewport()` and `setViewport()` to preserve user's view when updating data
-5. **Very large graphs**: Enable viewport culling via the `largeGraph` option (see below)
+3. **Custom rendering**: Optimize 2D `twoD.node` / `twoD.link` callbacks and 3D `threeD.nodeObject` / `threeD.linkObject` factories
+4. **Viewport**: Use `canvas.twoD.getViewport()` and `canvas.twoD.setViewport()` to preserve the 2D view when updating data; use the 3D camera methods for 3D.
+5. **Very large 2D graphs**: Enable viewport culling via `twoD.largeGraph` (see below)
 
-## Large-Graph Optimizations
+## 2D Large-Graph Optimizations
 
-For graphs with thousands of nodes and links, enable the built-in viewport culling and low-zoom draw-skipping optimizations via the `largeGraph` configuration option.
+For 2D graphs with thousands of nodes and links, enable the built-in viewport
+culling and low-zoom draw-skipping optimizations via `twoD.largeGraph`.
 
-> **Note:** These optimizations are applied by the default renderer. If you provide custom
-> `nodeCanvasObject` / `linkCanvasObject` callbacks, the library will not cull or skip
+> **2D only:** These optimizations are applied by the default Canvas renderer. If you provide custom
+> `twoD.node.nodeCanvasObject` / `twoD.link.linkCanvasObject` callbacks, the library will not cull or skip
 > drawing for those elements automatically. Implement equivalent viewport culling and
 > low-zoom checks in your custom renderer if needed.
 
 ```typescript
 canvas.setConfig({
-  largeGraph: {
-    enabled: true,           // master switch (true by default)
-    viewportPadding: 50,     // world-unit padding around the visible viewport (default: 0)
-    lowZoomThreshold: 0.5,  // zoom level below which expensive details are skipped
-    skipLabelsAtLowZoom: true,      // skip node labels at low zoom (default: true)
-    skipArrowsAtLowZoom: true,      // skip link arrowheads at low zoom (default: true)
-    skipLinkLabelsAtLowZoom: true,  // skip link relationship labels at low zoom (default: true)
-    nodeInstancing: true,          // batch opaque 3D node bodies at 1,000+ nodes (default: true)
-  }
+  twoD: {
+    largeGraph: {
+      enabled: true,           // master switch (true by default)
+      viewportPadding: 50,     // world-unit padding around the visible viewport (default: 0)
+      lowZoomThreshold: 0.5,    // zoom level below which expensive details are skipped
+      skipLabelsAtLowZoom: true,      // skip node labels at low zoom (default: true)
+      skipArrowsAtLowZoom: true,      // skip link arrowheads at low zoom (default: true)
+      skipLinkLabelsAtLowZoom: true,  // skip link relationship labels at low zoom (default: true)
+    },
+  },
+  threeD: {
+    largeGraph: {
+      enabled: true,
+      maxLabeledElements: 1000,
+      nodeInstancing: true,
+      viewportPadding: 50,
+      lowZoomThreshold: 1,
+      skipLabelsAtLowZoom: true,
+      skipArrowsAtLowZoom: true,
+      skipLinkLabelsAtLowZoom: true,
+    },
+  },
 });
 ```
 
@@ -647,17 +752,20 @@ Node and link shapes are always drawn so the overall graph structure remains vis
 ```typescript
 // Good starting point for graphs with 1,000 – 10,000+ elements
 canvas.setConfig({
-  largeGraph: {
-    enabled: true,
-    viewportPadding: 100,  // pre-render elements slightly off-screen to avoid pop-in
-    lowZoomThreshold: 0.4, // tune to match your typical minimum zoom
+  twoD: {
+    largeGraph: {
+      enabled: true,
+      viewportPadding: 100,  // pre-render elements slightly off-screen to avoid pop-in
+      lowZoomThreshold: 0.4, // tune to match your typical minimum zoom
+    }
   }
 });
 ```
 
-### Backward compatibility
+### Defaults
 
-The feature is **enabled by default** (`enabled: true`).  The `lowZoomThreshold` defaults to `1` (always active) and viewport culling uses zero padding.
+2D large-graph optimization is **enabled by default** (`enabled: true`). The
+`lowZoomThreshold` defaults to `1` and viewport culling uses zero padding.
 
 ## Debugging
 

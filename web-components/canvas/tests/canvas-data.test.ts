@@ -69,7 +69,7 @@ describe("setData and getData", () => {
 
   it("keeps self-loop lanes distinct and honors parallel-edge curvature settings", () => {
     const canvas = createCanvas();
-    canvas.setConfig({ linkStyle: { parallelEdgeCurveMultiplier: 0.7 } });
+    canvas.setConfig({ twoD: { linkStyle: { parallelEdgeCurveMultiplier: 0.7 } } });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
       links: [1, 2, 3].map(id => ({

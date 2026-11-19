@@ -12,9 +12,12 @@ import type {
   RadialLayoutOptions,
   ForceLayoutOptions,
   NodeStyleConfig,
+  TwoDNodeStyleConfig,
   LinkStyleConfig,
+  TwoDLinkStyleConfig,
   SimulationConfig,
   InteractionConfig,
+  TwoDInteractionConfig,
   EventHandlers,
 } from "./canvas-types.js";
 
@@ -52,15 +55,22 @@ export type {
   RadialLayoutOptions,
   ForceLayoutOptions,
   NodeStyleConfig,
+  TwoDNodeStyleConfig,
   LinkStyleConfig,
+  TwoDLinkStyleConfig,
   SimulationConfig,
   InteractionConfig,
+  TwoDInteractionConfig,
   EventHandlers,
 }
 
 export type {
-  ForceGraphConfig,
-  LargeGraphConfig,
+  CanvasConfig,
+  TwoDConfig,
+  ThreeDConfig,
+  TwoDLargeGraphConfig,
+  ThreeDLargeGraphConfig,
+  ThreeDRenderState,
   GraphNode,
   GraphLink,
   GraphData,
@@ -68,12 +78,16 @@ export type {
   NodeShape,
   Link,
   Data,
-  ViewportState,
-  ForceGraphInstance,
+  TwoDViewportState,
+  CameraState,
+  CanvasVector3,
+  ThreeDCullingStats,
+  TwoDGraphInstance,
+  ThreeDGraphInstance,
   Transform,
 } from "./canvas-types.js";
 
-export type { WorldBounds } from "./canvas.js";
+export type { TwoDWorldBounds } from "./canvas.js";
 
 // Utils
 export {

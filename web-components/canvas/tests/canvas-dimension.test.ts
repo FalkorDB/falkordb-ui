@@ -12,10 +12,10 @@ import {
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
-import { BoxGeometry, Group, InstancedMesh, LineBasicMaterial, Matrix4, MOUSE, Object3D, QuadraticBezierCurve3, Sprite, Vector3, type BufferGeometry, type Mesh, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { BoxGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, MOUSE, Mesh, MeshBasicMaterial, Object3D, QuadraticBezierCurve3, Raycaster, Sprite, Vector3, type BufferGeometry, type MeshLambertMaterial, type SpriteMaterial } from "three";
 import { LinkShaft } from "../src/link-shaft";
 import "../src/canvas";
-import type { CanvasTestElement, GraphNode, GraphLink } from "./test-types";
+import type { CanvasConfig, CanvasTestElement, GraphNode, GraphLink } from "./test-types";
 
 beforeAll(() => {
   class ResizeObserverMock {
@@ -70,9 +70,13 @@ function linkLabelFactory() {
 
 async function canvasIn3D(): Promise<CanvasTestElement> {
   const canvas = createCanvas();
-  canvas.setData(DATA);
+  canvas.setData(structuredClone(DATA));
   await canvas.setDimension("3d");
   return canvas;
+}
+
+function setThreeDConfig(canvas: CanvasTestElement, config: NonNullable<CanvasConfig["threeD"]>) {
+  canvas.setConfig({ threeD: config });
 }
 
 describe("dimension", () => {
@@ -83,6 +87,35 @@ describe("dimension", () => {
       mouseButtons: { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN },
     });
   });
+
+  it("keeps stable mode namespaces and rejects operations for the inactive renderer", async () => {
+    const canvas = createCanvas();
+    canvas.setData(DATA);
+    const api = canvas as unknown as {
+      twoD: { getGraph(): unknown };
+      threeD: { getGraph(): unknown };
+    };
+    const twoD = api.twoD;
+    const threeD = api.threeD;
+
+    expect(twoD.getGraph()).toBe(forceGraphMockState.lastInstance);
+    expect(() => threeD.getGraph()).toThrow(/3D.*not active.*2D/i);
+
+    const switchTo3D = canvas.setDimension("3d");
+    expect(() => twoD.getGraph()).not.toThrow();
+    await switchTo3D;
+
+    expect(api.twoD).toBe(twoD);
+    expect(api.threeD).toBe(threeD);
+    expect(() => twoD.getGraph()).toThrow(/2D.*not active.*3D/i);
+    expect(threeD.getGraph()).toBe(last3D());
+
+    await canvas.setDimension("2d");
+    expect(api.twoD).toBe(twoD);
+    expect(api.threeD).toBe(threeD);
+    expect(twoD.getGraph()).toBe(forceGraphMockState.lastInstance);
+  });
+
   it("defaults to 2D without loading the 3D renderer", () => {
     const canvas = createCanvas();
     canvas.setData(DATA);
@@ -104,7 +137,7 @@ describe("dimension", () => {
     expect(canvas.getDimension()).toBe("3d");
     expect(graph2D.destroyed).toBe(true);
     expect(forceGraph3DMockState.instances).toHaveLength(1);
-    expect(canvas.getGraph()).toBeUndefined();
+    expect(() => canvas.twoD.getGraph()).toThrow(/2D renderer is not active.*3D/i);
     expect(onDimensionChange).toHaveBeenCalledWith("3d");
 
     const shown = last3D().data.nodes as GraphNode[];
@@ -125,7 +158,7 @@ describe("dimension", () => {
 
     expect(graph3D.destroyed).toBe(true);
     expect(forceGraphMockState.instances).toHaveLength(2);
-    expect(canvas.getGraph()).toBe(forceGraphMockState.lastInstance);
+    expect(canvas.twoD.getGraph()).toBe(forceGraphMockState.lastInstance);
     const nodes = canvas.getGraphData().nodes as Array<GraphNode & { z?: number }>;
     expect(nodes.every((n) => n.z === undefined)).toBe(true);
   });
@@ -179,7 +212,7 @@ describe("dimension", () => {
 
     // The 2D view was already taken down; a fresh one is put back.
     expect(canvas.getDimension()).toBe("2d");
-    expect(canvas.getGraph()).toBe(forceGraphMockState.lastInstance);
+    expect(canvas.twoD.getGraph()).toBe(forceGraphMockState.lastInstance);
     expect(forceGraphMockState.instances).toHaveLength(2);
   });
 
@@ -191,7 +224,7 @@ describe("dimension", () => {
 
     document.body.appendChild(canvas);
 
-    await vi.waitFor(() => expect(canvas.getGraph()).toBeDefined());
+    await vi.waitFor(() => expect(canvas.twoD.getGraph()).toBeDefined());
     expect(canvas.getDimension()).toBe("2d");
   });
 
@@ -213,19 +246,19 @@ describe("dimension", () => {
   it("still reports the viewport it was left at once disconnected", () => {
     const canvas = createCanvas();
     canvas.setData(DATA);
-    canvas.setViewport({ zoom: 2.5, centerX: 10, centerY: -4 });
+    canvas.twoD.setViewport({ zoom: 2.5, centerX: 10, centerY: -4 });
 
     // Hosts save the view while unmounting, after the element has left the page.
     canvas.remove();
 
-    expect(canvas.getViewport()).toEqual({ zoom: 2.5, centerX: 10, centerY: -4 });
+    expect(canvas.twoD.getViewport()).toEqual({ zoom: 2.5, centerX: 10, centerY: -4 });
     // Each read is its own snapshot.
-    canvas.getViewport()!.zoom = 99;
-    expect(canvas.getViewport()!.zoom).toBe(2.5);
+    canvas.twoD.getViewport()!.zoom = 99;
+    expect(canvas.twoD.getViewport()!.zoom).toBe(2.5);
 
     // Back on the page, it reports the live view again.
     document.body.appendChild(canvas);
-    expect(canvas.getViewport()).toEqual({ zoom: forceGraphMockState.lastInstance!.zoomValue, centerX: 0, centerY: 0 });
+    expect(canvas.twoD.getViewport()).toEqual({ zoom: 2.5, centerX: 10, centerY: -4 });
   });
 
   it("reports no viewport once disconnected from 3D", async () => {
@@ -233,7 +266,7 @@ describe("dimension", () => {
 
     canvas.remove();
 
-    expect(canvas.getViewport()).toBeUndefined();
+    expect(() => canvas.twoD.getViewport()).toThrow(/2D renderer is not active/i);
   });
 
   it("renders a 2D canvas moved in the page afresh, in one container", () => {
@@ -245,7 +278,7 @@ describe("dimension", () => {
     document.body.appendChild(canvas);
 
     expect(first.destroyed).toBe(true);
-    expect(canvas.getGraph()).not.toBe(first);
+    expect(canvas.twoD.getGraph()).not.toBe(first);
     expect(canvas.shadowRoot!.children).toHaveLength(2);
   });
 
@@ -257,6 +290,74 @@ describe("dimension", () => {
     document.body.appendChild(canvas);
     await vi.waitFor(() => expect(forceGraph3DMockState.instances).toHaveLength(1));
     expect(forceGraphMockState.instances).toHaveLength(0);
+  });
+});
+
+describe("2D viewport state", () => {
+  it("survives dimension switches", async () => {
+    const canvas = createCanvas();
+    canvas.setData(DATA);
+    const state = { zoom: 2.5, centerX: 10, centerY: -4 };
+    canvas.twoD.setViewport(state);
+
+    await canvas.setDimension("3d");
+    await canvas.setDimension("2d");
+
+    expect(canvas.twoD.getViewport()).toEqual(state);
+  });
+});
+
+describe("3D camera state", () => {
+  it("round-trips position, target, and camera up", async () => {
+    const canvas = await canvasIn3D();
+    const graph = last3D();
+    const state = {
+      position: { x: 120, y: -80, z: 450 },
+      target: { x: 12, y: 34, z: -5 },
+      up: { x: 0.2, y: 0.9, z: 0.3 },
+    };
+    const setUp = vi.spyOn(graph.camera().up, "set");
+    const cameraPosition = vi.spyOn(graph, "cameraPosition");
+
+    canvas.threeD.setCameraState(state);
+
+    expect(setUp.mock.invocationCallOrder[0]).toBeLessThan(cameraPosition.mock.invocationCallOrder[0]);
+    expect(canvas.threeD.getCameraState()).toEqual(state);
+    const snapshot = canvas.threeD.getCameraState();
+    snapshot.position.x = 999;
+    expect(canvas.threeD.getCameraState()).toEqual(state);
+  });
+
+  it("preserves camera state across dimension switches and reconnects", async () => {
+    const canvas = await canvasIn3D();
+    const state = {
+      position: { x: 20, y: 30, z: 400 },
+      target: { x: 1, y: 2, z: 3 },
+      up: { x: 0, y: 0, z: -1 },
+    };
+    canvas.threeD.setCameraState(state);
+
+    await canvas.setDimension("2d");
+    await canvas.setDimension("3d");
+    expect(canvas.threeD.getCameraState()).toEqual(state);
+
+    canvas.remove();
+    expect(canvas.threeD.getCameraState()).toEqual(state);
+    document.body.appendChild(canvas);
+    await vi.waitFor(() => expect(forceGraph3DMockState.instances).toHaveLength(3));
+    expect(canvas.threeD.getCameraState()).toEqual(state);
+  });
+
+  it("rejects camera operations outside the active 3D renderer", () => {
+    const canvas = createCanvas();
+    const state = {
+      position: { x: 0, y: 0, z: 1 },
+      target: { x: 0, y: 0, z: 0 },
+      up: { x: 0, y: 1, z: 0 },
+    };
+
+    expect(() => canvas.threeD.getCameraState()).toThrow(/3D.*not active.*2D/i);
+    expect(() => canvas.threeD.setCameraState(state)).toThrow(/3D.*not active.*2D/i);
   });
 });
 
@@ -668,8 +769,8 @@ describe("3D rendering", () => {
   it("has no 2D viewport to report or restore", async () => {
     const canvas = await canvasIn3D();
 
-    expect(canvas.getViewport()).toBeUndefined();
-    expect(() => canvas.setViewport({ zoom: 2, centerX: 0, centerY: 0 })).not.toThrow();
+    expect(() => canvas.twoD.getViewport()).toThrow(/2D renderer is not active.*3D/i);
+    expect(() => canvas.twoD.setViewport({ zoom: 2, centerX: 0, centerY: 0 })).toThrow(/2D renderer is not active.*3D/i);
   });
 
   it("follows background colour and container size", async () => {
@@ -790,10 +891,10 @@ describe("3D scene objects", () => {
     expect(second.body.material.opacity).toBe(0.2);
     expect(batches()[0].count).toBe(1);
 
-    canvas.setConfig({ largeGraph: { nodeInstancing: false } });
+    canvas.setConfig({ threeD: { largeGraph: { nodeInstancing: false } } });
     expect(batches()).toHaveLength(0);
     expect(first.body.visible).toBe(true);
-    canvas.setConfig({ largeGraph: { nodeInstancing: true } });
+    canvas.setConfig({ threeD: { largeGraph: { nodeInstancing: true } } });
     expect(batches()).toHaveLength(1);
     nodes[2].visible = false;
     last3D().controlsChanged();
@@ -801,7 +902,7 @@ describe("3D scene objects", () => {
     nodes[2].visible = true;
     last3D().controlsChanged();
     expect(batches()).toHaveLength(1);
-    canvas.setConfig({ largeGraph: { enabled: false } });
+    canvas.setConfig({ threeD: { largeGraph: { enabled: false } } });
     expect(batches()).toHaveLength(0);
     expect(first.body.visible).toBe(true);
     expect(third.body.visible).toBe(true);
@@ -841,7 +942,7 @@ describe("3D scene objects", () => {
 
   it("defers offscreen captions and selection work until the camera reveals the node", async () => {
     const canvas = await canvasIn3D();
-    canvas.setConfig({ captionsKeys: ["name"], largeGraph: { lowZoomThreshold: 0 } });
+    canvas.setConfig({ captionsKeys: ["name"], threeD: { largeGraph: { lowZoomThreshold: 0 } } });
     const node = canvas.getGraphData().nodes[0];
     Object.assign(node, { x: 10000, y: 0, z: 0 });
     const name = vi.fn(() => "offscreen");
@@ -868,7 +969,7 @@ describe("3D scene objects", () => {
   it("applies deferred dimming and caption changes when a node moves back onscreen", async () => {
     const canvas = await canvasIn3D();
     last3D().callback("onEngineTick")();
-    canvas.setConfig({ captionsKeys: ["name"], largeGraph: { lowZoomThreshold: 0 } });
+    canvas.setConfig({ captionsKeys: ["name"], threeD: { largeGraph: { lowZoomThreshold: 0 } } });
     const node = canvas.getGraphData().nodes[0];
     const { body, caption } = nodeObject(canvas, 1);
     Object.assign(node, { x: 10000, y: 0, z: 0 });
@@ -894,7 +995,7 @@ describe("3D scene objects", () => {
 
   it("culls behind the camera and restores captions when culling is disabled", async () => {
     const canvas = await canvasIn3D();
-    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    canvas.setConfig({ threeD: { largeGraph: { lowZoomThreshold: 0 } } });
     const node = canvas.getGraphData().nodes[0];
     const { caption } = nodeObject(canvas, 1);
     Object.assign(node, { x: 0, y: 0, z: 10000 });
@@ -908,13 +1009,13 @@ describe("3D scene objects", () => {
     last3D().controlsChanged();
     expect(caption!.visible).toBe(false);
 
-    canvas.setConfig({ largeGraph: { enabled: false } });
+    canvas.setConfig({ threeD: { largeGraph: { enabled: false } } });
     expect(caption!.visible).toBe(true);
   });
 
   it("keeps edge captions and honors world-space viewport padding", async () => {
     const canvas = await canvasIn3D();
-    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    canvas.setConfig({ threeD: { largeGraph: { lowZoomThreshold: 0 } } });
     const node = canvas.getGraphData().nodes[0];
     Object.assign(node, { x: 500, y: 0, z: 0 });
     const { caption } = nodeObject(canvas, 1);
@@ -923,13 +1024,13 @@ describe("3D scene objects", () => {
     node.x = 10000;
     last3D().controlsChanged();
     expect(caption!.visible).toBe(false);
-    canvas.setConfig({ largeGraph: { viewportPadding: 10000 } });
+    canvas.setConfig({ threeD: { largeGraph: { viewportPadding: 10000 } } });
     expect(caption!.visible).toBe(true);
   });
 
   it("culls link captions at their actual midpoint, not at their endpoints", async () => {
     const canvas = await canvasIn3D();
-    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    canvas.setConfig({ threeD: { largeGraph: { lowZoomThreshold: 0 } } });
     const link = canvas.getGraphData().links[0];
     const factory = linkLabelFactory();
     const label = factory(link);
@@ -947,7 +1048,7 @@ describe("3D scene objects", () => {
 
   it("uses the curved link midpoint for caption culling", async () => {
     const canvas = await canvasIn3D();
-    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    canvas.setConfig({ threeD: { largeGraph: { lowZoomThreshold: 0 } } });
     const link = canvas.getGraphData().links[0];
     const factory = linkLabelFactory();
     const label = factory(link);
@@ -962,7 +1063,7 @@ describe("3D scene objects", () => {
 
   it("reveals deferred captions when resizing widens the camera view", async () => {
     const canvas = await canvasIn3D();
-    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 } });
+    canvas.setConfig({ threeD: { largeGraph: { lowZoomThreshold: 0 } } });
     const node = canvas.getGraphData().nodes[0];
     Object.assign(node, { x: 2000, y: 0, z: 0 });
     const { body, caption } = nodeObject(canvas, 1);
@@ -1005,10 +1106,10 @@ describe("3D scene objects", () => {
     expect(last3D().callback("linkDirectionalArrowLength")(link)).toBe(0);
     expect(last3D().callsTo("linkWidth")).toHaveLength(widths);
 
-    canvas.setConfig({ largeGraph: { skipLabelsAtLowZoom: false } });
+    canvas.setConfig({ threeD: { largeGraph: { skipLabelsAtLowZoom: false } } });
     expect(caption!.visible).toBe(true);
     expect(linkLabel.visible).toBe(false);
-    canvas.setConfig({ largeGraph: { enabled: false } });
+    canvas.setConfig({ threeD: { largeGraph: { enabled: false } } });
     expect(linkLabel.visible).toBe(true);
     expect(last3D().callback("linkDirectionalArrowLength")(link)).toBeGreaterThan(0);
   });
@@ -1238,6 +1339,17 @@ describe("3D scene objects", () => {
     expect(label.material.opacity).toBe(0.3);
   });
 
+  it("does not add a solid link label as its own child", async () => {
+    const canvas = await canvasIn3D();
+    const add = vi.spyOn(Object3D.prototype, "add");
+    const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => Object3D;
+
+    factory(canvas.getGraphData().links[0]);
+
+    expect(add.mock.contexts.some((parent, index) => add.mock.calls[index][0] === parent)).toBe(false);
+    add.mockRestore();
+  });
+
   it("places link labels halfway along the link", async () => {
     await canvasIn3D();
     const update = last3D().props.get("linkPositionUpdate") as (obj: Object3D, coords: object, link: object) => void;
@@ -1362,6 +1474,234 @@ describe("3D idle rendering", () => {
     expect(graph.callsTo("pauseAnimation")).toHaveLength(pauses);
     expect(graph.callsTo("resumeAnimation")).toHaveLength(resumes);
     expect(graph.destroyed).toBe(true);
+  });
+});
+
+describe("3D custom renderers and links", () => {
+  type RenderState = { selected: boolean; dimmed: boolean; opacity: number };
+  type Coordinates = { start: { x: number; y: number; z: number }; end: { x: number; y: number; z: number } };
+
+  beforeAll(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+      measureText: (text: string) => ({ width: text.length * 10 }),
+      fillRect: () => {},
+      fillText: () => {},
+    }) as unknown as CanvasRenderingContext2D);
+  });
+
+  it("recreates custom node visuals with current state on visual and data changes", async () => {
+    const nodeObject = vi.fn((_node: GraphNode, _state: RenderState) => new Group());
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { nodeObject });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("nodeThreeObject") as (node: GraphNode) => Object3D;
+    const node = canvas.getGraphData().nodes[0];
+    factory(node);
+    expect(nodeObject).toHaveBeenCalledTimes(1);
+    expect(nodeObject).toHaveBeenLastCalledWith(node, { selected: false, dimmed: false, opacity: 1 });
+
+    canvas.setConfig({ foregroundColor: "#ffffff" });
+    expect(nodeObject).toHaveBeenCalledTimes(1);
+
+    canvas.setConfig({
+      isNodeSelected: (current) => current.id === node.id,
+      dimmed: true,
+      isNodeDimmed: (current) => current.id === node.id,
+      dimOpacity: 0.25,
+    });
+
+    expect(nodeObject).toHaveBeenCalledTimes(2);
+    expect(nodeObject).toHaveBeenLastCalledWith(node, { selected: true, dimmed: true, opacity: 0.25 });
+
+    canvas.setGraphData({
+      nodes: DATA.nodes.map((current) => ({ ...current, data: { name: `${current.data.name}-updated` } })),
+      links: DATA.links,
+    });
+
+    expect(nodeObject).toHaveBeenCalledTimes(3);
+    expect(nodeObject).toHaveBeenLastCalledWith(node, { selected: true, dimmed: true, opacity: 0.25 });
+    expect(nodeObject.mock.calls.at(-1)?.[0].data.name).toBe("n1-updated");
+  });
+
+  it("retains shared custom resources across removals and disposes them after the final visual is released", async () => {
+    const geometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const nodeObject = vi.fn(() => new Mesh(geometry, material));
+    const disposeGeometry = vi.spyOn(geometry, "dispose");
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { nodeObject });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("nodeThreeObject") as (node: GraphNode) => Group;
+    const [firstNode, secondNode] = canvas.getGraphData().nodes;
+    const firstVisual = factory(firstNode).children.find((child) => child instanceof Mesh && child.geometry === geometry)!;
+    const secondVisual = factory(secondNode).children.find((child) => child instanceof Mesh && child.geometry === geometry)!;
+
+    canvas.setGraphData({ nodes: [DATA.nodes[0]], links: [] });
+
+    expect(secondVisual.parent).toBeNull();
+    expect(disposeGeometry).not.toHaveBeenCalled();
+
+    await canvas.setDimension("2d");
+
+    expect(firstVisual.parent).toBeNull();
+    expect(disposeGeometry).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes current endpoints and link data to the custom link position updater", async () => {
+    const linkObject = vi.fn((_link: GraphLink, _state: RenderState) => new Group());
+    const updatePosition = vi.fn();
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkObject, linkObjectPositionUpdate: updatePosition });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const link = canvas.getGraphData().links[0];
+    const factory = graph.callback("linkThreeObject") as (current: GraphLink) => Object3D;
+    const object = factory(link);
+    const coordinates: Coordinates = {
+      start: { x: 1, y: 2, z: 3 },
+      end: { x: 10, y: 20, z: 30 },
+    };
+    const update = graph.callback("linkPositionUpdate") as (object: Object3D, coordinates: Coordinates, link: GraphLink) => void;
+
+    update(object, coordinates, link);
+
+    expect(linkObject).toHaveBeenCalledWith(link, { selected: false, dimmed: false, opacity: 1 });
+    expect(updatePosition).toHaveBeenCalledWith(linkObject.mock.results[0].value, coordinates, link);
+    expect(linkObject).toHaveBeenCalledTimes(1);
+
+    canvas.setConfig({
+      isLinkSelected: (current) => current.id === link.id,
+      dimmed: true,
+      isLinkDimmed: (current) => current.id === link.id,
+      dimOpacity: 0.2,
+    });
+
+    expect(linkObject).toHaveBeenLastCalledWith(link, { selected: true, dimmed: true, opacity: 0.2 });
+  });
+
+  it("releases custom link resources when their links are removed", async () => {
+    const geometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const linkObject = vi.fn(() => new Mesh(geometry, material));
+    const disposeGeometry = vi.spyOn(geometry, "dispose");
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkObject });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("linkThreeObject") as (link: GraphLink) => Group;
+    const customVisual = factory(canvas.getGraphData().links[0]).children.find(
+      (child) => child instanceof Mesh && child.geometry === geometry,
+    )!;
+
+    canvas.setGraphData({ nodes: DATA.nodes, links: [] });
+
+    expect(customVisual.parent).toBeNull();
+    expect(disposeGeometry).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains node labels, selection outlines, visibility, and ray picking around custom visuals", async () => {
+    const customMesh = new Mesh(new BoxGeometry(4, 4, 4), new MeshBasicMaterial());
+    const nodeObject = vi.fn(() => customMesh);
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { nodeObject });
+    canvas.setConfig({ captionsKeys: ["name"], isNodeSelected: (node) => node.id === 1 });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const node = canvas.getGraphData().nodes[0];
+    const factory = graph.callback("nodeThreeObject") as (current: GraphNode) => Group;
+    const root = factory(node);
+    const outline = root.children.find((child) => child instanceof Mesh && child.material instanceof MeshBasicMaterial);
+    const label = root.children.find((child) => child instanceof Sprite);
+    const nodeLabel = graph.callback("nodeLabel") as (current: GraphNode) => string;
+    const raycaster = new Raycaster(new Vector3(0, 0, 10), new Vector3(0, 0, -1));
+    raycaster.camera = graph.cameraObject;
+
+    root.updateMatrixWorld(true);
+
+    expect(root.children).toContain(customMesh);
+    expect(outline?.visible).toBe(true);
+    expect(label).toBeInstanceOf(Sprite);
+    expect(nodeLabel(node)).toBe("n1");
+    expect(graph.props.get("nodeVisibility")).toBe("visible");
+    expect(raycaster.intersectObject(root, true).some(({ object }) => object === customMesh)).toBe(true);
+  });
+
+  it("applies world-unit dash patterns to straight and curved links while keeping solid links native", async () => {
+    const dashPattern = vi.fn((link: GraphLink) => link.relationship === "DASH" ? [4, 2] : []);
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkDashPattern: dashPattern });
+    canvas.setData({
+      nodes: DATA.nodes,
+      links: [{ ...DATA.links[0], relationship: "DASH" }],
+    });
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const link = canvas.getGraphData().links[0] as GraphLink & { __curve?: QuadraticBezierCurve3 };
+    const factory = graph.callback("linkThreeObject") as (current: GraphLink) => Object3D;
+    const object = factory(link);
+    const line = object.getObjectByProperty("type", "LineSegments") as LineSegments;
+    const update = graph.callback("linkPositionUpdate") as (object: Object3D, coordinates: Coordinates, link: GraphLink) => void;
+    const coordinates: Coordinates = {
+      start: { x: 0, y: 0, z: 0 },
+      end: { x: 10, y: 0, z: 0 },
+    };
+
+    expect(line).toBeInstanceOf(LineSegments);
+    expect(graph.props.get("linkThreeObjectExtend")).toBe(false);
+    const patternCalls = dashPattern.mock.calls.length;
+    update(object, coordinates, link);
+    update(object, coordinates, link);
+    expect(dashPattern).toHaveBeenCalledTimes(patternCalls);
+    expect(Array.from(line.geometry.getAttribute("position").array)).toEqual([0, 0, 0, 4, 0, 0, 6, 0, 0, 10, 0, 0]);
+
+    link.__curve = new QuadraticBezierCurve3(
+      new Vector3(0, 0, 0),
+      new Vector3(5, 5, 0),
+      new Vector3(10, 0, 0),
+    );
+    update(object, coordinates, link);
+    const curvedPositions = Array.from(line.geometry.getAttribute("position").array);
+    expect(curvedPositions.some((_, index) => index % 3 === 1 && curvedPositions[index] !== 0)).toBe(true);
+
+    const solidLink = { ...link, id: 11, relationship: "SOLID", __curve: undefined };
+    const solidObject = factory(solidLink);
+    expect(solidObject.getObjectByProperty("type", "LineSegments")).toBeUndefined();
+
+    const refreshes = graph.callsTo("refresh").length;
+    canvas.setGraphData({
+      nodes: DATA.nodes,
+      links: [{ ...DATA.links[0], relationship: "SOLID" }],
+    });
+    expect(graph.callsTo("refresh")).toHaveLength(refreshes + 1);
+  });
+
+  it("uses configured unselected width while keeping selected links emphasized", async () => {
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkWidth: 3 });
+    canvas.setConfig({ isLinkSelected: (link) => link.id === 10 });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const width = graph.callback("linkWidth") as (link: GraphLink) => number;
+    const selected = canvas.getGraphData().links[0];
+    const unselected = { ...selected, id: 11 };
+
+    expect(width(unselected)).toBe(3);
+    expect(width(selected)).toBeGreaterThan(width(unselected));
   });
 });
 
