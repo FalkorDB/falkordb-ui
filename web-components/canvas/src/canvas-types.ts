@@ -369,7 +369,7 @@ export interface ThreeDConfig {
   linkObject?: (link: GraphLink, state: ThreeDRenderState) => Object3D;
   /**
    * Dash and gap lengths in world units; an empty pattern keeps the native solid link.
-   * A link-position update that would exceed 4096 rendered segments throws a RangeError.
+   * Patterns exceeding 4096 rendered segments are proportionally scaled and warned once.
    */
   linkDashPattern?: (link: GraphLink) => number[];
   /** Updates a custom link visual with its current endpoints. */
@@ -552,8 +552,10 @@ export type GraphLink = {
   fontSize?: number;
   /** Arrowhead length in world units (scales with zoom). Default: ARROW_SIZE. Doubled while the link is selected */
   arrowSize?: number;
-  /** Curvature value for parallel edges and self-loops */
+  /** 3D curvature value for parallel edges and self-loops */
   curve: number;
+  /** 2D curvature value for parallel edges and self-loops */
+  curve2D: number;
   /** Arbitrary key-value properties on the link */
   data: {
     [key: string]: any;
@@ -584,7 +586,7 @@ export type Node = Omit<
  * Public link type for input data. References nodes by numeric ID
  * rather than resolved object references.
  */
-export type Link = Omit<GraphLink, "curve" | "source" | "target"> & {
+export type Link = Omit<GraphLink, "curve" | "curve2D" | "source" | "target"> & {
   /** Source node ID */
   source: number;
   /** Target node ID */

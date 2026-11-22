@@ -21,6 +21,12 @@ export class MockForceGraph3DInstance {
 
   public controlsState = {
     target: { x: 0, y: 0, z: 0 },
+    update: () => {
+      const { x, y, z } = this.controlsState.target;
+      this.cameraObject.position.copy(this.cameraPos);
+      this.cameraObject.lookAt(x, y, z);
+      this.cameraObject.updateMatrixWorld(true);
+    },
     addEventListener: (_name: string, callback: () => void) => { this.controlChanges.add(callback); },
     removeEventListener: (_name: string, callback: () => void) => { this.controlChanges.delete(callback); },
   };
@@ -129,8 +135,6 @@ export class MockForceGraph3DInstance {
 
   camera() {
     this.cameraObject.position.copy(this.cameraPos);
-    const target = this.controlsState.target;
-    this.cameraObject.lookAt(target.x, target.y, target.z);
     this.cameraObject.aspect = this.width() / this.height();
     this.cameraObject.updateProjectionMatrix();
     this.cameraObject.updateMatrixWorld();
@@ -153,7 +157,6 @@ export class MockForceGraph3DInstance {
     this.cameraObject.position.set(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
     if (lookAt) {
       this.controlsState.target = { ...lookAt };
-      this.cameraObject.lookAt(lookAt.x, lookAt.y, lookAt.z);
     }
     this.cameraObject.updateMatrixWorld(true);
     return this;

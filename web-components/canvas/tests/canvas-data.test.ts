@@ -60,7 +60,7 @@ describe("setData and getData", () => {
     };
     canvas.setData(input);
     const offsets = () => canvas.getGraphData().links.map(link =>
-      link.curve * (link.source.id < link.target.id ? 1 : -1));
+      Number(Reflect.get(link, "curve2D")) * (link.source.id < link.target.id ? 1 : -1));
     expect(new Set(offsets()).size).toBe(reversed.length);
     const before = offsets();
     canvas.setGraphData(input);
@@ -76,7 +76,10 @@ describe("setData and getData", () => {
         id, relationship: "SELF", source: 1, target: 1, visible: true, color: "#888", data: {},
       })),
     });
-    expect(canvas.getGraphData().links.map(link => link.curve)).toEqual([-2.1, 2.1, -2.8].map(value =>
+    const links = canvas.getGraphData().links;
+    expect(links.map(link => link.curve)).toEqual([-1.2, 1.2, -1.6].map(value =>
+      expect.closeTo(value, 8)));
+    expect(links.map(link => Reflect.get(link, "curve2D"))).toEqual([-2.1, 2.1, -2.8].map(value =>
       expect.closeTo(value, 8)));
   });
 
@@ -214,10 +217,10 @@ describe("setData and getData", () => {
     });
 
     const graphData = canvas.getGraphData();
-    // Parallel edges should have different curve values
-    const curves = graphData.links.map((l) => l.curve);
-    const uniqueCurves = new Set(curves);
-    expect(uniqueCurves.size).toBe(3);
+    const curves2D = graphData.links.map((link) => Reflect.get(link, "curve2D"));
+    expect(new Set(curves2D).size).toBe(3);
+    expect(graphData.links.map((link) => link.curve)).toEqual([0, 0.4, -0.4].map(value =>
+      expect.closeTo(value, 8)));
   });
 
   it("calculates self-loop curves differently", () => {

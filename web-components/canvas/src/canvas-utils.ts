@@ -102,7 +102,7 @@ function circularLayout(nodes: GraphNode[], center: { x: number; y: number }, ra
 
 /**
  * Converts Data format to GraphData format
- * Adds runtime properties (x, y, vx, vy, fx, fy, displayName, curve)
+ * Adds runtime properties (x, y, vx, vy, fx, fy, displayName, curve, curve2D)
  */
 export function dataToGraphData(
   data: Data,
@@ -190,7 +190,9 @@ export function dataToGraphData(
       target: targetNode,
       // Reversing endpoints reverses the curve's perpendicular. Keep each
       // unordered pair's assigned lane distinct in both rendering dimensions.
-      curve: calculateLinkCurve(duplicateIndex, sourceNode.id === targetNode.id, curveMultiplier)
+      curve: calculateLinkCurve(duplicateIndex, sourceNode.id === targetNode.id)
+        * (sourceNode.id > targetNode.id ? -1 : 1),
+      curve2D: calculateLinkCurve(duplicateIndex, sourceNode.id === targetNode.id, curveMultiplier)
         * (sourceNode.id > targetNode.id ? -1 : 1),
     };
   }).filter((link) => link !== undefined);
@@ -200,7 +202,7 @@ export function dataToGraphData(
 
 /**
  * Converts GraphData format to Data format
- * Removes runtime properties (x/y/z, layoutTargetX/Y, vx/vy/vz, fx/fy/fz, displayName, curve)
+ * Removes runtime properties (x/y/z, layoutTargetX/Y, vx/vy/vz, fx/fy/fz, displayName, curve, curve2D)
  * Preserves the expand boolean so the state survives round-trips through dataToGraphData.
  */
 export function graphDataToData(graphData: GraphData): Data {
@@ -210,7 +212,7 @@ export function graphDataToData(graphData: GraphData): Data {
   });
 
   const links: Link[] = graphData.links.map((link) => {
-    const { curve, source, target, ...rest } = link;
+    const { curve, curve2D, source, target, ...rest } = link;
     return {
       ...rest,
       source: source.id,

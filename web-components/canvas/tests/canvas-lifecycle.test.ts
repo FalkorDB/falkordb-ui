@@ -206,7 +206,7 @@ describe("edge cases", () => {
     const graphData = canvas.getGraphData();
     expect(graphData.links.length).toBe(3);
     // All self-loops should have different curves
-    const curves = graphData.links.map((l) => l.curve);
+    const curves = graphData.links.map((l) => l.curve2D);
     const uniqueCurves = new Set(curves);
     expect(uniqueCurves.size).toBe(3);
   });

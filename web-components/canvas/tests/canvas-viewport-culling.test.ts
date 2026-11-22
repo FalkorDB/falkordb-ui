@@ -853,7 +853,7 @@ describe("low-zoom draw skipping", () => {
     const link = data.links[0];
     link.source = { ...data.nodes[0], x: -100, y: 0, size: 6 } as GraphNode;
     link.target = { ...data.nodes[1], x: 100, y: 0, size: 6 } as GraphNode;
-    link.curve = 0;
+    link.curve2D = 0;
 
     // Above threshold (k=0.8 > 0.5) — arrow should be drawn
     triggerZoom({ k: 0.8, x: 0, y: 0 });
@@ -889,7 +889,7 @@ describe("low-zoom draw skipping", () => {
     const link = data.links[0];
     link.source = { ...data.nodes[0], x: -100, y: 0, size: 6 } as GraphNode;
     link.target = { ...data.nodes[1], x: 100, y: 0, size: 6 } as GraphNode;
-    link.curve = 0;
+    link.curve2D = 0;
 
     // Above threshold (k=0.8 > 0.5) — link label should be drawn
     triggerZoom({ k: 0.8, x: 0, y: 0 });

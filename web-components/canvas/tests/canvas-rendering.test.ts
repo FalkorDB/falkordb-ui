@@ -799,7 +799,7 @@ describe("link rendering", () => {
     const link = canvas.getGraphData().links[0];
     Object.assign(link.source, { x: 0, y: 0 });
     if (!loop) Object.assign(link.target, { x: 500, y: 0 });
-    link.curve = curve;
+    link.curve2D = curve;
     const ctx = createCtxSpy();
     getLastInstance().callbacks.linkCanvasObject!(link, ctx, 2);
     const stroke = loop ? ctx.bezierCurveTo.mock.calls[0] : ctx.quadraticCurveTo.mock.calls[0];
@@ -862,7 +862,7 @@ describe("link rendering", () => {
     const instance = getLastInstance();
     const graphData = canvas.getGraphData();
     // Parallel links should have different curve values
-    expect(graphData.links[0].curve).not.toBe(graphData.links[1].curve);
+    expect(graphData.links[0].curve2D).not.toBe(graphData.links[1].curve2D);
 
     // Position nodes
     graphData.links[0].source.x = -50;

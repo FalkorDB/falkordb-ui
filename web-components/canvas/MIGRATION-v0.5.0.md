@@ -66,9 +66,11 @@ culling remains active even when the 3D CPU-side optimizations are disabled.
 Other 3D-only configuration belongs under `threeD`: `nodeObject`, `linkObject`,
 `linkObjectPositionUpdate`, `linkDashPattern`, and `linkWidth`.
 `linkDashPattern` lengths and `linkWidth` are world units. A link-position
-update that would exceed 4096 rendered dash segments throws `RangeError`
-instead of generating unbounded geometry. Unselected `linkWidth` defaults to
-`0`, preserving the native hairline; selected links remain thicker.
+update that would exceed 4096 rendered dash segments proportionally scales the
+dash and gap lengths, and coarsens curve tessellation as needed to stay within
+the cap. Canvas emits one warning per 3D renderer when it scales a pattern;
+dash overflow no longer throws during rendering. Unselected `linkWidth`
+defaults to `0`, preserving the native hairline; selected links remain thicker.
 
 ## Move mode operations into namespaces
 
@@ -86,8 +88,13 @@ error that identifies the required and active dimension. Shared operations,
 including `setDimension`, data/layout/zoom/fit methods, stay on `canvas`.
 
 The 3D camera snapshot includes `position`, `target`, and `up`, so it preserves
-camera roll. Both 2D viewport and 3D camera snapshots remain available across
-dimension switches and element reconnects.
+camera roll. Dimension switches and element reconnects preserve each
+renderer’s latest view for restoration, but a mode-specific getter remains
+unavailable while that renderer is inactive. A full `setData()` replacement
+clears the inactive renderer’s saved view. The active 2D renderer still
+auto-fits as usual; an active 3D renderer keeps its live camera while the new
+layout is applied. Incremental `setGraphData()` updates retain the inactive
+renderer’s saved view.
 
 ## Custom Three.js visual lifecycle
 
@@ -108,8 +115,9 @@ references held by application code or another renderer—observes the
 replacement.
 
 1. Creating or replacing a visual acquires leases for its resources before the
-   old visual releases its leases. Reusing the same resources in the
-   replacement therefore does not dispose them between visuals.
+   old visual releases its leases. For graph-data updates, Canvas waits until
+   the renderer has applied the update before releasing removed visuals, so
+   replacement factories can acquire shared resources first.
 2. Removing/replacing a visual releases its lease. Duplicate references inside
    one visual count once. Dimension teardown releases the leases for the
    renderer's remaining custom visuals.

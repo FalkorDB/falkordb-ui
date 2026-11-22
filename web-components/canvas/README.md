@@ -158,6 +158,13 @@ canvas.threeD.getGraph();           // 3d-force-graph instance
 canvas.threeD.getCullingStats();
 ```
 
+Dimension switches preserve each renderer’s latest viewport or camera for
+restoration. The corresponding getter is only available while that renderer is
+active. A full `setData()` replacement clears the inactive renderer’s saved
+view. The active 2D renderer still auto-fits as usual; an active 3D renderer
+keeps its live camera while the new layout is applied. Incremental
+`setGraphData()` updates retain the inactive renderer’s saved view.
+
 ### Configuration Options
 
 Configuration is passed to `setConfig()` as a `CanvasConfig`. Shared settings
@@ -261,9 +268,9 @@ layout settings, captions, and event handlers remain shared.
   (the existing hairline). The configured width and selected-link emphasis also
   apply to dashed links.
 - `threeD.linkDashPattern(link)`: alternating dash/gap lengths in world units;
-  return `[]` for a solid native link. A link-position update that would
-  exceed 4096 rendered segments throws `RangeError` instead of generating
-  unbounded geometry.
+  return `[]` for a solid native link. If a link would exceed 4096 rendered
+  segments, Canvas proportionally scales the dash and gap lengths and coarsens
+  curve tessellation as needed; it emits one warning per 3D renderer.
 - `threeD.nodeObject(node, state)` / `threeD.linkObject(link, state)`: return
   custom `THREE.Object3D` visuals with `{ selected, dimmed, opacity }` state.
 - `threeD.linkObjectPositionUpdate(object, { start, end }, link)`: update a
@@ -428,6 +435,22 @@ warn or limit graph sizes before calling `setDimension`, `setData` or
 - Save and restore full camera orientation—including roll—with `threeD.getCameraState()` and `threeD.setCameraState(state)`. `threeD.getGraph()` exposes the typed underlying 3D graph instance.
 - 3D culling diagnostics are available through `threeD.getCullingStats()`. They traverse current scene drawables to count actual frustum intersections, including partial bounds; collect them on demand, not every frame.
 
+Treat a native graph handle as mode-scoped: Canvas destroys that renderer when
+the dimension changes or the element disconnects. Reacquire the handle through
+the active `canvas.twoD.getGraph()` or `canvas.threeD.getGraph()` after it is
+mounted again. Canvas owns native callbacks for rendering, input, layout and
+culling; do not overwrite them. Use `eventHandlers`, `twoD.node` / `twoD.link`,
+and `threeD.nodeObject` / `threeD.linkObject` / `threeD.linkObjectPositionUpdate`
+instead. Owned 2D callbacks include `nodeCanvasObject`, `linkCanvasObject`,
+`nodePointerAreaPaint`, `linkPointerAreaPaint`, `onNodeClick`,
+`onNodeRightClick`, `onLinkClick`, `onLinkRightClick`, `onNodeHover`,
+`onLinkHover`, `onBackgroundClick`, `onBackgroundRightClick`,
+`onNodeDragEnd`, `onZoom`, and `onEngineStop`. Owned 3D callbacks include
+`nodeThreeObject`, `linkThreeObject`, `linkPositionUpdate`, `onNodeClick`,
+`onNodeRightClick`, `onLinkClick`, `onLinkRightClick`, `onNodeHover`,
+`onLinkHover`, `onBackgroundClick`, `onBackgroundRightClick`, `onNodeDrag`,
+`onNodeDragEnd`, `onEngineTick`, `onEngineStop`, and `onDagError`.
+
 See [the interactive 3D example](./examples/3d-parity.example.html) for switching, camera persistence, custom visuals, dashed links, and culling diagnostics. See [the repeatable 3D performance check](./examples/3d-performance.example.html) for seeded visible, partial, and offscreen views.
 
 ### Data Types
@@ -491,7 +514,9 @@ Internal format with computed properties:
 ```
 
 The typed instance returned by `canvas.threeD.getGraph()` includes the
-underlying 3D graph controls and 3D node coordinates for advanced use.
+underlying 3D graph controls and 3D node coordinates for advanced use. The
+handle and its live graph objects are invalid after a dimension switch or
+disconnect; reacquire them after the 3D renderer is mounted again.
 
 #### GraphLink
 Internal format with resolved node references:
@@ -500,7 +525,8 @@ Internal format with resolved node references:
   ...Link;
   source: GraphNode;  // Resolved node object
   target: GraphNode;  // Resolved node object
-  curve: number;      // Computed curvature for rendering
+  curve: number;      // Computed 3D curvature
+  curve2D: number;    // Computed 2D curvature
 }
 ```
 

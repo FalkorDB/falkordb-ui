@@ -1074,8 +1074,11 @@ class FalkorDBCanvas extends HTMLElement {
    */
   setData(data: Data) {
     this.log('setData called with', data.nodes.length, 'nodes and', data.links.length, 'links');
+    const graphData = dataToGraphData(data, undefined, undefined, this.config.linkStyle.parallelEdgeCurveMultiplier);
+    this.detachedViewport = undefined;
+    this.detachedCameraState = undefined;
     // Convert data and apply circular layout to new nodes only
-    this.data = dataToGraphData(data, undefined, undefined, this.config.linkStyle.parallelEdgeCurveMultiplier);
+    this.data = graphData;
 
     // A full replacement can reuse node ids for different nodes, so drop
     // everything cached per id; pending glow repaints belong to the old graph.
@@ -1951,7 +1954,7 @@ class FalkorDBCanvas extends HTMLElement {
       // Self-loop: the cubic bezier extends roughly |curve| * nodeSize * factor
       // away from the node centre. Use that as a conservative radius.
       const nodeSize = link.source.size;
-      const loopRadius = Math.abs(link.curve || 1) * nodeSize * this.config.linkStyle.selfLoopCurveFactor + margin;
+      const loopRadius = Math.abs(link.curve2D || 1) * nodeSize * this.config.linkStyle.selfLoopCurveFactor + margin;
       return { minX: sx - loopRadius, maxX: sx + loopRadius, minY: sy - loopRadius, maxY: sy + loopRadius };
     }
 
@@ -1964,7 +1967,7 @@ class FalkorDBCanvas extends HTMLElement {
       return { minX: sx - margin, maxX: sx + margin, minY: sy - margin, maxY: sy + margin };
     }
 
-    const curvature = link.curve ?? 0;
+    const curvature = link.curve2D ?? 0;
     const perpX = dy / distance;
     const perpY = -dx / distance;
     const cx = (sx + ex) / 2 + perpX * curvature * distance;
@@ -2289,7 +2292,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     if (start.id === end.id) {
       const nodeSize = start.size;
-      const d = (link.curve || 0) * nodeSize * this.config.linkStyle.selfLoopCurveFactor;
+      const d = (link.curve2D || 0) * nodeSize * this.config.linkStyle.selfLoopCurveFactor;
 
       ctx.lineWidth = lineWidth / globalScale;
       if (this.config.linkLineDash) ctx.setLineDash(this.config.linkLineDash(link));
@@ -2389,7 +2392,7 @@ class FalkorDBCanvas extends HTMLElement {
       const perpX = dy / distance;
       const perpY = -dx / distance;
 
-      const curvature = link.curve || 0;
+      const curvature = link.curve2D || 0;
       const controlX =
         (start.x + end.x) / 2 + perpX * curvature * distance * 1.0;
       const controlY =
@@ -2576,7 +2579,7 @@ class FalkorDBCanvas extends HTMLElement {
     if (start.id === end.id) {
       // Self-loop: replicate exact cubic bezier clip from drawLink
       const nodeSize = start.size;
-      const d = (link.curve || 0) * nodeSize * this.config.linkStyle.selfLoopCurveFactor;
+      const d = (link.curve2D || 0) * nodeSize * this.config.linkStyle.selfLoopCurveFactor;
 
       const nodeStrokeWidth = this.config.isNodeSelected?.(start) ? this.config.nodeStyle.strokeWidthSelected : this.config.nodeStyle.strokeWidthUnselected;
       const borderRadius = nodeSize + nodeStrokeWidth + this.edgeGap;
@@ -2609,7 +2612,7 @@ class FalkorDBCanvas extends HTMLElement {
       const dx = end.x - start.x;
       const dy = end.y - start.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      const curvature = link.curve || 0;
+      const curvature = link.curve2D || 0;
 
       if (distance === 0) {
         ctx.moveTo(start.x, start.y);
