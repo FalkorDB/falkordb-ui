@@ -261,6 +261,21 @@ describe("dimension", () => {
     expect(canvas.twoD.getViewport()).toEqual({ zoom: 2.5, centerX: 10, centerY: -4 });
   });
 
+  it("cancels a pending 2D fit when the canvas is disconnected", () => {
+    vi.useFakeTimers();
+    try {
+      const canvas = createCanvas();
+      canvas.setData(DATA);
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      canvas.remove();
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports no viewport once disconnected from 3D", async () => {
     const canvas = await canvasIn3D();
 
@@ -305,6 +320,22 @@ describe("2D viewport state", () => {
 
     expect(canvas.twoD.getViewport()).toEqual(state);
   });
+
+  it("keeps a restored viewport after a pending fit", () => {
+    vi.useFakeTimers();
+    try {
+      const canvas = createCanvas();
+      canvas.setData(DATA);
+      const state = { zoom: 2.5, centerX: 10, centerY: -4 };
+
+      canvas.twoD.setViewport(state);
+      vi.advanceTimersByTime(100);
+
+      expect(canvas.twoD.getViewport()).toEqual(state);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("3D camera state", () => {
@@ -343,6 +374,27 @@ describe("3D camera state", () => {
     last3D().callback("onEngineStop")();
 
     expect(canvas.threeD.getCameraState()).toEqual(state);
+  });
+
+  it("cancels a pending 2D fit when switching to and restoring a 3D camera", async () => {
+    vi.useFakeTimers();
+    try {
+      const canvas = createCanvas();
+      canvas.setData(DATA);
+      await canvas.setDimension("3d");
+      const state = {
+        position: { x: 900, y: -300, z: 700 },
+        target: { x: 20, y: 30, z: 40 },
+        up: { x: 0.1, y: 0.8, z: 0.2 },
+      };
+
+      canvas.threeD.setCameraState(state);
+      vi.advanceTimersByTime(100);
+
+      expect(canvas.threeD.getCameraState()).toEqual(state);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("refreshes frustum visibility after restoring the camera", async () => {
@@ -1669,6 +1721,30 @@ describe("3D custom renderers and links", () => {
     expect(disposeGeometry).toHaveBeenCalledTimes(1);
   });
 
+  it("releases the current link visual after a same-id replacement following restyle", async () => {
+    const geometries = [new BoxGeometry(), new BoxGeometry(), new BoxGeometry()];
+    const disposeGeometries = geometries.map((geometry) => vi.spyOn(geometry, "dispose"));
+    let geometryIndex = 0;
+    const linkObject = vi.fn(() => new Mesh(geometries[geometryIndex++], new MeshBasicMaterial()));
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkObject });
+    canvas.setData(structuredClone(DATA));
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("linkThreeObject") as (link: GraphLink) => Object3D;
+    const link = canvas.getGraphData().links[0];
+    factory(link);
+    canvas.setConfig({ isLinkSelected: () => true });
+    expect(linkObject).toHaveBeenCalledTimes(2);
+
+    factory(link);
+    expect(disposeGeometries[1]).toHaveBeenCalledTimes(1);
+
+    await canvas.setDimension("2d");
+    expect(disposeGeometries[2]).toHaveBeenCalledTimes(1);
+  });
+
   it("releases removed node leases after full replacements while preserving same-id resources", async () => {
     const removedGeometry = new BoxGeometry();
     const retainedGeometry = new BoxGeometry();
@@ -1801,16 +1877,17 @@ describe("3D custom renderers and links", () => {
 
     const curve = new QuadraticBezierCurve3(
       new Vector3(0, 0, 0),
-      new Vector3(50, 50, 0),
+      new Vector3(0, 0, 0),
       new Vector3(100, 0, 0),
     );
     link.__curve = curve;
     update(object, coordinates, link);
     const curvedPositions = line.geometry.getAttribute("position").array;
-    const curvedEnd = curve.getPoint(1 - 15 / curve.getLength());
+    const curvedEnd = curve.getPointAt(1 - 15 / curve.getLength());
     expect(curvedPositions[curvedPositions.length - 3]).toBeCloseTo(curvedEnd.x);
     expect(curvedPositions[curvedPositions.length - 2]).toBeCloseTo(curvedEnd.y);
     expect(curvedPositions[curvedPositions.length - 1]).toBeCloseTo(curvedEnd.z);
+    expect(curvedPositions[curvedPositions.length - 3]).toBeGreaterThan(curvedPositions[curvedPositions.length - 6]);
 
     canvas.setConfig({ threeD: { largeGraph: { lowZoomThreshold: 1000, skipArrowsAtLowZoom: true } } });
     link.__curve = undefined;

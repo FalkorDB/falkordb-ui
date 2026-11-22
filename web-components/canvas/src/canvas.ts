@@ -354,7 +354,7 @@ class FalkorDBCanvas extends HTMLElement {
   readonly threeD = {
     getGraph: (): ThreeDGraphInstance => this.require3DGraph(),
     getCameraState: (): CameraState => this.getThreeDCameraState(),
-    setCameraState: (state: CameraState): void => this.require3DRenderer().setCameraState(state),
+    setCameraState: (state: CameraState): void => this.setThreeDCameraState(state),
     getCullingStats: (): ThreeDCullingStats => this.require3DRenderer().getCullingStats(),
   };
 
@@ -382,6 +382,7 @@ class FalkorDBCanvas extends HTMLElement {
   // Pending glow repaints, keyed by node, so a glowing node queues one timer
   // rather than one per frame.
   private glowRenderScheduled: Map<number, ReturnType<typeof setTimeout>> = new Map();
+  private autoFitTimers = new Set<ReturnType<typeof setTimeout>>();
 
   private relationshipsTextCache: Map<
     string,
@@ -748,6 +749,7 @@ class FalkorDBCanvas extends HTMLElement {
 
   /** Drop whichever renderer is mounted, leaving the container empty. */
   private unmountRenderer() {
+    this.clearAutoFitTimers();
     if (this.graph) this.detachedViewport = this.getTwoDViewport();
     if (this.graph3d) this.detachedCameraState = this.graph3d.getCameraState();
     if (this.graph) {
@@ -1029,7 +1031,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     // Delay zoomToFit so force-graph renders the new positions first
     if (zoomToFit) {
-      setTimeout(() => this.zoomToFit(), this.config.interaction.zoomToFitDelay);
+      this.scheduleAutoFit(() => this.zoomToFit(), this.config.interaction.zoomToFitDelay);
     }
   }
 
@@ -1109,7 +1111,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     // Auto zoom to fit (delay to let positions render)
     const nodeCount = this.data.nodes.length;
-    setTimeout(() => {
+    this.scheduleAutoFit(() => {
       this.zoomToFit(1);
       // For very small graphs the force simulation may push nodes far apart,
       // producing a near-zero zoom that makes them invisible.
@@ -1160,8 +1162,15 @@ class FalkorDBCanvas extends HTMLElement {
     this.log('Setting viewport:', viewport);
     if (!viewport) return;
     const graph = this.require2DGraph();
+    this.clearAutoFitTimers();
     graph.centerAt(viewport.centerX, viewport.centerY, 0);
     graph.zoom(viewport.zoom, 0);
+  }
+
+  private setThreeDCameraState(state: CameraState) {
+    const renderer = this.require3DRenderer();
+    this.clearAutoFitTimers();
+    renderer.setCameraState(state);
   }
 
   /**
@@ -1463,6 +1472,19 @@ class FalkorDBCanvas extends HTMLElement {
   private clearGlowTimers() {
     this.glowRenderScheduled.forEach(clearTimeout);
     this.glowRenderScheduled.clear();
+  }
+
+  private clearAutoFitTimers() {
+    this.autoFitTimers.forEach(clearTimeout);
+    this.autoFitTimers.clear();
+  }
+
+  private scheduleAutoFit(callback: () => void, delay: number) {
+    const timer = setTimeout(() => {
+      this.autoFitTimers.delete(timer);
+      callback();
+    }, delay);
+    this.autoFitTimers.add(timer);
   }
 
   private scheduleGlowRender(nodeId: number, delay: number) {

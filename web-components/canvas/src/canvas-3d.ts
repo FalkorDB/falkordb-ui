@@ -1606,6 +1606,7 @@ export class Graph3D {
     };
     this.disposeLinkParts(parts, next);
     this.linkParts.set(link, next);
+    this.linkPartsById.set(link.id, { link, parts: next });
     if (shaft) this.linkShafts.set(link, shaft);
     else this.linkShafts.delete(link);
   }
@@ -1686,10 +1687,8 @@ function updateDashedLine(
   const end = new THREE.Vector3(coordinates.end.x, coordinates.end.y, coordinates.end.z);
   curve?.updateArcLengths();
   const length = curve?.getLength() ?? start.distanceTo(end);
-  const endParameter = length > 0
-    ? THREE.MathUtils.clamp(1 - (targetRadius + arrowLength) / length, 0, 1)
-    : 0;
-  const renderedLength = length * endParameter;
+  const renderedLength = Math.max(0, length - targetRadius - arrowLength);
+  const renderedEndFraction = length > 0 ? renderedLength / length : 0;
   const positions: number[] = [];
   let distance = 0;
   let patternIndex = 0;
@@ -1713,7 +1712,7 @@ function updateDashedLine(
         const segmentEnd = distance + (span * (segment + 1)) / segments;
         const from = curve ? curve.getPointAt(segmentStart / length) : start.clone().lerp(end, segmentStart / length);
         const to = curve
-          ? segmentEnd >= renderedLength ? curve.getPoint(endParameter) : curve.getPointAt(segmentEnd / length)
+          ? curve.getPointAt(segmentEnd >= renderedLength ? renderedEndFraction : segmentEnd / length)
           : start.clone().lerp(end, segmentEnd / length);
         positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
       }
