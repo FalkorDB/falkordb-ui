@@ -196,8 +196,10 @@ layout settings, captions, and event handlers remain shared.
 | `fontFamily` | `'SofiaSans'` | Font family for node labels |
 | `fontWeightUnselected` | `400` | Font weight when not selected |
 | `fontWeightSelected` | `700` | Font weight when selected |
-| `twoD.nodeStyle.fontSize` | `2` | 2D fixed font size (world units). Used when `textFillRatio` is 0 or unset |
-| `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fraction of node radius that text fills (0–1). Takes precedence over `fontSize` |
+| `twoD.nodeStyle.fontSize` | `2` | 2D fixed font size (world units). Always used for outside-node captions |
+| `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fraction of node radius that inside captions fill (0–1). Set to `0` to use `fontSize` |
+| `twoD.nodeStyle.captionPosition` | `'inside'` | 2D captions can be `'inside'`, `'above'`, `'below'`, `'left'`, or `'right'`. Outside captions use the canvas foreground color |
+| `twoD.nodeStyle.captionGap` | `1` | Non-negative, finite gap in world units from the node border to an outside caption in 2D. Invalid values throw `RangeError` |
 | `twoD.nodeStyle.strokeWidthSelected` | `1` | 2D border width when selected |
 | `twoD.nodeStyle.strokeWidthUnselected` | `0.5` | 2D border width when not selected |
 | `twoD.nodeStyle.glowDuration` | `10000` | 2D glow duration (ms) after expand/collapse |
@@ -211,6 +213,7 @@ layout settings, captions, and event handlers remain shared.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `fontFamily` | `'SofiaSans'` | Font family for link labels |
+| `fontSize` | `6` | Default link label font size (world units); a link's own `fontSize` takes precedence |
 | `fontWeightUnselected` | `400` | Font weight when not selected |
 | `fontWeightSelected` | `700` | Font weight when selected |
 | `twoD.linkStyle.arrowWidthRatio` | `1.6` | 2D arrow width-to-height ratio |
@@ -453,7 +456,7 @@ See [the interactive 3D example](./examples/3d-parity.example.html) for switchin
 | `target` | *required* | Target node ID |
 | `visible` | *required* | Whether the link is visible |
 | `width` | `1` | 2D line width in screen pixels (stays constant while zooming) |
-| `fontSize` | `6` | Relationship caption font size (world units) |
+| `fontSize` | `linkStyle.fontSize` | Relationship caption font size override (world units) |
 | `arrowSize` | `8` | Arrowhead length (world units) |
 | `data` | *required* | Link properties as key-value pairs |
 

@@ -242,6 +242,38 @@ describe("viewport culling", () => {
     expect(ctxOff.arc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["left", 450, 0, 383.5, 0],
+    ["right", -450, 0, -383.5, 0],
+    ["above", 0, 350, 0, 283.5],
+    ["below", 0, -350, 0, -283.5],
+  ] as const)("draws a visible %s caption even when its node is offscreen", (side, x, y, textX, textY) => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      width: 800, height: 600,
+      twoD: { nodeStyle: { captionPosition: side, captionGap: 60 } },
+      largeGraph: { viewportPadding: 0, skipLabelsAtLowZoom: false },
+    });
+    canvas.setData(SIMPLE_DATA);
+    const instance = getLastInstance();
+    setupInstanceDimensions(instance);
+    const node = canvas.getGraphData().nodes[0];
+    node.x = x;
+    node.y = y;
+    node.size = 6;
+    triggerZoom({ k: 1, x: 0, y: 0 });
+
+    const ctx = createCtxSpy();
+    instance.callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fillText).toHaveBeenCalledWith("1", textX, textY);
+
+    node.x = 5000;
+    node.y = 5000;
+    const farAway = createCtxSpy();
+    instance.callbacks.nodeCanvasObject!(node, farAway);
+    expect(farAway.fillText).not.toHaveBeenCalled();
+  });
+
   it("culling bounds include viewport padding — borderline node is drawn", () => {
     const canvas = createCanvas();
     canvas.setConfig({

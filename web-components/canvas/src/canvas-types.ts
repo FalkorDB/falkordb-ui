@@ -18,16 +18,20 @@ export interface TwoDNodeStyleConfig {
   /**
    * Fixed font size for node labels (world units).
    * When set, text uses this exact size (no auto-scaling).
-   * Ignored when textFillRatio is set (textFillRatio takes precedence).
+   * For inside captions, textFillRatio takes precedence when positive.
    */
   fontSize?: number;
   /**
    * Fraction of node radius that text fills (0–1). Default: 0.85.
    * Text auto-scales to fit inside the node circle at this fill ratio.
    * Takes precedence over fontSize when set.
-   * Set to undefined/null and provide fontSize for fixed-size text.
+   * Set to 0 and provide fontSize for fixed-size text.
    */
   textFillRatio?: number;
+  /** 2D caption placement. Default: 'inside'. In 3D captions are always below the node. */
+  captionPosition?: 'inside' | 'above' | 'below' | 'left' | 'right';
+  /** Gap between the node border and an outside 2D caption, in world units. Must be non-negative and finite. Default: 1. */
+  captionGap?: number;
   /** Stroke width when node is selected. Default: 1 */
   strokeWidthSelected?: number;
   /** Stroke width when node is not selected. Default: 0.5 */
@@ -48,6 +52,8 @@ export interface TwoDNodeStyleConfig {
 export interface LinkStyleConfig {
   /** Font family for link labels. Default: 'SofiaSans' */
   fontFamily?: string;
+  /** Default link label font size in world units. Per-link fontSize takes precedence. Default: 6 */
+  fontSize?: number;
   /** Font weight when link is not selected. Default: 400 */
   fontWeightUnselected?: number;
   /** Font weight when link is selected. Default: 700 */
@@ -542,7 +548,7 @@ export type GraphLink = {
   color: string;
   /** Line width in screen pixels (divided by globalScale, so it stays constant while zooming). Default: LINK_WIDTH. Doubled while the link is selected */
   width?: number;
-  /** Label font size in world units (scales with zoom). Default: LINK_FONT_SIZE */
+  /** Label font size in world units (scales with zoom). Overrides linkStyle.fontSize. */
   fontSize?: number;
   /** Arrowhead length in world units (scales with zoom). Default: ARROW_SIZE. Doubled while the link is selected */
   arrowSize?: number;

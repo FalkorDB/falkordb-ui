@@ -118,6 +118,8 @@ const DEFAULT_NODE_STYLE: Required<NodeStyleConfig & TwoDNodeStyleConfig> = {
   fontWeightSelected: 700,
   fontSize: 2,
   textFillRatio: 0.85,
+  captionPosition: 'inside',
+  captionGap: 1,
   strokeWidthSelected: 1,
   strokeWidthUnselected: 0.5,
   glowDuration: 10000,
@@ -129,6 +131,7 @@ const DEFAULT_NODE_STYLE: Required<NodeStyleConfig & TwoDNodeStyleConfig> = {
 
 const DEFAULT_LINK_STYLE: Required<LinkStyleConfig & TwoDLinkStyleConfig> = {
   fontFamily: 'SofiaSans',
+  fontSize: LINK_FONT_SIZE,
   fontWeightUnselected: 400,
   fontWeightSelected: 700,
   arrowWidthRatio: 1.6,
@@ -502,6 +505,11 @@ class FalkorDBCanvas extends HTMLElement {
   setConfig(config: Partial<CanvasConfig>) {
     rejectFlatTwoDConfig(config);
     this.log('Setting config:', config);
+
+    const captionGap = config.twoD?.nodeStyle?.captionGap;
+    if (captionGap !== undefined && (!Number.isFinite(captionGap) || captionGap < 0)) {
+      throw new RangeError('twoD.nodeStyle.captionGap must be a finite non-negative number');
+    }
 
     const captionsKeys = config.captionsKeys
       ? normalizeCaptionsKeys(config.captionsKeys)
@@ -1835,6 +1843,38 @@ class FalkorDBCanvas extends HTMLElement {
     return FalkorDBCanvas.overlaps(this.nodeExtent(node), this.cullingBounds);
   }
 
+  private outsideCaptionLayout(node: GraphNode, position: Exclude<Required<TwoDNodeStyleConfig>['captionPosition'], 'inside'>) {
+    const strokeWidth = this.config.isNodeSelected?.(node)
+      ? this.config.nodeStyle.strokeWidthSelected
+      : this.config.nodeStyle.strokeWidthUnselected;
+    const offset = node.size + strokeWidth + this.config.nodeStyle.captionGap;
+    const x = node.x ?? 0;
+    const y = node.y ?? 0;
+    switch (position) {
+      case "above": return { x, y: y - offset, align: "center", baseline: "bottom" } as const;
+      case "below": return { x, y: y + offset, align: "center", baseline: "top" } as const;
+      case "left": return { x: x - offset, y, align: "right", baseline: "middle" } as const;
+      case "right": return { x: x + offset, y, align: "left", baseline: "middle" } as const;
+    }
+  }
+
+  private isOutsideCaptionInCullingBounds(node: GraphNode, ctx: CanvasRenderingContext2D): boolean {
+    const { captionPosition, fontSize, fontFamily, fontWeightSelected, fontWeightUnselected } = this.config.nodeStyle;
+    const { skipLabelsAtLowZoom, lowZoomThreshold } = this.config.largeGraph;
+    if (!this.cullingBounds || captionPosition === "inside" || (skipLabelsAtLowZoom && this.cullingZoom <= lowZoomThreshold)) return false;
+    const { x, y, align, baseline } = this.outsideCaptionLayout(node, captionPosition);
+    const text = node.displayName[0] || getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
+    ctx.save();
+    ctx.font = `${this.config.isNodeSelected?.(node) ? fontWeightSelected : fontWeightUnselected} ${fontSize}px ${fontFamily}`;
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline;
+    const metrics = ctx.measureText(text);
+    ctx.restore();
+    const width = Math.max(metrics.width, Math.abs(metrics.actualBoundingBoxLeft || 0), Math.abs(metrics.actualBoundingBoxRight || 0));
+    const height = Math.max(fontSize * 2, Math.abs(metrics.actualBoundingBoxAscent || 0), Math.abs(metrics.actualBoundingBoxDescent || 0));
+    return FalkorDBCanvas.overlaps({ minX: x - width, maxX: x + width, minY: y - height, maxY: y + height }, this.cullingBounds);
+  }
+
   /** The box around `node`'s hit area: its shape at `size + PADDING`, circle or square. */
   private nodeExtent(node: GraphNode): Bounds {
     const r = node.size + PADDING;
@@ -1878,7 +1918,7 @@ class FalkorDBCanvas extends HTMLElement {
     // along the curve and the label is drawn around its midpoint.
     const margin = Math.max(
       (link.arrowSize ?? ARROW_SIZE) * LINK_SELECTED_SCALE,
-      link.fontSize ?? LINK_FONT_SIZE,
+      link.fontSize ?? this.config.linkStyle.fontSize,
     );
 
     if (link.source.id === link.target.id) {
@@ -1988,7 +2028,7 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Viewport culling: skip nodes that are entirely outside the visible area.
-    if (this.config.largeGraph?.enabled && !this.isNodeInCullingBounds(node)) return;
+    if (this.config.largeGraph?.enabled && !this.isNodeInCullingBounds(node) && !this.isOutsideCaptionInCullingBounds(node, ctx)) return;
 
     // Focus mode dimming: reduce opacity for nodes outside the focused set.
     const isDimmed = this.config.dimmed === true && (this.config.isNodeDimmed?.(node) ?? false);
@@ -2044,13 +2084,28 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Draw text
-    ctx.fillStyle = getContrastTextColor(node.color, this.config.interaction.contrastThreshold);
+    const nodeStyle = this.config.nodeStyle;
+    const nodeFontWeight = this.config.isNodeSelected?.(node) ? nodeStyle.fontWeightSelected : nodeStyle.fontWeightUnselected;
     ctx.textAlign = "center";
+
+    if (nodeStyle.captionPosition !== "inside") {
+      const text = node.displayName[0] || getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
+      node.displayName = [text, ""];
+      ctx.fillStyle = this.config.foregroundColor;
+      ctx.font = `${nodeFontWeight} ${nodeStyle.fontSize}px ${nodeStyle.fontFamily}`;
+      const { x, y, align, baseline } = this.outsideCaptionLayout(node, nodeStyle.captionPosition);
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      ctx.fillText(text, x, y);
+      if (isDimmed) ctx.restore();
+      return;
+    }
+
+    ctx.fillStyle = getContrastTextColor(node.color, this.config.interaction.contrastThreshold);
     ctx.textBaseline = "middle";
 
     let [line1, line2] = node.displayName;
     const textRadius = node.size - PADDING / 2;
-    const nodeFontWeight = this.config.isNodeSelected?.(node) ? this.config.nodeStyle.fontWeightSelected : this.config.nodeStyle.fontWeightUnselected;
 
     if (!line1 && !line2) {
       const text = getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
@@ -2178,7 +2233,7 @@ class FalkorDBCanvas extends HTMLElement {
     const emphasis = isLinkSelected ? LINK_SELECTED_SCALE : 1;
     const arrowLen = (link.arrowSize ?? ARROW_SIZE) * emphasis;
     const lineWidth = (link.width ?? LINK_WIDTH) * emphasis;
-    const fontSize = link.fontSize ?? LINK_FONT_SIZE;
+    const fontSize = link.fontSize ?? this.config.linkStyle.fontSize;
 
     // Low-zoom flags – evaluated once per link draw.
     // lowZoomThreshold is the zoom level below which details are hidden (e.g. 0.5 = skip at half zoom).

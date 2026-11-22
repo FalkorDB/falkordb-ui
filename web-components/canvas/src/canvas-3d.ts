@@ -16,7 +16,6 @@ import { ThreeDResourceTracker } from "./three-d-resource-tracker.js";
 import {
   ARROW_SIZE,
   LINK_DISTANCE,
-  LINK_FONT_SIZE,
   LINK_WIDTH,
   getContrastTextColor,
   getNodeDisplayText,
@@ -1391,7 +1390,7 @@ export class Graph3D {
     }
 
     const sprite = this.createTextSprite(link.relationship, {
-      height: (link.fontSize ?? LINK_FONT_SIZE) * 0.6,
+      height: (link.fontSize ?? config.linkStyle.fontSize) * 0.6,
       font: `${config.linkStyle.fontWeightUnselected} ${LABEL_TEXTURE_HEIGHT * 0.8}px ${config.linkStyle.fontFamily}`,
       color: getContrastTextColor(config.backgroundColor, config.interaction.contrastThreshold),
       background: config.backgroundColor,
