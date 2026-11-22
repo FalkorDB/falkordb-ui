@@ -262,6 +262,55 @@ describe("node rendering", () => {
     expect(ctx.fillText).not.toHaveBeenCalled();
   });
 
+  it("caches a fixed-size caption that cannot fit and retries when its font changes", () => {
+    let selected = false;
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: ["name"],
+      isNodeSelected: () => selected,
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { textFillRatio: 0, fontSize: 6 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 2, data: { name: "abc" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => {
+      const small = ctx.font.startsWith("700 ");
+      const width = text.length * (small ? 0.4 : 4);
+      return {
+        width,
+        actualBoundingBoxAscent: text ? (small ? 0.2 : 3) : 0,
+        actualBoundingBoxDescent: text ? (small ? 0.2 : 2) : 0,
+        actualBoundingBoxLeft: width / 2,
+        actualBoundingBoxRight: width / 2,
+      };
+    });
+    const draw = () => getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+
+    draw();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+    expect(ctx.measureText).toHaveBeenCalled();
+    ctx.measureText.mockClear();
+    draw();
+    expect(ctx.measureText).not.toHaveBeenCalled();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+
+    selected = true;
+    draw();
+    expect(ctx.fillText).toHaveBeenCalledWith("abc", 0, 0);
+    selected = false;
+    ctx.fillText.mockClear();
+    draw();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+    canvas.setConfig({ twoD: { nodeStyle: { textFillRatio: 0.85 } } });
+    draw();
+    expect(ctx.fillText).toHaveBeenCalledWith("abc", 0, expect.any(Number));
+  });
+
   it("keeps both fixed-size caption lines inside the usable circular radius", () => {
     const canvas = createCanvas();
     canvas.setConfig({

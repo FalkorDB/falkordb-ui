@@ -2147,7 +2147,7 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     let [line1, line2] = node.displayName;
-    if (!line1 && !line2) {
+    if (!this.nodeDisplayFontSize.has(node.id)) {
       const text = getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
 
       const baseFontSize = this.config.nodeStyle.fontSize;
