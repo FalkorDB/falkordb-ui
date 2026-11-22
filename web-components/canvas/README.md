@@ -620,7 +620,7 @@ const graphData = dataToGraphData(data);
 const data = graphDataToData(graphData);
 
 // Get display text for a node
-const text = getNodeDisplayText(node);  // Returns node.data[caption] or defaults to id
+const text = getNodeDisplayText(node, [["name", false]], false);  // Caption keys, then whether to show the key prefix
 
 // Wrap text for circular nodes
 const [line1, line2] = wrapTextForCircularNode(ctx, text, radius);
