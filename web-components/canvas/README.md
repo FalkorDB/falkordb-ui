@@ -440,10 +440,14 @@ See [the interactive 3D example](./examples/3d-parity.example.html) for switchin
 | `labels` | *required* | Array of label names for the node |
 | `color` | *required* | Node color (hex or CSS color) |
 | `visible` | *required* | Whether the node is visible |
-| `size` | `9` | Node radius (world units) |
-| `shape` | `'circle'` | Node outline: `'circle'` or `'square'` (a square uses the circle's bounding box) |
+| `size` | `9` | Size in world units: circle/sphere radius or half the side length of a square/cube |
+| `shape` | `'circle'` | `'circle'` renders a circle in 2D and a sphere in 3D; `'square'` renders a square in 2D and a cube in 3D |
 | `caption` | `'id'` | Property key to use from the data for display text |
 | `data` | *required* | Node properties as key-value pairs |
+
+For example, `size: 9` renders a circle or sphere with a radius of 9, or a
+square or cube with sides of 18 world units, excluding borders and selection
+outlines. Custom renderers control their own geometry.
 
 #### Link
 
@@ -753,7 +757,7 @@ canvas.setConfig({
 
 **Viewport culling** – before each node or link is drawn, the renderer checks whether its world-space bounding box overlaps the currently visible area (with optional extra `viewportPadding`).  Elements that are entirely offscreen are skipped without any canvas work.
 
-- For **nodes**: the bounding box is a circle of radius `node.size + 2`.
+- For **nodes**: the axis-aligned bounding box extends `node.size + 2` world units from the center in each direction, for both circles and squares. An outside caption is also considered when enabled.
 - For **links**: the bounding box is the convex-hull axis-aligned rectangle of the Bezier curve's control points (source, control point, target).  This is a conservative bound – it never produces false negatives.
 - For **self-loops**: the bounding box is a square centered on the node with a side length derived from the loop curvature.
 

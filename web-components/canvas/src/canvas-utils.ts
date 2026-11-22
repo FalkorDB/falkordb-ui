@@ -41,7 +41,7 @@ export const DEFAULT_CANVAS_FOREGROUND = '#1A1A1A';
 
 /** Default link distance between connected nodes (world units) */
 export const LINK_DISTANCE = 45;
-/** Default node circle radius (world units) */
+/** Default circle/sphere radius or half the square/cube side length (world units). */
 export const NODE_SIZE = 9;
 /** Default link line width, in screen pixels (divided by globalScale so it stays constant while zooming) */
 export const LINK_WIDTH = 1;

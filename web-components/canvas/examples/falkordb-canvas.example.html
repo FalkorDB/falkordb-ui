@@ -950,19 +950,19 @@
       <h4>Data Format</h4>
       <pre>{
   nodes: [{
-    id: number | string,
+    id: number,
     labels: string[],
     data: Record&lt;string, any&gt;,
     visible: boolean,
     color: string,
-    size?: number,           // Radius in world units (default: 9)
-    shape?: 'circle' | 'square',  // Node outline (default: 'circle')
+    size?: number,           // Circle/sphere radius, or half square/cube side, in world units (default: 9)
+    shape?: 'circle' | 'square',  // Circle/sphere or square/cube (default: 'circle')
     expand?: boolean,
   }],
   links: [{
-    id: number | string,
-    source: number | string,
-    target: number | string,
+    id: number,
+    source: number,
+    target: number,
     relationship: string,
     data: Record&lt;string, any&gt;,
     color: string,

@@ -478,8 +478,8 @@ export interface LayoutOptions {
 }
 
 /**
- * The outline a node is drawn with. A square uses the circle's bounding box,
- * so a caption laid out for the default circle keeps fitting.
+ * The built-in node shape: circle or square in 2D, sphere or cube in 3D.
+ * Squares and cubes have a side length of twice the node size.
  */
 export type NodeShape = "circle" | "square";
 
@@ -498,11 +498,11 @@ export type GraphNode = NodeObject & {
   expand: [boolean, Date];
   /** Cached two-line display text computed from captionsKeys */
   displayName: [string, string];
-  /** Fill color for the node circle (CSS color string) */
+  /** Fill color for the node (CSS color string) */
   color: string;
   /** Border stroke color for the node (CSS color string, optional — overrides config.foregroundColor if set) */
   borderColor?: string;
-  /** Radius of the node circle in world units */
+  /** Circle/sphere radius or half the square/cube side length, in world units. */
   size: number;
   /** The outline this node is drawn with. Defaults to "circle" */
   shape?: NodeShape;
@@ -574,7 +574,7 @@ export type Node = Omit<
   GraphNode,
   "x" | "y" | "layoutTargetX" | "layoutTargetY" | "vx" | "vy" | "fx" | "fy" | "initialPositionCalculated" | "displayName" | "size" | "expand"
 > & {
-  /** Optional node radius override (defaults to built-in NODE_SIZE) */
+  /** Circle/sphere radius or half the square/cube side length, in world units. Default: 9. */
   size?: number;
   /** Whether the node is in an expanded state (triggers glow animation on change) */
   expand?: boolean;
