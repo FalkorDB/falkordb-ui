@@ -12,7 +12,7 @@ import {
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
-import { BoxGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, MOUSE, Mesh, MeshBasicMaterial, Object3D, QuadraticBezierCurve3, Raycaster, Sprite, Vector3, type BufferGeometry, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { BoxGeometry, Group, InstancedMesh, Line, LineBasicMaterial, LineSegments, Matrix4, MOUSE, Mesh, MeshBasicMaterial, Object3D, QuadraticBezierCurve3, Raycaster, Sprite, Vector3, type BufferGeometry, type MeshLambertMaterial, type SpriteMaterial } from "three";
 import { LinkShaft } from "../src/link-shaft";
 import "../src/canvas";
 import type { CanvasConfig, CanvasTestElement, GraphNode, GraphLink } from "./test-types";
@@ -1883,11 +1883,17 @@ describe("3D custom renderers and links", () => {
     link.__curve = curve;
     update(object, coordinates, link);
     const curvedPositions = line.geometry.getAttribute("position").array;
-    const curvedEnd = curve.getPointAt(1 - 15 / curve.getLength());
-    expect(curvedPositions[curvedPositions.length - 3]).toBeCloseTo(curvedEnd.x);
-    expect(curvedPositions[curvedPositions.length - 2]).toBeCloseTo(curvedEnd.y);
-    expect(curvedPositions[curvedPositions.length - 1]).toBeCloseTo(curvedEnd.z);
+    const shaft = new LinkShaft(new Object3D(), 0, new LineBasicMaterial());
+    shaft.update(new Vector3(0, 0, 0), new Vector3(100, 0, 0), curve, 10, 5);
+    const shaftLine = shaft.getObjectByProperty("type", "Line") as Line;
+    const shaftEnd = shaftLine.geometry.getAttribute("position").array.slice(-3);
+    const dashedEnd = curvedPositions.slice(-3);
+
+    expect(dashedEnd).toEqual(shaftEnd);
+    expect(dashedEnd[0]).toBeCloseTo(72.25);
     expect(curvedPositions[curvedPositions.length - 3]).toBeGreaterThan(curvedPositions[curvedPositions.length - 6]);
+    shaft.dispose();
+    shaft.material.dispose();
 
     canvas.setConfig({ threeD: { largeGraph: { lowZoomThreshold: 1000, skipArrowsAtLowZoom: true } } });
     link.__curve = undefined;

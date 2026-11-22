@@ -1687,8 +1687,12 @@ function updateDashedLine(
   const end = new THREE.Vector3(coordinates.end.x, coordinates.end.y, coordinates.end.z);
   curve?.updateArcLengths();
   const length = curve?.getLength() ?? start.distanceTo(end);
-  const renderedLength = Math.max(0, length - targetRadius - arrowLength);
-  const renderedEndFraction = length > 0 ? renderedLength / length : 0;
+  const endParameter = length > 0
+    ? THREE.MathUtils.clamp(1 - (targetRadius + arrowLength) / length, 0, 1)
+    : 0;
+  const renderedLength = curve
+    ? getCurveLengthAtParameter(curve, endParameter)
+    : length * endParameter;
   const positions: number[] = [];
   let distance = 0;
   let patternIndex = 0;
@@ -1712,7 +1716,7 @@ function updateDashedLine(
         const segmentEnd = distance + (span * (segment + 1)) / segments;
         const from = curve ? curve.getPointAt(segmentStart / length) : start.clone().lerp(end, segmentStart / length);
         const to = curve
-          ? curve.getPointAt(segmentEnd >= renderedLength ? renderedEndFraction : segmentEnd / length)
+          ? segmentEnd >= renderedLength ? curve.getPoint(endParameter) : curve.getPointAt(segmentEnd / length)
           : start.clone().lerp(end, segmentEnd / length);
         positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
       }
@@ -1733,6 +1737,15 @@ function updateDashedLine(
     }
     line.geometry.computeBoundingSphere();
   }
+}
+
+function getCurveLengthAtParameter(curve: THREE.Curve<THREE.Vector3>, parameter: number): number {
+  const lengths = curve.getLengths();
+  const index = parameter * (lengths.length - 1);
+  const lowerIndex = Math.floor(index);
+  const upperIndex = Math.min(lowerIndex + 1, lengths.length - 1);
+  const fraction = index - lowerIndex;
+  return lengths[lowerIndex] + (lengths[upperIndex] - lengths[lowerIndex]) * fraction;
 }
 
 function updateDashedMeshGeometry(geometry: THREE.BufferGeometry, endpoints: number[], width: number) {
