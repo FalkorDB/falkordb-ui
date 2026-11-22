@@ -254,7 +254,8 @@ layout settings, captions, and event handlers remain shared.
   instancing default to enabled. Native Three.js frustum culling stays active
   regardless of this group's `enabled` setting.
 - `threeD.linkWidth`: unselected 3D link width in world units; defaults to `0`
-  (the existing hairline). Selected links remain emphasized.
+  (the existing hairline). The configured width and selected-link emphasis also
+  apply to dashed links.
 - `threeD.linkDashPattern(link)`: alternating dash/gap lengths in world units;
   return `[]` for a solid native link. A link-position update that would
   exceed 4096 rendered segments throws `RangeError` instead of generating

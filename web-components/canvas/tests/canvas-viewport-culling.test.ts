@@ -523,6 +523,32 @@ describe("low-zoom draw skipping", () => {
       });
     });
 
+    it("counts instanced node bodies using the total-node threshold when one node is hidden", async () => {
+      const canvas = createCanvas();
+      const nodes = Array.from({ length: 1000 }, (_, id) => ({
+        id,
+        labels: ["A"],
+        visible: id !== 999,
+        color: "#f00",
+        data: {},
+      }));
+      canvas.setData({ nodes, links: [] });
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const nodeFactory = graph.callback("nodeThreeObject") as (current: GraphNode) => Object3D;
+      for (const node of canvas.getGraphData().nodes) {
+        Object.assign(node, { x: 0, y: 0, z: 0 });
+        graph.sceneObject.add(nodeFactory(node));
+      }
+      graph.controlsChanged();
+
+      expect(canvas.threeD.getCullingStats()).toMatchObject({
+        frustumVisibleNodeBodies: 999,
+        totalNodeBodies: 999,
+      });
+    });
+
     it("counts visible drawables nested inside custom 3D node objects", async () => {
       const canvas = createCanvas();
       canvas.setConfig({
@@ -544,6 +570,41 @@ describe("low-zoom draw skipping", () => {
       expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(1);
 
       object.visible = false;
+      expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(0);
+    });
+
+    it("culls custom nodes by their own bounds while retaining caption and node visibility checks", async () => {
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+        measureText: (text: string) => ({ width: text.length * 10 }),
+        fillRect: () => {},
+        fillText: () => {},
+      }) as unknown as CanvasRenderingContext2D);
+      const nodeObject = vi.fn(() => {
+        const mesh = new Mesh(new BoxGeometry(10, 10, 10), new MeshBasicMaterial());
+        mesh.position.x = -10000;
+        return mesh;
+      });
+      const canvas = createCanvas();
+      canvas.setConfig({ captionsKeys: ["name"], threeD: { nodeObject } });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const node = canvas.getGraphData().nodes[0];
+      Object.assign(node, { x: 10000, y: 0, z: 0 });
+      const nodeFactory = graph.callback("nodeThreeObject") as (current: GraphNode) => Object3D;
+      const object = nodeFactory(node);
+      object.position.set(10000, 0, 0);
+      graph.sceneObject.add(object);
+
+      expect(nodeObject).toHaveBeenCalledTimes(1);
+      expect(object.visible).toBe(true);
+      expect(object.children.find((child) => child instanceof Sprite)?.visible).toBe(false);
+      expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(1);
+
+      node.visible = false;
+      graph.controlsChanged();
+      expect(object.visible).toBe(false);
       expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(0);
     });
 

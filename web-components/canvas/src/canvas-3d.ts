@@ -99,12 +99,14 @@ type LinkParts = {
   root: THREE.Object3D;
   label: THREE.Sprite | null;
   customVisual: THREE.Object3D | null;
-  dashedLine: THREE.LineSegments | null;
+  dashedLine: THREE.LineSegments | THREE.Mesh | null;
   releaseCustomVisual: (() => void) | null;
   renderState: ThreeDRenderState;
   factory: InternalCanvasConfig["modeConfig"]["threeD"]["linkObject"];
   dashPatternFactory: InternalCanvasConfig["modeConfig"]["threeD"]["linkDashPattern"];
   dashPattern: number[];
+  dashWidth: number;
+  dashMaterialShared: boolean;
   shaft: LinkShaft | null;
 };
 
@@ -133,7 +135,11 @@ export class Graph3D {
 
   private nodeParts = new Map<GraphNode, NodeParts>();
 
+  private readonly nodePartsById = new Map<number, { node: GraphNode; parts: NodeParts }>();
+
   private linkParts = new Map<GraphLink, LinkParts>();
+
+  private readonly linkPartsById = new Map<number, { link: GraphLink; parts: LinkParts }>();
 
   private readonly resourceTracker = new ThreeDResourceTracker();
 
@@ -283,11 +289,13 @@ export class Graph3D {
     const height = Math.max(node.size * 0.6, 3);
     const radius = node.size * SELECTED_OUTLINE_SCALE * Math.sqrt(3) +
       height * (MAX_LABEL_TEXTURE_WIDTH / LABEL_TEXTURE_HEIGHT + 1);
-    const visible = node.visible !== false && this.inView(node, radius);
+    const nodeVisible = node.visible !== false;
+    const inView = this.inView(node, radius);
+    const factory = this.host.config.modeConfig.threeD.nodeObject;
+    const visible = nodeVisible && (inView || !!factory || !!parts.customVisual);
     parts.group.visible = visible;
     if (visible && parts.dirty) {
       const state = this.nodeRenderState(node);
-      const factory = this.host.config.modeConfig.threeD.nodeObject;
       if (
         parts.refreshCustomVisual
         || !sameRenderState(state, parts.renderState)
@@ -300,7 +308,8 @@ export class Graph3D {
       this.styleNode(node, parts, state);
       parts.dirty = false;
     }
-    if (parts.label) parts.label.visible = visible && this.details.nodes;
+    parts.group.visible = nodeVisible && (inView || !!parts.customVisual);
+    if (parts.label) parts.label.visible = nodeVisible && inView && this.details.nodes;
   }
 
   private syncLinkLabel(link: GraphLink, label: THREE.Sprite) {
@@ -486,11 +495,12 @@ export class Graph3D {
       if (refreshCustomVisuals) parts.refreshCustomVisual = true;
     }
 
-    const liveLinks = new Set(this.host.data.links.filter(link => link.visible));
+    const liveLinkIds = new Set(this.host.data.links.filter(link => link.visible).map(link => link.id));
     for (const [link, parts] of this.linkParts) {
-      if (liveLinks.has(link)) continue;
+      if (liveLinkIds.has(link.id)) continue;
       this.disposeLinkParts(parts);
       this.linkParts.delete(link);
+      if (this.linkPartsById.get(link.id)?.parts === parts) this.linkPartsById.delete(link.id);
       this.linkShafts.delete(link);
     }
     let colorsChanged = false;
@@ -502,19 +512,18 @@ export class Graph3D {
       if (!parts) continue;
       const state = this.linkRenderState(link);
       const patternFactory = this.host.config.modeConfig.threeD.linkDashPattern;
+      const linkWidth = this.linkRenderWidth(link, state);
       if (
         refreshCustomVisuals
         || !sameRenderState(state, parts.renderState)
         || parts.factory !== this.host.config.modeConfig.threeD.linkObject
         || parts.dashPatternFactory !== patternFactory
+        || parts.dashWidth !== linkWidth
       ) {
         this.replaceLinkVisual(link, parts, state);
       } else if (parts.label?.visible) {
         parts.label.material.opacity = state.opacity;
       }
-      const linkWidth = this.isLinkSelected(link)
-        ? Math.max(link.width ?? LINK_WIDTH, config.modeConfig.threeD.linkWidth) * SELECTED_LINK_WIDTH
-        : config.modeConfig.threeD.linkWidth;
       this.linkShafts.get(link)?.setStyle(linkWidth, this.shaftMaterial(link));
     }
 
@@ -615,6 +624,7 @@ export class Graph3D {
     // so it is never taken for the data already shown.
     const { nodes, links } = this.host.data;
     this.graph.graphData({ nodes, links });
+    this.cleanupRemovedVisuals();
     this.restyle();
   }
 
@@ -833,6 +843,8 @@ export class Graph3D {
   }
 
   setCameraState(state: CameraState) {
+    this.pendingFit = null;
+    this.resetViewPending = false;
     const camera = this.graph.camera();
     camera.up.set(state.up.x, state.up.y, state.up.z);
     this.graph.cameraPosition(
@@ -867,7 +879,7 @@ export class Graph3D {
         && !parts.customVisual
         && largeGraph.enabled
         && largeGraph.nodeInstancing
-        && visibleNodes.length >= LARGE_GRAPH_NODE_THRESHOLD
+        && this.host.data.nodes.length >= LARGE_GRAPH_NODE_THRESHOLD
         && !parts.outline.visible
         && parts.body.material.opacity === 1;
       const bodyInFrustum = body && (parts && instancedBody
@@ -1002,7 +1014,9 @@ export class Graph3D {
     for (const parts of this.nodeParts.values()) this.disposeNodeParts(parts);
     for (const parts of this.linkParts.values()) this.disposeLinkParts(parts);
     this.nodeParts.clear();
+    this.nodePartsById.clear();
     this.linkParts.clear();
+    this.linkPartsById.clear();
     this.sphereGeometry.dispose();
     this.boxGeometry.dispose();
     for (const material of this.shaftMaterials.values()) material.dispose();
@@ -1196,7 +1210,7 @@ export class Graph3D {
   }
 
   private createNodeObject(node: GraphNode): THREE.Object3D {
-    const previous = this.nodeParts.get(node);
+    const previous = this.nodePartsById.get(node.id);
     const geometry = node.shape === "square"
       ? this.boxGeometry
       : this.sphereGeometry;
@@ -1224,10 +1238,14 @@ export class Graph3D {
       factory: undefined,
       refreshCustomVisual: false,
     };
-    this.nodeParts.set(node, parts);
     this.updateFrustum();
     this.syncNode(node, parts);
-    if (previous) this.disposeNodeParts(previous, parts);
+    if (previous) {
+      this.nodeParts.delete(previous.node);
+      this.disposeNodeParts(previous.parts, parts);
+    }
+    this.nodeParts.set(node, parts);
+    this.nodePartsById.set(node.id, { node, parts });
 
     return group;
   }
@@ -1320,7 +1338,7 @@ export class Graph3D {
   }
 
   private createLinkObject(link: GraphLink): THREE.Object3D {
-    const previous = this.linkParts.get(link);
+    const previous = this.linkPartsById.get(link.id);
     const state = this.linkRenderState(link);
     const factory = this.host.config.modeConfig.threeD.linkObject;
     const dashPattern = factory ? [] : this.getDashPattern(link);
@@ -1329,12 +1347,10 @@ export class Graph3D {
       throw new TypeError("[FalkorDBCanvas] threeD.linkObject must return a Three.js Object3D");
     }
 
-    const dashedLine = !factory && dashPattern.length ? this.createDashedLine(link) : null;
+    const width = this.linkRenderWidth(link, state);
+    const dashedLine = !factory && dashPattern.length ? this.createDashedLine(link, width) : null;
     const labelObject = this.createLinkLabel(link);
     const label = labelObject instanceof THREE.Sprite ? labelObject : null;
-    const width = state.selected
-      ? Math.max(link.width ?? LINK_WIDTH, this.host.config.modeConfig.threeD.linkWidth) * SELECTED_LINK_WIDTH
-      : this.host.config.modeConfig.threeD.linkWidth;
     const shaft = new LinkShaft(labelObject, width, this.shaftMaterial(link));
     const releaseCustomVisual = customVisual ? this.resourceTracker.acquire(customVisual) : null;
     if (customVisual) shaft.add(customVisual);
@@ -1351,12 +1367,19 @@ export class Graph3D {
       factory,
       dashPatternFactory: this.host.config.modeConfig.threeD.linkDashPattern,
       dashPattern,
+      dashWidth: width,
+      dashMaterialShared: !!dashedLine && width > 0,
       shaft,
     };
-    if (previous) this.disposeLinkParts(previous, parts);
+    if (previous) {
+      this.linkParts.delete(previous.link);
+      this.linkShafts.delete(previous.link);
+      this.disposeLinkParts(previous.parts, parts);
+    }
+    this.linkParts.set(link, parts);
+    this.linkPartsById.set(link.id, { link, parts });
     if (shaft) this.linkShafts.set(link, shaft);
     else this.linkShafts.delete(link);
-    this.linkParts.set(link, parts);
     return shaft;
   }
 
@@ -1452,15 +1475,26 @@ export class Graph3D {
     return pattern.length % 2 === 0 ? [...pattern] : [...pattern, ...pattern];
   }
 
-  private createDashedLine(link: GraphLink): THREE.LineSegments {
+  private createDashedLine(link: GraphLink, width: number): THREE.LineSegments | THREE.Mesh {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute([], 3));
-    const material = new THREE.LineBasicMaterial({
-      color: this.linkColor(link),
-      opacity: 0.9,
-      transparent: true,
-    });
-    return new THREE.LineSegments(geometry, material);
+    const material = width > 0
+      ? this.shaftMaterial(link)
+      : new THREE.LineBasicMaterial({
+        color: this.linkColor(link),
+        opacity: 0.9,
+        transparent: true,
+      });
+    return width > 0
+      ? new THREE.Mesh(geometry, material)
+      : new THREE.LineSegments(geometry, material);
+  }
+
+  private linkRenderWidth(link: GraphLink, state: ThreeDRenderState): number {
+    const unselectedWidth = this.host.config.modeConfig.threeD.linkWidth;
+    return state.selected
+      ? Math.max(link.width ?? LINK_WIDTH, unselectedWidth) * SELECTED_LINK_WIDTH
+      : unselectedWidth;
   }
 
   private updateLinkObjectPosition(
@@ -1481,8 +1515,16 @@ export class Graph3D {
     const shaft = parts?.shaft ?? (object instanceof LinkShaft ? object : null);
     if (shaft) {
       if (parts?.dashedLine) {
-        updateDashedLine(parts.dashedLine, parts.dashPattern, coordinates, curve);
-        const material = parts.dashedLine.material as THREE.LineBasicMaterial;
+        updateDashedLine(
+          parts.dashedLine,
+          parts.dashPattern,
+          coordinates,
+          curve,
+          typeof link.target === "number" ? 0 : link.target.size,
+          this.arrowLength(link),
+          parts.dashWidth,
+        );
+        const material = parts.dashedLine.material as THREE.LineBasicMaterial | THREE.MeshLambertMaterial;
         material.color.set(this.linkColor(link));
         material.opacity = 0.9;
         material.transparent = true;
@@ -1527,9 +1569,8 @@ export class Graph3D {
     const dashPattern = factory ? [] : this.getDashPattern(link);
     if (!factory && dashPattern.length === 0 && !parts.customVisual && !parts.dashedLine && parts.shaft) {
       parts.renderState = state;
-      const width = state.selected
-        ? Math.max(link.width ?? LINK_WIDTH, this.host.config.modeConfig.threeD.linkWidth) * SELECTED_LINK_WIDTH
-        : this.host.config.modeConfig.threeD.linkWidth;
+      const width = this.linkRenderWidth(link, state);
+      parts.dashWidth = width;
       parts.shaft.setStyle(width, this.shaftMaterial(link));
       if (parts.label?.visible) parts.label.material.opacity = state.opacity;
       return;
@@ -1539,15 +1580,13 @@ export class Graph3D {
     if (factory && !isThreeObject(customVisual)) {
       throw new TypeError("[FalkorDBCanvas] threeD.linkObject must return a Three.js Object3D");
     }
-    const dashedLine = !factory && dashPattern.length ? this.createDashedLine(link) : null;
+    const width = this.linkRenderWidth(link, state);
+    const dashedLine = !factory && dashPattern.length ? this.createDashedLine(link, width) : null;
     const shaft = parts.shaft;
     if (!shaft) throw new Error("[FalkorDBCanvas] Missing 3D link shaft while replacing its visual");
     const releaseCustomVisual = customVisual ? this.resourceTracker.acquire(customVisual) : null;
     if (customVisual) shaft.add(customVisual);
     if (dashedLine) shaft.add(dashedLine);
-    const width = state.selected
-      ? Math.max(link.width ?? LINK_WIDTH, this.host.config.modeConfig.threeD.linkWidth) * SELECTED_LINK_WIDTH
-      : this.host.config.modeConfig.threeD.linkWidth;
     shaft.setStyle(width, this.shaftMaterial(link));
     shaft.setShaftVisible(!customVisual && !dashedLine);
 
@@ -1561,6 +1600,8 @@ export class Graph3D {
       factory,
       dashPatternFactory: this.host.config.modeConfig.threeD.linkDashPattern,
       dashPattern,
+      dashWidth: width,
+      dashMaterialShared: !!dashedLine && width > 0,
       shaft,
     };
     this.disposeLinkParts(parts, next);
@@ -1570,18 +1611,20 @@ export class Graph3D {
   }
 
   private cleanupRemovedVisuals() {
-    const nodes = new Set(this.host.data.nodes);
+    const nodeIds = new Set(this.host.data.nodes.map(node => node.id));
     for (const [node, parts] of this.nodeParts) {
-      if (nodes.has(node)) continue;
+      if (nodeIds.has(node.id)) continue;
       this.disposeNodeParts(parts);
       this.nodeParts.delete(node);
+      if (this.nodePartsById.get(node.id)?.parts === parts) this.nodePartsById.delete(node.id);
     }
 
-    const links = new Set(this.host.data.links);
+    const linkIds = new Set(this.host.data.links.map(link => link.id));
     for (const [link, parts] of this.linkParts) {
-      if (links.has(link)) continue;
+      if (linkIds.has(link.id)) continue;
       this.disposeLinkParts(parts);
       this.linkParts.delete(link);
+      if (this.linkPartsById.get(link.id)?.parts === parts) this.linkPartsById.delete(link.id);
       this.linkShafts.delete(link);
     }
   }
@@ -1605,7 +1648,7 @@ export class Graph3D {
     }
     if (parts.dashedLine && parts.dashedLine !== replacement?.dashedLine) {
       parts.dashedLine.geometry.dispose();
-      (parts.dashedLine.material as THREE.Material).dispose();
+      if (!parts.dashMaterialShared) (parts.dashedLine.material as THREE.Material).dispose();
       parts.dashedLine.removeFromParent();
     }
     if (!parts.shaft && parts.label && parts.label !== replacement?.label) {
@@ -1630,28 +1673,35 @@ function isThreeObject(value: unknown): value is THREE.Object3D {
 }
 
 function updateDashedLine(
-  line: THREE.LineSegments,
+  line: THREE.LineSegments | THREE.Mesh,
   pattern: number[],
   coordinates: { start: CanvasVector3; end: CanvasVector3 },
   curve?: THREE.Curve<THREE.Vector3> | null,
+  targetRadius = 0,
+  arrowLength = 0,
+  width = 0,
 ) {
   const maxLineSegments = 4096;
   const start = new THREE.Vector3(coordinates.start.x, coordinates.start.y, coordinates.start.z);
   const end = new THREE.Vector3(coordinates.end.x, coordinates.end.y, coordinates.end.z);
   curve?.updateArcLengths();
   const length = curve?.getLength() ?? start.distanceTo(end);
+  const endParameter = length > 0
+    ? THREE.MathUtils.clamp(1 - (targetRadius + arrowLength) / length, 0, 1)
+    : 0;
+  const renderedLength = length * endParameter;
   const positions: number[] = [];
   let distance = 0;
   let patternIndex = 0;
   let patternSteps = 0;
   let generatedSegments = 0;
 
-  while (distance < length && length > 0) {
+  while (distance < renderedLength && length > 0) {
     if (patternSteps >= maxLineSegments * 2) {
       throw new RangeError(`[FalkorDBCanvas] threeD.linkDashPattern exceeds ${maxLineSegments} line segments for a link`);
     }
     patternSteps++;
-    const span = Math.min(pattern[patternIndex], length - distance);
+    const span = Math.min(pattern[patternIndex], renderedLength - distance);
     if (patternIndex % 2 === 0) {
       const segments = curve ? Math.max(1, Math.ceil(span / 2)) : 1;
       if (generatedSegments + segments > maxLineSegments) {
@@ -1662,7 +1712,9 @@ function updateDashedLine(
         const segmentStart = distance + (span * segment) / segments;
         const segmentEnd = distance + (span * (segment + 1)) / segments;
         const from = curve ? curve.getPointAt(segmentStart / length) : start.clone().lerp(end, segmentStart / length);
-        const to = curve ? curve.getPointAt(segmentEnd / length) : start.clone().lerp(end, segmentEnd / length);
+        const to = curve
+          ? segmentEnd >= renderedLength ? curve.getPoint(endParameter) : curve.getPointAt(segmentEnd / length)
+          : start.clone().lerp(end, segmentEnd / length);
         positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
       }
     }
@@ -1670,15 +1722,111 @@ function updateDashedLine(
     patternIndex = (patternIndex + 1) % pattern.length;
   }
 
-  const current = line.geometry.getAttribute("position");
-  if (current && current.array.length === positions.length) {
-    for (let index = 0; index < positions.length; index++) current.array[index] = positions[index];
-    current.needsUpdate = true;
+  if (line instanceof THREE.Mesh) {
+    updateDashedMeshGeometry(line.geometry, positions, width);
   } else {
-    line.geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const current = line.geometry.getAttribute("position");
+    if (current && current.array.length === positions.length) {
+      for (let index = 0; index < positions.length; index++) current.array[index] = positions[index];
+      current.needsUpdate = true;
+    } else {
+      line.geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    }
+    line.geometry.computeBoundingSphere();
   }
-  line.geometry.computeBoundingSphere();
+}
 
+function updateDashedMeshGeometry(geometry: THREE.BufferGeometry, endpoints: number[], width: number) {
+  const radialSegments = 6;
+  const verticesPerSegment = radialSegments * 2 + 2;
+  const indicesPerSegment = radialSegments * 12;
+  const segmentCount = endpoints.length / 6;
+  const positionAttribute = geometry.getAttribute("position");
+  const positions = positionAttribute?.array instanceof Float32Array
+    && positionAttribute.array.length === segmentCount * verticesPerSegment * 3
+    ? positionAttribute.array
+    : new Float32Array(segmentCount * verticesPerSegment * 3);
+  const indexAttribute = geometry.getIndex();
+  const indices = indexAttribute?.array instanceof Uint16Array
+    && indexAttribute.array.length === segmentCount * indicesPerSegment
+    ? indexAttribute.array
+    : new Uint16Array(segmentCount * indicesPerSegment);
+  const start = new THREE.Vector3();
+  const end = new THREE.Vector3();
+  const direction = new THREE.Vector3();
+  const reference = new THREE.Vector3();
+  const basisA = new THREE.Vector3();
+  const basisB = new THREE.Vector3();
+  const radius = width / 2;
+
+  for (let segment = 0; segment < segmentCount; segment++) {
+    const source = segment * 6;
+    start.set(endpoints[source], endpoints[source + 1], endpoints[source + 2]);
+    end.set(endpoints[source + 3], endpoints[source + 4], endpoints[source + 5]);
+    direction.subVectors(end, start);
+    const hasDirection = direction.lengthSq() > 0;
+    if (hasDirection) {
+      direction.normalize();
+      reference.set(Math.abs(direction.y) < 0.9 ? 0 : 1, Math.abs(direction.y) < 0.9 ? 1 : 0, 0);
+      basisA.crossVectors(direction, reference).normalize();
+      basisB.crossVectors(direction, basisA).normalize();
+    }
+
+    const baseVertex = segment * verticesPerSegment;
+    for (let ring = 0; ring < 2; ring++) {
+      const center = ring === 0 ? start : end;
+      for (let side = 0; side < radialSegments; side++) {
+        const angle = (side / radialSegments) * Math.PI * 2;
+        const offset = (baseVertex + ring * radialSegments + side) * 3;
+        positions[offset] = center.x + (hasDirection ? radius * (Math.cos(angle) * basisA.x + Math.sin(angle) * basisB.x) : 0);
+        positions[offset + 1] = center.y + (hasDirection ? radius * (Math.cos(angle) * basisA.y + Math.sin(angle) * basisB.y) : 0);
+        positions[offset + 2] = center.z + (hasDirection ? radius * (Math.cos(angle) * basisA.z + Math.sin(angle) * basisB.z) : 0);
+      }
+    }
+    const startCenter = baseVertex + radialSegments * 2;
+    const endCenter = startCenter + 1;
+    positions[startCenter * 3] = start.x;
+    positions[startCenter * 3 + 1] = start.y;
+    positions[startCenter * 3 + 2] = start.z;
+    positions[endCenter * 3] = end.x;
+    positions[endCenter * 3 + 1] = end.y;
+    positions[endCenter * 3 + 2] = end.z;
+
+    const indexOffset = segment * indicesPerSegment;
+    let index = indexOffset;
+    for (let side = 0; side < radialSegments; side++) {
+      const next = (side + 1) % radialSegments;
+      const startCurrent = baseVertex + side;
+      const startNext = baseVertex + next;
+      const endCurrent = baseVertex + radialSegments + side;
+      const endNext = baseVertex + radialSegments + next;
+      indices[index++] = startCurrent;
+      indices[index++] = startNext;
+      indices[index++] = endCurrent;
+      indices[index++] = startNext;
+      indices[index++] = endNext;
+      indices[index++] = endCurrent;
+      indices[index++] = startCenter;
+      indices[index++] = startNext;
+      indices[index++] = startCurrent;
+      indices[index++] = endCenter;
+      indices[index++] = endCurrent;
+      indices[index++] = endNext;
+    }
+  }
+
+  if (positionAttribute?.array === positions) {
+    positionAttribute.needsUpdate = true;
+  } else {
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  }
+  if (indexAttribute?.array === indices) {
+    indexAttribute.needsUpdate = true;
+  } else {
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  }
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
 }
 
 /**

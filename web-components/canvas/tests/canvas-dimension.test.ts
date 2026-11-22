@@ -328,6 +328,23 @@ describe("3D camera state", () => {
     expect(canvas.threeD.getCameraState()).toEqual(state);
   });
 
+  it("keeps an explicit camera restore after the initial pending fit completes", async () => {
+    const canvas = await canvasIn3D();
+    const nodes = canvas.getGraphData().nodes;
+    Object.assign(nodes[0], { x: 0, y: 0, z: 0 });
+    Object.assign(nodes[1], { x: 200, y: 100, z: 50 });
+    const state = {
+      position: { x: 900, y: -300, z: 700 },
+      target: { x: 20, y: 30, z: 40 },
+      up: { x: 0.1, y: 0.8, z: 0.2 },
+    };
+
+    canvas.threeD.setCameraState(state);
+    last3D().callback("onEngineStop")();
+
+    expect(canvas.threeD.getCameraState()).toEqual(state);
+  });
+
   it("refreshes frustum visibility after restoring the camera", async () => {
     const canvas = await canvasIn3D();
     const node = canvas.getGraphData().nodes[0];
@@ -1630,6 +1647,53 @@ describe("3D custom renderers and links", () => {
     expect(disposeGeometry).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps link resources leased until same-id replacement visuals acquire them", async () => {
+    const geometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const disposeGeometry = vi.spyOn(geometry, "dispose");
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkObject: () => new Mesh(geometry, material) });
+    canvas.setData(structuredClone(DATA));
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("linkThreeObject") as (link: GraphLink) => Object3D;
+    factory(canvas.getGraphData().links[0]);
+    canvas.setGraphData(structuredClone(DATA));
+
+    expect(disposeGeometry).not.toHaveBeenCalled();
+    expect(() => factory(canvas.getGraphData().links[0])).not.toThrow();
+    expect(disposeGeometry).not.toHaveBeenCalled();
+
+    await canvas.setDimension("2d");
+    expect(disposeGeometry).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases removed node leases after full replacements while preserving same-id resources", async () => {
+    const removedGeometry = new BoxGeometry();
+    const retainedGeometry = new BoxGeometry();
+    const disposeRemovedGeometry = vi.spyOn(removedGeometry, "dispose");
+    const disposeRetainedGeometry = vi.spyOn(retainedGeometry, "dispose");
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, {
+      nodeObject: (node) => new Mesh(node.id === 1 ? removedGeometry : retainedGeometry, new MeshBasicMaterial()),
+    });
+    canvas.setData(structuredClone(DATA));
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("nodeThreeObject") as (node: GraphNode) => Group;
+    for (const node of canvas.getGraphData().nodes) factory(node);
+
+    canvas.setData({ nodes: [DATA.nodes[1]], links: [] });
+    expect(disposeRemovedGeometry).toHaveBeenCalledTimes(1);
+    expect(disposeRetainedGeometry).not.toHaveBeenCalled();
+
+    expect(() => factory(canvas.getGraphData().nodes[0])).not.toThrow();
+    await canvas.setDimension("2d");
+    expect(disposeRetainedGeometry).toHaveBeenCalledTimes(1);
+  });
+
   it("retains node labels, selection outlines, visibility, and ray picking around custom visuals", async () => {
     const customMesh = new Mesh(new BoxGeometry(4, 4, 4), new MeshBasicMaterial());
     const nodeObject = vi.fn(() => customMesh);
@@ -1677,7 +1741,7 @@ describe("3D custom renderers and links", () => {
     const update = graph.callback("linkPositionUpdate") as (object: Object3D, coordinates: Coordinates, link: GraphLink) => void;
     const coordinates: Coordinates = {
       start: { x: 0, y: 0, z: 0 },
-      end: { x: 10, y: 0, z: 0 },
+      end: { x: 19, y: 0, z: 0 },
     };
 
     expect(line).toBeInstanceOf(LineSegments);
@@ -1707,6 +1771,96 @@ describe("3D custom renderers and links", () => {
       links: [{ ...DATA.links[0], relationship: "SOLID" }],
     });
     expect(graph.callsTo("refresh")).toHaveLength(refreshes + 1);
+  });
+
+  it("trims dashed links before target nodes and arrowheads, including curved and low-zoom paths", async () => {
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, {
+      linkDashPattern: () => [200, 1],
+      largeGraph: { lowZoomThreshold: 0 },
+    });
+    canvas.setData(structuredClone(DATA));
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const link = canvas.getGraphData().links[0] as GraphLink & { __curve?: QuadraticBezierCurve3 };
+    link.target.size = 10;
+    link.arrowSize = 5;
+    const factory = graph.callback("linkThreeObject") as (current: GraphLink) => Object3D;
+    const object = factory(link);
+    const line = object.getObjectByProperty("type", "LineSegments") as LineSegments;
+    const update = graph.callback("linkPositionUpdate") as (object: Object3D, coordinates: Coordinates, link: GraphLink) => void;
+    const coordinates: Coordinates = {
+      start: { x: 0, y: 0, z: 0 },
+      end: { x: 100, y: 0, z: 0 },
+    };
+
+    update(object, coordinates, link);
+    const straightPositions = line.geometry.getAttribute("position").array;
+    expect(straightPositions.slice(-3)).toEqual(new Float32Array([85, 0, 0]));
+
+    const curve = new QuadraticBezierCurve3(
+      new Vector3(0, 0, 0),
+      new Vector3(50, 50, 0),
+      new Vector3(100, 0, 0),
+    );
+    link.__curve = curve;
+    update(object, coordinates, link);
+    const curvedPositions = line.geometry.getAttribute("position").array;
+    const curvedEnd = curve.getPoint(1 - 15 / curve.getLength());
+    expect(curvedPositions[curvedPositions.length - 3]).toBeCloseTo(curvedEnd.x);
+    expect(curvedPositions[curvedPositions.length - 2]).toBeCloseTo(curvedEnd.y);
+    expect(curvedPositions[curvedPositions.length - 1]).toBeCloseTo(curvedEnd.z);
+
+    canvas.setConfig({ threeD: { largeGraph: { lowZoomThreshold: 1000, skipArrowsAtLowZoom: true } } });
+    link.__curve = undefined;
+    update(object, coordinates, link);
+    const lowZoomPositions = line.geometry.getAttribute("position").array;
+    expect(lowZoomPositions.slice(-3)).toEqual(new Float32Array([90, 0, 0]));
+  });
+
+  it("applies configured and selected world-unit widths to dashed links", async () => {
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkWidth: 2, linkDashPattern: () => [4, 2] });
+    canvas.setConfig({ isLinkSelected: () => false });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const link = canvas.getGraphData().links[0];
+    const factory = graph.callback("linkThreeObject") as (current: GraphLink) => Object3D;
+    const object = factory(link);
+    const update = graph.callback("linkPositionUpdate") as (
+      object: Object3D,
+      coordinates: Coordinates,
+      link: GraphLink,
+    ) => void;
+    const renderWidth = (visual: Object3D, current: GraphLink) => {
+      update(visual, {
+        start: { x: 0, y: 0, z: 0 },
+        end: { x: 20, y: 0, z: 0 },
+      }, current);
+      let mesh: Mesh | undefined;
+      visual.traverse((child) => {
+        if (child instanceof Mesh && child.geometry.getAttribute("position")?.count) mesh = child;
+      });
+      expect(mesh).toBeDefined();
+      mesh!.geometry.computeBoundingBox();
+      return mesh!.geometry.boundingBox!.max.y - mesh!.geometry.boundingBox!.min.y;
+    };
+
+    expect(renderWidth(object, link)).toBeCloseTo(2 * Math.sqrt(3) / 2);
+    const dashedMesh = object.children.find((child) =>
+      child instanceof Mesh && child.geometry.getAttribute("position")?.count > 0
+    ) as Mesh;
+    const disposeSharedMaterial = vi.spyOn(dashedMesh.material, "dispose");
+
+    canvas.setConfig({ threeD: { linkWidth: 4 } });
+    expect(disposeSharedMaterial).not.toHaveBeenCalled();
+    expect(renderWidth(object, link)).toBeCloseTo(4 * Math.sqrt(3) / 2);
+
+    canvas.setConfig({ isLinkSelected: () => true });
+    expect(renderWidth(object, link)).toBeCloseTo(6 * Math.sqrt(3) / 2);
   });
 
   it("rejects dash patterns that would generate too many line segments", async () => {
