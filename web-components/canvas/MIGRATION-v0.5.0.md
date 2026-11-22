@@ -33,7 +33,7 @@ canvas.setConfig({
   linkLineDash: (link) => link.relationship === 'KNOWS' ? [8, 4] : [],
 });
 
-// v1
+// After (Canvas 0.5.0)
 canvas.setConfig({
   nodeStyle: { fontFamily: 'SofiaSans' }, // shared by both renderers
   twoD: {
@@ -72,7 +72,7 @@ instead of generating unbounded geometry. Unselected `linkWidth` defaults to
 
 ## Move mode operations into namespaces
 
-| Before | v1 |
+| Before | After (Canvas 0.5.0) |
 |---|---|
 | `canvas.getGraph()` | `canvas.twoD.getGraph()` or `canvas.threeD.getGraph()` |
 | `canvas.getViewport()` | `canvas.twoD.getViewport()` |

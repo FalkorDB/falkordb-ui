@@ -251,8 +251,10 @@ describe("viewport culling", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       width: 800, height: 600,
-      twoD: { nodeStyle: { captionPosition: side, captionGap: 60 } },
-      largeGraph: { viewportPadding: 0, skipLabelsAtLowZoom: false },
+      twoD: {
+        nodeStyle: { captionPosition: side, captionGap: 60 },
+        largeGraph: { viewportPadding: 0, skipLabelsAtLowZoom: false },
+      },
     });
     canvas.setData(SIMPLE_DATA);
     const instance = getLastInstance();

@@ -235,7 +235,7 @@ describe("node rendering", () => {
     canvas.setConfig({
       captionsKeys: [["name", true]],
       foregroundColor: "#345678",
-      largeGraph: { enabled: false },
+      twoD: { largeGraph: { enabled: false } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
@@ -261,7 +261,7 @@ describe("node rendering", () => {
     expect(below.fillText.mock.calls[0][2]).toBeGreaterThan(25 + node.size);
     expect(below.textBaseline).toBe("top");
     expect(below.fillStyle).toBe("#345678");
-    expect(below.font).toBe("400 2px SofiaSans");
+    expect(below.font).toBe("400 6px SofiaSans");
 
     canvas.setConfig({ twoD: { nodeStyle: { captionPosition: "inside" } } });
     expect(draw().fillText.mock.calls).toEqual(inside.fillText.mock.calls);
@@ -277,8 +277,7 @@ describe("node rendering", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       captionsKeys: [["name", true]],
-      largeGraph: { enabled: false },
-      twoD: { nodeStyle: { captionPosition: side, captionGap: 3, fontSize: 5 } },
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: side, captionGap: 3, fontSize: 5 } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
@@ -794,7 +793,7 @@ describe("link rendering", () => {
 
   it("uses the configured link text size while preserving per-link overrides", () => {
     const canvas = createCanvas();
-    canvas.setConfig({ largeGraph: { enabled: false } });
+    canvas.setConfig({ twoD: { largeGraph: { enabled: false } } });
     canvas.setData({
       nodes: [
         { id: 1, labels: ["A"], visible: true, color: "#f00", data: {} },

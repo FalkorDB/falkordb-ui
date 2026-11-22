@@ -16,7 +16,7 @@ export interface NodeStyleConfig {
 /** Canvas-specific node style fields. */
 export interface TwoDNodeStyleConfig {
   /**
-   * Fixed font size for node labels (world units).
+   * Fixed font size for node labels (world units). Default: 6.
    * When set, text uses this exact size (no auto-scaling).
    * For inside captions, textFillRatio takes precedence when positive.
    */

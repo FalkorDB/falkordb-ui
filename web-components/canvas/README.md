@@ -196,7 +196,7 @@ layout settings, captions, and event handlers remain shared.
 | `fontFamily` | `'SofiaSans'` | Font family for node labels |
 | `fontWeightUnselected` | `400` | Font weight when not selected |
 | `fontWeightSelected` | `700` | Font weight when selected |
-| `twoD.nodeStyle.fontSize` | `2` | 2D fixed font size (world units). Always used for outside-node captions |
+| `twoD.nodeStyle.fontSize` | `6` | 2D fixed font size (world units). Always used for outside-node captions |
 | `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fraction of node radius that inside captions fill (0–1). Set to `0` to use `fontSize` |
 | `twoD.nodeStyle.captionPosition` | `'inside'` | 2D captions can be `'inside'`, `'above'`, `'below'`, `'left'`, or `'right'`. Outside captions use the canvas foreground color |
 | `twoD.nodeStyle.captionGap` | `1` | Non-negative, finite gap in world units from the node border to an outside caption in 2D. Invalid values throw `RangeError` |

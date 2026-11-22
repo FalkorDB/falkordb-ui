@@ -116,7 +116,7 @@ const DEFAULT_NODE_STYLE: Required<NodeStyleConfig & TwoDNodeStyleConfig> = {
   fontFamily: 'SofiaSans',
   fontWeightUnselected: 400,
   fontWeightSelected: 700,
-  fontSize: 2,
+  fontSize: 6,
   textFillRatio: 0.85,
   captionPosition: 'inside',
   captionGap: 1,
@@ -312,6 +312,8 @@ class FalkorDBCanvas extends HTMLElement {
         nodeStyle: {
           fontSize: DEFAULT_NODE_STYLE.fontSize,
           textFillRatio: DEFAULT_NODE_STYLE.textFillRatio,
+          captionPosition: DEFAULT_NODE_STYLE.captionPosition,
+          captionGap: DEFAULT_NODE_STYLE.captionGap,
           strokeWidthSelected: DEFAULT_NODE_STYLE.strokeWidthSelected,
           strokeWidthUnselected: DEFAULT_NODE_STYLE.strokeWidthUnselected,
           glowDuration: DEFAULT_NODE_STYLE.glowDuration,

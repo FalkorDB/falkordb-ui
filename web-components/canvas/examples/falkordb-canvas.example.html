@@ -493,7 +493,7 @@
             </div>
             <div class="field">
               <label for="ns-fontSize">Text Size</label>
-              <input type="number" id="ns-fontSize" value="2" min="0.5" max="8" step="0.5">
+              <input type="number" id="ns-fontSize" value="6" min="0.5" step="0.5" required>
             </div>
             <div class="field">
               <label>Fill Ratio</label>
@@ -559,7 +559,7 @@
             </div>
             <div class="field">
               <label for="ls-fontSize">Text Size</label>
-              <input type="number" id="ls-fontSize" value="6" min="0.5" step="0.5">
+              <input type="number" id="ls-fontSize" value="6" min="0.5" step="0.5" required>
             </div>
           </div>
           <div class="field-row">
@@ -776,10 +776,6 @@
           <label for="caption-gap">Caption gap</label>
           <input type="number" id="caption-gap" value="1" min="0" step="0.5" disabled>
         </div>
-        <div class="field-inline">
-          <label for="caption-size">Caption size</label>
-          <input type="number" id="caption-size" value="2" min="0.5" max="8" step="0.5" disabled>
-        </div>
         <div class="separator" id="delete-separator" style="display:none"></div>
         <button class="btn-warning btn-sm" id="btn-delete-node" style="display:none" onclick="deleteSelectedNode()">Delete Node</button>
         <button class="btn-warning btn-sm" id="btn-delete-link" style="display:none" onclick="deleteSelectedLink()">Delete Link</button>
@@ -840,7 +836,7 @@
         <tr><td><code>fontFamily</code></td><td>string</td><td>'SofiaSans'</td><td>Shared node-label font</td></tr>
         <tr><td><code>fontWeightUnselected</code></td><td>number</td><td>400</td><td>Shared unselected font weight</td></tr>
         <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Shared selected font weight</td></tr>
-        <tr><td><code>twoD.nodeStyle.fontSize</code></td><td>number</td><td>2</td><td>2D base font size (world units)</td></tr>
+        <tr><td><code>twoD.nodeStyle.fontSize</code></td><td>number</td><td>6</td><td>2D base font size (world units)</td></tr>
         <tr><td><code>twoD.nodeStyle.textFillRatio</code></td><td>number</td><td>0.85</td><td>2D fraction of node radius text fills</td></tr>
         <tr><td><code>twoD.nodeStyle.captionPosition</code></td><td>'inside' | 'above' | 'below' | 'left' | 'right'</td><td>'inside'</td><td>2D caption placement. Outside captions use <code>fontSize</code> and the canvas foreground color.</td></tr>
         <tr><td><code>twoD.nodeStyle.captionGap</code></td><td>number</td><td>1</td><td>Non-negative gap between the node border and outside caption, in world units.</td></tr>
@@ -1172,7 +1168,6 @@
           }
         },
       });
-      document.getElementById('caption-size').value = fontSize.value;
     };
 
     window.applyLinkStyle = () => {
@@ -1513,10 +1508,9 @@
     const captionPositionToggle = document.getElementById('caption-position-toggle');
     const captionSide = document.getElementById('caption-side');
     const captionGap = document.getElementById('caption-gap');
-    const captionSize = document.getElementById('caption-size');
     captionPositionToggle.checked = false;
     captionPositionToggle.addEventListener('change', () => {
-      [captionSide, captionGap, captionSize].forEach((control) => {
+      [captionSide, captionGap].forEach((control) => {
         control.disabled = !captionPositionToggle.checked;
       });
       canvas.setConfig({ twoD: { nodeStyle: { captionPosition: captionPositionToggle.checked ? captionSide.value : 'inside' } } });
@@ -1527,11 +1521,6 @@
     captionGap.addEventListener('change', () => {
       if (!captionGap.reportValidity()) return;
       canvas.setConfig({ twoD: { nodeStyle: { captionGap: captionGap.valueAsNumber } } });
-    });
-    captionSize.addEventListener('change', () => {
-      if (!captionSize.reportValidity()) return;
-      canvas.setConfig({ twoD: { nodeStyle: { fontSize: captionSize.valueAsNumber } } });
-      document.getElementById('ns-fontSize').value = captionSize.value;
     });
 
     const graphContainer = document.querySelector('.graph-container');
