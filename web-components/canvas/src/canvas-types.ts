@@ -16,18 +16,22 @@ export interface NodeStyleConfig {
 /** Canvas-specific node style fields. */
 export interface TwoDNodeStyleConfig {
   /**
-   * Fixed font size for node labels (world units).
+   * Fixed font size for node labels (world units). Default: 6.
    * When set, text uses this exact size (no auto-scaling).
-   * Ignored when textFillRatio is set (textFillRatio takes precedence).
+   * For inside captions, textFillRatio takes precedence when positive.
    */
   fontSize?: number;
   /**
    * Fraction of node radius that text fills (0–1). Default: 0.85.
-   * Text auto-scales to fit inside the node circle at this fill ratio.
+   * Inside captions auto-scale on one line to fit within this fraction of the node radius.
    * Takes precedence over fontSize when set.
-   * Set to undefined/null and provide fontSize for fixed-size text.
+   * Set to 0 and provide fontSize for fixed-size text.
    */
   textFillRatio?: number;
+  /** 2D caption placement. Default: 'inside'. In 3D captions are always below the node. */
+  captionPosition?: 'inside' | 'above' | 'below' | 'left' | 'right';
+  /** Gap between the node border and an outside 2D caption, in world units. Must be non-negative and finite. Default: 1. */
+  captionGap?: number;
   /** Stroke width when node is selected. Default: 1 */
   strokeWidthSelected?: number;
   /** Stroke width when node is not selected. Default: 0.5 */
@@ -48,6 +52,8 @@ export interface TwoDNodeStyleConfig {
 export interface LinkStyleConfig {
   /** Font family for link labels. Default: 'SofiaSans' */
   fontFamily?: string;
+  /** Default link label font size in world units. Per-link fontSize takes precedence. Default: 6 */
+  fontSize?: number;
   /** Font weight when link is not selected. Default: 400 */
   fontWeightUnselected?: number;
   /** Font weight when link is selected. Default: 700 */
@@ -472,8 +478,8 @@ export interface LayoutOptions {
 }
 
 /**
- * The outline a node is drawn with. A square uses the circle's bounding box,
- * so a caption laid out for the default circle keeps fitting.
+ * The built-in node shape: circle or square in 2D, sphere or cube in 3D.
+ * Squares and cubes have a side length of twice the node size.
  */
 export type NodeShape = "circle" | "square";
 
@@ -492,11 +498,11 @@ export type GraphNode = NodeObject & {
   expand: [boolean, Date];
   /** Cached two-line display text computed from captionsKeys */
   displayName: [string, string];
-  /** Fill color for the node circle (CSS color string) */
+  /** Fill color for the node (CSS color string) */
   color: string;
   /** Border stroke color for the node (CSS color string, optional — overrides config.foregroundColor if set) */
   borderColor?: string;
-  /** Radius of the node circle in world units */
+  /** Circle/sphere radius or half the square/cube side length, in world units. */
   size: number;
   /** The outline this node is drawn with. Defaults to "circle" */
   shape?: NodeShape;
@@ -542,7 +548,7 @@ export type GraphLink = {
   color: string;
   /** Line width in screen pixels (divided by globalScale, so it stays constant while zooming). Default: LINK_WIDTH. Doubled while the link is selected */
   width?: number;
-  /** Label font size in world units (scales with zoom). Default: LINK_FONT_SIZE */
+  /** Label font size in world units (scales with zoom). Overrides linkStyle.fontSize. */
   fontSize?: number;
   /** Arrowhead length in world units (scales with zoom). Default: ARROW_SIZE. Doubled while the link is selected */
   arrowSize?: number;
@@ -568,7 +574,7 @@ export type Node = Omit<
   GraphNode,
   "x" | "y" | "layoutTargetX" | "layoutTargetY" | "vx" | "vy" | "fx" | "fy" | "initialPositionCalculated" | "displayName" | "size" | "expand"
 > & {
-  /** Optional node radius override (defaults to built-in NODE_SIZE) */
+  /** Circle/sphere radius or half the square/cube side length, in world units. Default: 9. */
   size?: number;
   /** Whether the node is in an expanded state (triggers glow animation on change) */
   expand?: boolean;

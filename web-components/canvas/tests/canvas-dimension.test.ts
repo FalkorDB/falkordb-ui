@@ -910,6 +910,17 @@ describe("3D scene objects", () => {
     }) as unknown as CanvasRenderingContext2D);
   });
 
+  it("uses the configured link caption size in 3D while preserving link overrides", async () => {
+    const canvas = await canvasIn3D();
+    const link = canvas.getGraphData().links[0];
+    expect(linkLabelFactory()(link).scale.y).toBeCloseTo(3.6);
+    canvas.setConfig({ linkStyle: { fontSize: 10 } });
+    expect(linkLabelFactory()(link).scale.y).toBeCloseTo(6);
+    expect(linkLabelFactory()({ ...link, fontSize: 15 }).scale.y).toBeCloseTo(9);
+    canvas.setConfig({ linkStyle: { fontSize: 4 } });
+    expect(linkLabelFactory()(link).scale.y).toBeCloseTo(2.4);
+  });
+
   /** Build `id`'s scene object through the factory the canvas hands the library. */
   function nodeObject(canvas: CanvasTestElement, id: number): Parts {
     const factory = last3D().props.get("nodeThreeObject") as (node: GraphNode) => Group;

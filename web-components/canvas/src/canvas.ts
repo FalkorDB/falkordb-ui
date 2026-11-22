@@ -116,8 +116,10 @@ const DEFAULT_NODE_STYLE: Required<NodeStyleConfig & TwoDNodeStyleConfig> = {
   fontFamily: 'SofiaSans',
   fontWeightUnselected: 400,
   fontWeightSelected: 700,
-  fontSize: 2,
+  fontSize: 6,
   textFillRatio: 0.85,
+  captionPosition: 'inside',
+  captionGap: 1,
   strokeWidthSelected: 1,
   strokeWidthUnselected: 0.5,
   glowDuration: 10000,
@@ -129,6 +131,7 @@ const DEFAULT_NODE_STYLE: Required<NodeStyleConfig & TwoDNodeStyleConfig> = {
 
 const DEFAULT_LINK_STYLE: Required<LinkStyleConfig & TwoDLinkStyleConfig> = {
   fontFamily: 'SofiaSans',
+  fontSize: LINK_FONT_SIZE,
   fontWeightUnselected: 400,
   fontWeightSelected: 700,
   arrowWidthRatio: 1.6,
@@ -309,6 +312,8 @@ class FalkorDBCanvas extends HTMLElement {
         nodeStyle: {
           fontSize: DEFAULT_NODE_STYLE.fontSize,
           textFillRatio: DEFAULT_NODE_STYLE.textFillRatio,
+          captionPosition: DEFAULT_NODE_STYLE.captionPosition,
+          captionGap: DEFAULT_NODE_STYLE.captionGap,
           strokeWidthSelected: DEFAULT_NODE_STYLE.strokeWidthSelected,
           strokeWidthUnselected: DEFAULT_NODE_STYLE.strokeWidthUnselected,
           glowDuration: DEFAULT_NODE_STYLE.glowDuration,
@@ -379,6 +384,15 @@ class FalkorDBCanvas extends HTMLElement {
     }
   > = new Map();
 
+  private outsideCaptionMetrics = new Map<number, {
+    text: string;
+    font: string;
+    align: CanvasTextAlign;
+    baseline: CanvasTextBaseline;
+    width: number;
+    height: number;
+  }>();
+
   // Pending glow repaints, keyed by node, so a glowing node queues one timer
   // rather than one per frame.
   private glowRenderScheduled: Map<number, ReturnType<typeof setTimeout>> = new Map();
@@ -411,6 +425,7 @@ class FalkorDBCanvas extends HTMLElement {
     // The font string is unchanged, so only an explicit clear picks up the
     // metrics of the face that just replaced the fallback.
     this.nodeTextLayout.clear();
+    this.outsideCaptionMetrics.clear();
     for (const node of this.data.nodes) {
       node.displayName = ["" , ""];
     }
@@ -503,6 +518,11 @@ class FalkorDBCanvas extends HTMLElement {
     rejectFlatTwoDConfig(config);
     this.log('Setting config:', config);
 
+    const captionGap = config.twoD?.nodeStyle?.captionGap;
+    if (captionGap !== undefined && (!Number.isFinite(captionGap) || captionGap < 0)) {
+      throw new RangeError('twoD.nodeStyle.captionGap must be a finite non-negative number');
+    }
+
     const captionsKeys = config.captionsKeys
       ? normalizeCaptionsKeys(config.captionsKeys)
       : undefined;
@@ -572,6 +592,7 @@ class FalkorDBCanvas extends HTMLElement {
       || (config.showPropertyKeyPrefix !== undefined && config.showPropertyKeyPrefix !== this.config.showPropertyKeyPrefix)) {
       this.nodeDisplayFontSize.clear();
       this.nodeTextLayout.clear();
+      this.outsideCaptionMetrics.clear();
       for (const node of this.data.nodes) {
         node.displayName = ["", ""];
       }
@@ -594,6 +615,7 @@ class FalkorDBCanvas extends HTMLElement {
     if (sharedNodeStyleChanged || twoDNodeStyleChanged) {
       this.nodeDisplayFontSize.clear();
       this.nodeTextLayout.clear();
+      this.outsideCaptionMetrics.clear();
       for (const node of this.data.nodes) {
         node.displayName = ["", ""];
       }
@@ -1059,6 +1081,7 @@ class FalkorDBCanvas extends HTMLElement {
     // everything cached per id; pending glow repaints belong to the old graph.
     this.nodeDisplayFontSize.clear();
     this.nodeTextLayout.clear();
+    this.outsideCaptionMetrics.clear();
     this.clearGlowTimers();
 
     // Initialize graph if it hasn't been initialized yet
@@ -1192,6 +1215,7 @@ class FalkorDBCanvas extends HTMLElement {
     // Clear font size cache so text re-fits updated node sizes
     this.nodeDisplayFontSize.clear();
     this.nodeTextLayout.clear();
+    this.outsideCaptionMetrics.clear();
     // The repaint below re-schedules any node that is still glowing.
     this.clearGlowTimers();
     // Clear display names so text re-wraps for the new node sizes
@@ -1252,6 +1276,7 @@ class FalkorDBCanvas extends HTMLElement {
     // that affects text wrapping or font sizing.
     this.nodeDisplayFontSize.clear();
     this.nodeTextLayout.clear();
+    this.outsideCaptionMetrics.clear();
     for (const node of this.data.nodes) {
       node.displayName = ["", ""];
     }
@@ -1835,6 +1860,47 @@ class FalkorDBCanvas extends HTMLElement {
     return FalkorDBCanvas.overlaps(this.nodeExtent(node), this.cullingBounds);
   }
 
+  private outsideCaptionLayout(node: GraphNode, position: Exclude<Required<TwoDNodeStyleConfig>['captionPosition'], 'inside'>) {
+    const strokeWidth = this.config.isNodeSelected?.(node)
+      ? this.config.nodeStyle.strokeWidthSelected
+      : this.config.nodeStyle.strokeWidthUnselected;
+    const offset = node.size + strokeWidth + this.config.nodeStyle.captionGap;
+    const x = node.x ?? 0;
+    const y = node.y ?? 0;
+    switch (position) {
+      case "above": return { x, y: y - offset, align: "center", baseline: "bottom" } as const;
+      case "below": return { x, y: y + offset, align: "center", baseline: "top" } as const;
+      case "left": return { x: x - offset, y, align: "right", baseline: "middle" } as const;
+      case "right": return { x: x + offset, y, align: "left", baseline: "middle" } as const;
+    }
+  }
+
+  private isOutsideCaptionInCullingBounds(node: GraphNode, ctx: CanvasRenderingContext2D): boolean {
+    const { captionPosition, fontSize, fontFamily, fontWeightSelected, fontWeightUnselected } = this.config.nodeStyle;
+    const { skipLabelsAtLowZoom, lowZoomThreshold } = this.config.largeGraph;
+    if (!this.cullingBounds || captionPosition === "inside" || (skipLabelsAtLowZoom && this.cullingZoom <= lowZoomThreshold)) return false;
+    const { x, y, align, baseline } = this.outsideCaptionLayout(node, captionPosition);
+    const text = node.displayName[0] || getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
+    const font = `${this.config.isNodeSelected?.(node) ? fontWeightSelected : fontWeightUnselected} ${fontSize}px ${fontFamily}`;
+    let cached = this.outsideCaptionMetrics.get(node.id);
+    if (!cached || cached.text !== text || cached.font !== font || cached.align !== align || cached.baseline !== baseline) {
+      ctx.save();
+      ctx.font = font;
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      const metrics = ctx.measureText(text);
+      ctx.restore();
+      cached = {
+        text, font, align, baseline,
+        width: Math.max(metrics.width, Math.abs(metrics.actualBoundingBoxLeft || 0), Math.abs(metrics.actualBoundingBoxRight || 0)),
+        height: Math.max(fontSize * 2, Math.abs(metrics.actualBoundingBoxAscent || 0), Math.abs(metrics.actualBoundingBoxDescent || 0)),
+      };
+      this.outsideCaptionMetrics.set(node.id, cached);
+    }
+    const { width, height } = cached;
+    return FalkorDBCanvas.overlaps({ minX: x - width, maxX: x + width, minY: y - height, maxY: y + height }, this.cullingBounds);
+  }
+
   /** The box around `node`'s hit area: its shape at `size + PADDING`, circle or square. */
   private nodeExtent(node: GraphNode): Bounds {
     const r = node.size + PADDING;
@@ -1878,7 +1944,7 @@ class FalkorDBCanvas extends HTMLElement {
     // along the curve and the label is drawn around its midpoint.
     const margin = Math.max(
       (link.arrowSize ?? ARROW_SIZE) * LINK_SELECTED_SCALE,
-      link.fontSize ?? LINK_FONT_SIZE,
+      link.fontSize ?? this.config.linkStyle.fontSize,
     );
 
     if (link.source.id === link.target.id) {
@@ -1988,7 +2054,7 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Viewport culling: skip nodes that are entirely outside the visible area.
-    if (this.config.largeGraph?.enabled && !this.isNodeInCullingBounds(node)) return;
+    if (this.config.largeGraph?.enabled && !this.isNodeInCullingBounds(node) && !this.isOutsideCaptionInCullingBounds(node, ctx)) return;
 
     // Focus mode dimming: reduce opacity for nodes outside the focused set.
     const isDimmed = this.config.dimmed === true && (this.config.isNodeDimmed?.(node) ?? false);
@@ -2044,26 +2110,53 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Draw text
-    ctx.fillStyle = getContrastTextColor(node.color, this.config.interaction.contrastThreshold);
+    const nodeStyle = this.config.nodeStyle;
+    const nodeFontWeight = this.config.isNodeSelected?.(node) ? nodeStyle.fontWeightSelected : nodeStyle.fontWeightUnselected;
     ctx.textAlign = "center";
+
+    if (nodeStyle.captionPosition !== "inside") {
+      const text = node.displayName[0] || getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
+      node.displayName = [text, ""];
+      ctx.fillStyle = this.config.foregroundColor;
+      ctx.font = `${nodeFontWeight} ${nodeStyle.fontSize}px ${nodeStyle.fontFamily}`;
+      const { x, y, align, baseline } = this.outsideCaptionLayout(node, nodeStyle.captionPosition);
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      ctx.fillText(text, x, y);
+      if (isDimmed) ctx.restore();
+      return;
+    }
+
+    ctx.fillStyle = getContrastTextColor(node.color, this.config.interaction.contrastThreshold);
     ctx.textBaseline = "middle";
 
-    let [line1, line2] = node.displayName;
     const textRadius = node.size - PADDING / 2;
-    const nodeFontWeight = this.config.isNodeSelected?.(node) ? this.config.nodeStyle.fontWeightSelected : this.config.nodeStyle.fontWeightUnselected;
 
-    if (!line1 && !line2) {
+    if (textRadius <= 0) {
+      if (isDimmed) ctx.restore();
+      return;
+    }
+
+    const previousLayout = this.nodeTextLayout.get(node.id);
+    const cachedFontSize = this.nodeDisplayFontSize.get(node.id) ?? nodeStyle.fontSize;
+    const currentFont = `${nodeFontWeight} ${cachedFontSize}px ${nodeStyle.fontFamily}`;
+    if (previousLayout && previousLayout.font !== currentFont) {
+      node.displayName = ["", ""];
+      this.nodeDisplayFontSize.delete(node.id);
+      this.nodeTextLayout.delete(node.id);
+    }
+
+    let [line1, line2] = node.displayName;
+    if (!this.nodeDisplayFontSize.has(node.id)) {
       const text = getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
 
       const baseFontSize = this.config.nodeStyle.fontSize;
 
-      // Measure at the base size for line-wrapping decisions.
-      ctx.font = `${nodeFontWeight} ${baseFontSize}px ${this.config.nodeStyle.fontFamily}`;
-      [line1, line2] = wrapTextForCircularNode(ctx, text, textRadius);
-
       let chosenSize = baseFontSize;
 
-      if (this.config.nodeStyle.textFillRatio > 0 && !line2) {
+      if (this.config.nodeStyle.textFillRatio > 0) {
+        line1 = text;
+        line2 = "";
         // Auto-size mode: scale text to fill textFillRatio × nodeRadius.
         // Measure at a large reference size (20px) where canvas metrics are precise.
         const REF = 20;
@@ -2084,8 +2177,10 @@ class FalkorDBCanvas extends HTMLElement {
         } else if (refWidth > 0) {
           chosenSize = REF * (2 * r / refWidth);
         }
+      } else {
+        ctx.font = `${nodeFontWeight} ${baseFontSize}px ${this.config.nodeStyle.fontFamily}`;
+        [line1, line2] = wrapTextForCircularNode(ctx, text, textRadius);
       }
-      // else: fixed fontSize mode — chosenSize stays as baseFontSize.
 
       node.displayName = [line1, line2];
       this.nodeDisplayFontSize.set(node.id, chosenSize);
@@ -2178,7 +2273,7 @@ class FalkorDBCanvas extends HTMLElement {
     const emphasis = isLinkSelected ? LINK_SELECTED_SCALE : 1;
     const arrowLen = (link.arrowSize ?? ARROW_SIZE) * emphasis;
     const lineWidth = (link.width ?? LINK_WIDTH) * emphasis;
-    const fontSize = link.fontSize ?? LINK_FONT_SIZE;
+    const fontSize = link.fontSize ?? this.config.linkStyle.fontSize;
 
     // Low-zoom flags – evaluated once per link draw.
     // lowZoomThreshold is the zoom level below which details are hidden (e.g. 0.5 = skip at half zoom).

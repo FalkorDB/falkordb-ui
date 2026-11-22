@@ -196,8 +196,10 @@ layout settings, captions, and event handlers remain shared.
 | `fontFamily` | `'SofiaSans'` | Font family for node labels |
 | `fontWeightUnselected` | `400` | Font weight when not selected |
 | `fontWeightSelected` | `700` | Font weight when selected |
-| `twoD.nodeStyle.fontSize` | `2` | 2D fixed font size (world units). Used when `textFillRatio` is 0 or unset |
-| `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fraction of node radius that text fills (0–1). Takes precedence over `fontSize` |
+| `twoD.nodeStyle.fontSize` | `6` | 2D fixed font size (world units). Always used for outside-node captions |
+| `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fit the full inside caption on one line within this fraction of the node radius (0–1). Set to `0` to use `fontSize` and wrap or truncate as needed. Inside captions are omitted when there is insufficient room |
+| `twoD.nodeStyle.captionPosition` | `'inside'` | 2D captions can be `'inside'`, `'above'`, `'below'`, `'left'`, or `'right'`. Outside captions use the canvas foreground color |
+| `twoD.nodeStyle.captionGap` | `1` | Non-negative, finite gap in world units from the node border to an outside caption in 2D. Invalid values throw `RangeError` |
 | `twoD.nodeStyle.strokeWidthSelected` | `1` | 2D border width when selected |
 | `twoD.nodeStyle.strokeWidthUnselected` | `0.5` | 2D border width when not selected |
 | `twoD.nodeStyle.glowDuration` | `10000` | 2D glow duration (ms) after expand/collapse |
@@ -211,6 +213,7 @@ layout settings, captions, and event handlers remain shared.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `fontFamily` | `'SofiaSans'` | Font family for link labels |
+| `fontSize` | `6` | Default link label font size (world units); a link's own `fontSize` takes precedence |
 | `fontWeightUnselected` | `400` | Font weight when not selected |
 | `fontWeightSelected` | `700` | Font weight when selected |
 | `twoD.linkStyle.arrowWidthRatio` | `1.6` | 2D arrow width-to-height ratio |
@@ -437,10 +440,17 @@ See [the interactive 3D example](./examples/3d-parity.example.html) for switchin
 | `labels` | *required* | Array of label names for the node |
 | `color` | *required* | Node color (hex or CSS color) |
 | `visible` | *required* | Whether the node is visible |
-| `size` | `9` | Node radius (world units) |
-| `shape` | `'circle'` | Node outline: `'circle'` or `'square'` (a square uses the circle's bounding box) |
-| `caption` | `'id'` | Property key to use from the data for display text |
+| `size` | `9` | Size in world units: circle/sphere radius or half the side length of a square/cube |
+| `shape` | `'circle'` | `'circle'` renders a circle in 2D and a sphere in 3D; `'square'` renders a square in 2D and a cube in 3D |
 | `data` | *required* | Node properties as key-value pairs |
+
+Node captions are selected from `data` using the top-level
+[`captionsKeys`](#top-level-options) configuration; when no configured key
+matches, the node ID is displayed.
+
+For example, `size: 9` renders a circle or sphere with a radius of 9, or a
+square or cube with sides of 18 world units, excluding borders and selection
+outlines. Custom renderers control their own geometry.
 
 #### Link
 
@@ -453,7 +463,7 @@ See [the interactive 3D example](./examples/3d-parity.example.html) for switchin
 | `target` | *required* | Target node ID |
 | `visible` | *required* | Whether the link is visible |
 | `width` | `1` | 2D line width in screen pixels (stays constant while zooming) |
-| `fontSize` | `6` | Relationship caption font size (world units) |
+| `fontSize` | `linkStyle.fontSize` | Relationship caption font size override (world units) |
 | `arrowSize` | `8` | Arrowhead length (world units) |
 | `data` | *required* | Link properties as key-value pairs |
 
@@ -613,9 +623,11 @@ const graphData = dataToGraphData(data);
 const data = graphDataToData(graphData);
 
 // Get display text for a node
-const text = getNodeDisplayText(node);  // Returns node.data[caption] or defaults to id
+const text = getNodeDisplayText(node, [["name", false]], false);  // Caption keys, then whether to show the key prefix
 
 // Wrap text for circular nodes
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
 const [line1, line2] = wrapTextForCircularNode(ctx, text, radius);
 ```
 
@@ -750,7 +762,7 @@ canvas.setConfig({
 
 **Viewport culling** – before each node or link is drawn, the renderer checks whether its world-space bounding box overlaps the currently visible area (with optional extra `viewportPadding`).  Elements that are entirely offscreen are skipped without any canvas work.
 
-- For **nodes**: the bounding box is a circle of radius `node.size + 2`.
+- For **nodes**: the axis-aligned bounding box extends `node.size + 2` world units from the center in each direction, for both circles and squares. An outside caption is also considered when enabled.
 - For **links**: the bounding box is the convex-hull axis-aligned rectangle of the Bezier curve's control points (source, control point, target).  This is a conservative bound – it never produces false negatives.
 - For **self-loops**: the bounding box is a square centered on the node with a side length derived from the loop curvature.
 

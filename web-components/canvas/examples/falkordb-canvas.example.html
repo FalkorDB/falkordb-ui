@@ -81,6 +81,8 @@
       align-items: center;
     }
 
+    .toolbar input[type="number"] { width: 60px; }
+
     .graph-container {
       flex: 1;
       position: relative;
@@ -490,8 +492,8 @@
               <input type="text" id="ns-fontFamily" value="SofiaSans" style="width: 90px;">
             </div>
             <div class="field">
-              <label>Size</label>
-              <input type="number" id="ns-fontSize" value="2" min="0.5" max="8" step="0.5">
+              <label for="ns-fontSize">Text Size</label>
+              <input type="number" id="ns-fontSize" value="6" min="0.5" step="0.5" required>
             </div>
             <div class="field">
               <label>Fill Ratio</label>
@@ -554,6 +556,10 @@
             <div class="field">
               <label>Font</label>
               <input type="text" id="ls-fontFamily" value="SofiaSans" style="width: 90px;">
+            </div>
+            <div class="field">
+              <label for="ls-fontSize">Text Size</label>
+              <input type="number" id="ls-fontSize" value="6" min="0.5" step="0.5" required>
             </div>
           </div>
           <div class="field-row">
@@ -753,6 +759,23 @@
         <button class="btn-secondary btn-sm" onclick="zoomIn()">+</button>
         <button class="btn-secondary btn-sm" onclick="zoomOut()">−</button>
         <button class="btn-secondary btn-sm" onclick="resetViewport()">Reset</button>
+        <div class="field-inline">
+          <input type="checkbox" id="caption-position-toggle">
+          <label for="caption-position-toggle">Captions outside nodes (2D)</label>
+        </div>
+        <div class="field-inline">
+          <label for="caption-side">Caption side</label>
+          <select id="caption-side" disabled>
+            <option value="below">Below</option>
+            <option value="above" selected>Above</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+          </select>
+        </div>
+        <div class="field-inline">
+          <label for="caption-gap">Caption gap</label>
+          <input type="number" id="caption-gap" value="1" min="0" step="0.5" required disabled>
+        </div>
         <div class="separator" id="delete-separator" style="display:none"></div>
         <button class="btn-warning btn-sm" id="btn-delete-node" style="display:none" onclick="deleteSelectedNode()">Delete Node</button>
         <button class="btn-warning btn-sm" id="btn-delete-link" style="display:none" onclick="deleteSelectedLink()">Delete Link</button>
@@ -813,8 +836,10 @@
         <tr><td><code>fontFamily</code></td><td>string</td><td>'SofiaSans'</td><td>Shared node-label font</td></tr>
         <tr><td><code>fontWeightUnselected</code></td><td>number</td><td>400</td><td>Shared unselected font weight</td></tr>
         <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Shared selected font weight</td></tr>
-        <tr><td><code>twoD.nodeStyle.fontSize</code></td><td>number</td><td>2</td><td>2D base font size (world units)</td></tr>
-        <tr><td><code>twoD.nodeStyle.textFillRatio</code></td><td>number</td><td>0.85</td><td>2D fraction of node radius text fills</td></tr>
+        <tr><td><code>twoD.nodeStyle.fontSize</code></td><td>number</td><td>6</td><td>2D base font size (world units)</td></tr>
+        <tr><td><code>twoD.nodeStyle.textFillRatio</code></td><td>number</td><td>0.85</td><td>Fit inside captions on one line within this fraction of the node radius; set to 0 for fixed-size wrapping.</td></tr>
+        <tr><td><code>twoD.nodeStyle.captionPosition</code></td><td>'inside' | 'above' | 'below' | 'left' | 'right'</td><td>'inside'</td><td>2D caption placement. Outside captions use <code>fontSize</code> and the canvas foreground color.</td></tr>
+        <tr><td><code>twoD.nodeStyle.captionGap</code></td><td>number</td><td>1</td><td>Non-negative gap between the node border and outside caption, in world units.</td></tr>
         <tr><td><code>twoD.nodeStyle.strokeWidthSelected</code></td><td>number</td><td>1</td><td>2D selected border width</td></tr>
         <tr><td><code>twoD.nodeStyle.strokeWidthUnselected</code></td><td>number</td><td>0.5</td><td>2D normal border width</td></tr>
         <tr><td><code>twoD.nodeStyle.glowDuration</code></td><td>number</td><td>10000</td><td>2D glow duration in ms</td></tr>
@@ -828,6 +853,7 @@
       <table>
         <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
         <tr><td><code>fontFamily</code></td><td>string</td><td>'SofiaSans'</td><td>Shared link-label font</td></tr>
+        <tr><td><code>fontSize</code></td><td>number</td><td>6</td><td>Default link label size in world units; a link's own fontSize overrides it</td></tr>
         <tr><td><code>fontWeightUnselected</code></td><td>number</td><td>400</td><td>Shared unselected font weight</td></tr>
         <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Shared selected font weight</td></tr>
         <tr><td><code>twoD.linkStyle.arrowWidthRatio</code></td><td>number</td><td>1.6</td><td>2D arrow width/height ratio</td></tr>
@@ -924,19 +950,19 @@
       <h4>Data Format</h4>
       <pre>{
   nodes: [{
-    id: number | string,
+    id: number,
     labels: string[],
     data: Record&lt;string, any&gt;,
     visible: boolean,
     color: string,
-    size?: number,           // Radius in world units (default: 9)
-    shape?: 'circle' | 'square',  // Node outline (default: 'circle')
+    size?: number,           // Circle/sphere radius, or half square/cube side, in world units (default: 9)
+    shape?: 'circle' | 'square',  // Circle/sphere or square/cube (default: 'circle')
     expand?: boolean,
   }],
   links: [{
-    id: number | string,
-    source: number | string,
-    target: number | string,
+    id: number,
+    source: number,
+    target: number,
     relationship: string,
     data: Record&lt;string, any&gt;,
     color: string,
@@ -1120,6 +1146,8 @@
 
     // ===== Config Apply Handlers =====
     window.applyNodeStyle = () => {
+      const fontSize = document.getElementById('ns-fontSize');
+      if (!fontSize.reportValidity()) return;
       canvas.setConfig({
         nodeStyle: {
           fontFamily: document.getElementById('ns-fontFamily').value,
@@ -1143,9 +1171,12 @@
     };
 
     window.applyLinkStyle = () => {
+      const fontSize = document.getElementById('ls-fontSize');
+      if (!fontSize.reportValidity()) return;
       canvas.setConfig({
         linkStyle: {
           fontFamily: document.getElementById('ls-fontFamily').value,
+          fontSize: fontSize.valueAsNumber,
           fontWeightUnselected: parseInt(document.getElementById('ls-fontWeightUnselected').value),
           fontWeightSelected: parseInt(document.getElementById('ls-fontWeightSelected').value),
         },
@@ -1473,6 +1504,24 @@
     // ===== Initialization =====
     canvas = document.getElementById('graph');
     await customElements.whenDefined('falkordb-canvas');
+
+    const captionPositionToggle = document.getElementById('caption-position-toggle');
+    const captionSide = document.getElementById('caption-side');
+    const captionGap = document.getElementById('caption-gap');
+    captionPositionToggle.checked = false;
+    captionPositionToggle.addEventListener('change', () => {
+      [captionSide, captionGap].forEach((control) => {
+        control.disabled = !captionPositionToggle.checked;
+      });
+      canvas.setConfig({ twoD: { nodeStyle: { captionPosition: captionPositionToggle.checked ? captionSide.value : 'inside' } } });
+    });
+    captionSide.addEventListener('change', () => {
+      canvas.setConfig({ twoD: { nodeStyle: { captionPosition: captionSide.value } } });
+    });
+    captionGap.addEventListener('change', () => {
+      if (!captionGap.reportValidity()) return;
+      canvas.setConfig({ twoD: { nodeStyle: { captionGap: captionGap.valueAsNumber } } });
+    });
 
     const graphContainer = document.querySelector('.graph-container');
     canvas.setWidth(graphContainer.clientWidth);
