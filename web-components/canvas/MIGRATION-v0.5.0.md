@@ -1,10 +1,10 @@
-# Migrate to Canvas v1
+# Migrate to Canvas 0.5.0
 
-Canvas v1 is a major release. It replaces the flat renderer API with explicit
-mode groups and mode-specific namespaces. There are no deprecated aliases:
-update call sites and TypeScript imports before upgrading.
+Canvas 0.5.0 includes breaking API changes. It replaces the flat renderer API
+with explicit mode groups and mode-specific namespaces. There are no deprecated
+aliases: update call sites and TypeScript imports before upgrading.
 
-## v1.0.0 release notes
+## 0.5.0 release notes
 
 - Shared configuration stays at the top level; 2D and 3D options move under
   `twoD` and `threeD`.
@@ -145,8 +145,9 @@ nodes or links from the force simulation.
 
 ## Release
 
-This API break requires a major release. Merge the Canvas implementation PR
-first. Then create a GitHub Release from the merged commit with the tag
-`canvas-v1.0.0`. The repository release workflow derives the package version
-from that tag and publishes `@falkordb/canvas`; do not manually edit the
-placeholder version in `package.json` or publish the package separately.
+This breaking API ships in the combined Canvas 0.5.0 release. Wait until PRs
+#45 and #46 are merged, then create a GitHub Release from the combined release
+commit with the tag `canvas-v0.5.0`. The repository release workflow derives the
+package version from that tag and publishes `@falkordb/canvas`; do not manually
+edit the placeholder version in `package.json` or publish the package
+separately.

@@ -4,9 +4,10 @@
 
 A standalone web component for visualizing FalkorDB graphs using force-directed layouts.
 
-> **v1.0 is a breaking API release.** Renderer-specific settings and operations
-> are now grouped under `twoD` and `threeD`; legacy flat names are removed.
-> Follow the [v1 migration guide](./MIGRATION-v1.md) before upgrading.
+> **Canvas 0.5.0 includes breaking API changes.** Renderer-specific settings and
+> operations are now grouped under `twoD` and `threeD`; legacy flat names are
+> removed. Follow the [0.5.0 migration guide](./MIGRATION-v0.5.0.md) before
+> upgrading.
 
 ## Features
 
@@ -591,8 +592,8 @@ after the final Canvas release is not supported. Coordinate disposal with other
 owners; if a resource must remain usable independently, provide an independent
 copy of every needed resource. Resources hidden outside the returned object's
 traversed geometry/material graph remain caller-owned. See the
-[v1 migration guide](./MIGRATION-v1.md#custom-threejs-visual-lifecycle) for the
-full ownership contract and lifecycle tests.
+[0.5.0 migration guide](./MIGRATION-v0.5.0.md#custom-threejs-visual-lifecycle)
+for the full ownership contract and lifecycle tests.
 
 ## Utility Functions
 
