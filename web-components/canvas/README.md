@@ -442,8 +442,11 @@ See [the interactive 3D example](./examples/3d-parity.example.html) for switchin
 | `visible` | *required* | Whether the node is visible |
 | `size` | `9` | Size in world units: circle/sphere radius or half the side length of a square/cube |
 | `shape` | `'circle'` | `'circle'` renders a circle in 2D and a sphere in 3D; `'square'` renders a square in 2D and a cube in 3D |
-| `caption` | `'id'` | Property key to use from the data for display text |
 | `data` | *required* | Node properties as key-value pairs |
+
+Node captions are selected from `data` using the top-level
+[`captionsKeys`](#top-level-options) configuration; when no configured key
+matches, the node ID is displayed.
 
 For example, `size: 9` renders a circle or sphere with a radius of 9, or a
 square or cube with sides of 18 world units, excluding borders and selection
