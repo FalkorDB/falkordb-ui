@@ -1709,6 +1709,31 @@ describe("3D custom renderers and links", () => {
     expect(graph.callsTo("refresh")).toHaveLength(refreshes + 1);
   });
 
+  it("rejects dash patterns that would generate too many line segments", async () => {
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkDashPattern: () => [0.0001, 0.0001] });
+    canvas.setData({
+      nodes: DATA.nodes,
+      links: [{ ...DATA.links[0], relationship: "DASH" }],
+    });
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const link = canvas.getGraphData().links[0];
+    const factory = graph.callback("linkThreeObject") as (current: GraphLink) => Object3D;
+    const object = factory(link);
+    const update = graph.callback("linkPositionUpdate") as (
+      object: Object3D,
+      coordinates: Coordinates,
+      link: GraphLink,
+    ) => void;
+
+    expect(() => update(object, {
+      start: { x: 0, y: 0, z: 0 },
+      end: { x: 10, y: 0, z: 0 },
+    }, link)).toThrow(RangeError);
+  });
+
   it("uses configured unselected width while keeping selected links emphasized", async () => {
     const canvas = createCanvas();
     setThreeDConfig(canvas, { linkWidth: 3 });

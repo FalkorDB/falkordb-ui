@@ -65,9 +65,10 @@ culling remains active even when the 3D CPU-side optimizations are disabled.
 
 Other 3D-only configuration belongs under `threeD`: `nodeObject`, `linkObject`,
 `linkObjectPositionUpdate`, `linkDashPattern`, and `linkWidth`.
-`linkDashPattern` lengths and `linkWidth` are world units. Unselected
-`linkWidth` defaults to `0`, preserving the native hairline; selected links
-remain thicker.
+`linkDashPattern` lengths and `linkWidth` are world units. A link-position
+update that would exceed 4096 rendered dash segments throws `RangeError`
+instead of generating unbounded geometry. Unselected `linkWidth` defaults to
+`0`, preserving the native hairline; selected links remain thicker.
 
 ## Move mode operations into namespaces
 
@@ -100,22 +101,36 @@ link geometry as world-space endpoints move. A custom `linkObject` takes
 precedence over the built-in `linkDashPattern`.
 
 Canvas reference-counts each distinct geometry, material, and reachable
-texture across active custom visuals:
+texture across active custom visuals. To defer `3d-force-graph` cleanup,
+Canvas replaces each leased resource object's `dispose()` method with a
+no-op. This mutates the Three.js object itself, so every alias—including
+references held by application code or another renderer—observes the
+replacement.
 
 1. Creating or replacing a visual acquires leases for its resources before the
-   old visual releases its leases.
+   old visual releases its leases. Reusing the same resources in the
+   replacement therefore does not dispose them between visuals.
 2. Removing/replacing a visual releases its lease. Duplicate references inside
-   one visual count once.
-3. Canvas calls a resource's original `dispose()` once its final active visual
-   releases it. Graph-engine cleanup is deferred while a Canvas lease exists.
-4. Resources referenced outside active Canvas visuals are not tracked. Do not
-   reuse a resource after its last visual releases it. If application code
-   needs it afterward, retain an independent copy. Resources hidden outside
-   the returned object's geometry/material graph remain caller-owned.
+   one visual count once. Dimension teardown releases the leases for the
+   renderer's remaining custom visuals.
+3. While any lease exists, calls to `dispose()` through any reference are
+   intercepted; they do not dispose the resource immediately. When the final
+   active visual releases it, Canvas invokes the originally captured
+   `dispose()` once. The replacement no-op remains installed afterward, so
+   later `dispose()` calls through aliases are also suppressed.
+4. An external reference does not create a lease. Resources used outside
+   Canvas are not tracked: the final Canvas release disposes them even if an
+   external owner still holds or uses the object. Coordinate disposal with
+   other owners and do not call `dispose()` expecting immediate disposal while
+   Canvas has a lease. If the external use must outlive the Canvas visual,
+   provide an independent copy of every resource that must remain usable.
+   Resources hidden outside the returned object's traversed geometry/material
+   graph remain caller-owned.
 
-Create fresh resources before rendering again after the last visual released
-them. Do not rely on an external JavaScript reference to keep a released GPU
-resource usable.
+The tracker tests cover explicit `dispose()` calls through an external alias,
+shared-resource replacement, visual removal, and renderer teardown. Create
+fresh resources before rendering again after the last visual released them; an
+external JavaScript reference does not keep a released GPU resource usable.
 
 ## 3D culling diagnostics
 

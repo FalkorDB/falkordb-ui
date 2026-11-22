@@ -7,18 +7,21 @@ describe("ThreeDResourceTracker", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps shared geometry, material, and textures alive until the last visual releases them", () => {
+  it("intercepts explicit disposal through every reference until the last visual releases shared resources", () => {
     const tracker = new ThreeDResourceTracker();
     const geometry = new BoxGeometry();
     const texture = new Texture();
     const material = new MeshBasicMaterial({ map: texture });
+    const originalGeometryDispose = geometry.dispose;
     const disposeGeometry = vi.spyOn(geometry, "dispose");
     const disposeMaterial = vi.spyOn(material, "dispose");
     const disposeTexture = vi.spyOn(texture, "dispose");
     const first = tracker.acquire(new Group().add(new Mesh(geometry, material)));
     const second = tracker.acquire(new Group().add(new Mesh(geometry, material)));
+    const externalGeometryReference = geometry;
 
-    geometry.dispose();
+    expect(externalGeometryReference.dispose).not.toBe(originalGeometryDispose);
+    externalGeometryReference.dispose();
     material.dispose();
     texture.dispose();
 
@@ -38,7 +41,8 @@ describe("ThreeDResourceTracker", () => {
     expect(disposeMaterial).toHaveBeenCalledTimes(1);
     expect(disposeTexture).toHaveBeenCalledTimes(1);
 
-    geometry.dispose();
+    expect(externalGeometryReference.dispose).not.toBe(originalGeometryDispose);
+    externalGeometryReference.dispose();
     material.dispose();
     texture.dispose();
     expect(disposeGeometry).toHaveBeenCalledTimes(1);

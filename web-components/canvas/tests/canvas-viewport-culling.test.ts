@@ -12,7 +12,7 @@ import {
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
-import { BoxGeometry, BufferGeometry, Group, Line, LineBasicMaterial, Mesh, MeshBasicMaterial, Object3D, Vector3 } from "three";
+import { BoxGeometry, BufferGeometry, Frustum, Group, Line, LineBasicMaterial, Matrix4, Mesh, MeshBasicMaterial, Object3D, Sprite, SpriteMaterial, Vector3 } from "three";
 import "../src/canvas";
 import type { CanvasTestElement, Data, GraphNode } from "./test-types";
 
@@ -545,6 +545,71 @@ describe("low-zoom draw skipping", () => {
 
       object.visible = false;
       expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(0);
+    });
+
+    it("uses camera-facing bounds for custom sprites in node and link diagnostics", async () => {
+      const canvas = createCanvas();
+      canvas.setConfig({
+        threeD: {
+          nodeObject: () => {
+            const sprite = new Sprite(new SpriteMaterial());
+            sprite.name = "custom-node";
+            sprite.center.set(0, 0);
+            return sprite;
+          },
+          linkObject: () => {
+            const sprite = new Sprite(new SpriteMaterial());
+            sprite.name = "custom-link";
+            sprite.center.set(0, 0);
+            return sprite;
+          },
+        },
+      });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const data = canvas.getGraphData();
+      const camera = graph.camera();
+      const frustum = new Frustum().setFromProjectionMatrix(
+        new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+      );
+      const edgePlane = frustum.planes[0];
+      const edgePosition = edgePlane.normal.clone().multiplyScalar(-1 - edgePlane.constant);
+      const node = data.nodes[0];
+      Object.assign(node, { x: edgePosition.x, y: edgePosition.y, z: edgePosition.z });
+      const nodeFactory = graph.callback("nodeThreeObject") as (current: GraphNode) => Object3D;
+      const nodeObject = nodeFactory(node);
+      nodeObject.position.copy(edgePosition);
+      graph.sceneObject.add(nodeObject);
+
+      const link = data.links[0];
+      const linkFactory = graph.callback("linkThreeObject") as (current: typeof link) => Object3D;
+      const linkObject = linkFactory(link);
+      Object.assign(linkObject, { __graphObjType: "link", __data: link });
+      graph.sceneObject.add(linkObject);
+      const updateLink = graph.callback("linkPositionUpdate") as (
+        object: Object3D,
+        coordinates: { start: Vector3; end: Vector3 },
+        current: typeof link,
+      ) => void;
+      updateLink(linkObject, {
+        start: edgePosition.clone(),
+        end: edgePosition.clone(),
+      }, link);
+      graph.sceneObject.updateMatrixWorld(true);
+
+      const nodeSprite = nodeObject.getObjectByName("custom-node") as Sprite;
+      const linkSprite = linkObject.getObjectByName("custom-link") as Sprite;
+      expect(frustum.intersectsObject(nodeSprite)).toBe(false);
+      expect(frustum.intersectsSprite(nodeSprite)).toBe(true);
+      expect(frustum.intersectsObject(linkSprite)).toBe(false);
+      expect(frustum.intersectsSprite(linkSprite)).toBe(true);
+
+      expect(canvas.threeD.getCullingStats()).toMatchObject({
+        frustumVisibleNodeBodies: 1,
+        frustumVisibleLinks: 1,
+      });
     });
   });
 

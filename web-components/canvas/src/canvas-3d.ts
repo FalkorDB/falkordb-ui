@@ -906,7 +906,7 @@ export class Graph3D {
       let bodyInFrustum = false;
       root.traverse((object) => {
         if (object === root || object === label || bodyInFrustum) return;
-        if (this.isDrawableInFrustum(frustum, object)) bodyInFrustum = true;
+        if (this.intersectsFrustum(frustum, object)) bodyInFrustum = true;
       });
       if (bodyInFrustum) frustumVisibleLinks++;
     }
@@ -935,7 +935,7 @@ export class Graph3D {
   private drawableTreeInFrustum(frustum: THREE.Frustum, root: THREE.Object3D): boolean {
     let intersects = false;
     root.traverse((object) => {
-      if (!intersects && this.isDrawableInFrustum(frustum, object)) intersects = true;
+      if (!intersects && this.intersectsFrustum(frustum, object)) intersects = true;
     });
     return intersects;
   }
@@ -1635,6 +1635,7 @@ function updateDashedLine(
   coordinates: { start: CanvasVector3; end: CanvasVector3 },
   curve?: THREE.Curve<THREE.Vector3> | null,
 ) {
+  const maxLineSegments = 4096;
   const start = new THREE.Vector3(coordinates.start.x, coordinates.start.y, coordinates.start.z);
   const end = new THREE.Vector3(coordinates.end.x, coordinates.end.y, coordinates.end.z);
   curve?.updateArcLengths();
@@ -1642,11 +1643,21 @@ function updateDashedLine(
   const positions: number[] = [];
   let distance = 0;
   let patternIndex = 0;
+  let patternSteps = 0;
+  let generatedSegments = 0;
 
   while (distance < length && length > 0) {
+    if (patternSteps >= maxLineSegments * 2) {
+      throw new RangeError(`[FalkorDBCanvas] threeD.linkDashPattern exceeds ${maxLineSegments} line segments for a link`);
+    }
+    patternSteps++;
     const span = Math.min(pattern[patternIndex], length - distance);
     if (patternIndex % 2 === 0) {
       const segments = curve ? Math.max(1, Math.ceil(span / 2)) : 1;
+      if (generatedSegments + segments > maxLineSegments) {
+        throw new RangeError(`[FalkorDBCanvas] threeD.linkDashPattern exceeds ${maxLineSegments} line segments for a link`);
+      }
+      generatedSegments += segments;
       for (let segment = 0; segment < segments; segment++) {
         const segmentStart = distance + (span * segment) / segments;
         const segmentEnd = distance + (span * (segment + 1)) / segments;

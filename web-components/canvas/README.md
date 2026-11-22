@@ -256,7 +256,9 @@ layout settings, captions, and event handlers remain shared.
 - `threeD.linkWidth`: unselected 3D link width in world units; defaults to `0`
   (the existing hairline). Selected links remain emphasized.
 - `threeD.linkDashPattern(link)`: alternating dash/gap lengths in world units;
-  return `[]` for a solid native link.
+  return `[]` for a solid native link. A link-position update that would
+  exceed 4096 rendered segments throws `RangeError` instead of generating
+  unbounded geometry.
 - `threeD.nodeObject(node, state)` / `threeD.linkObject(link, state)`: return
   custom `THREE.Object3D` visuals with `{ selected, dimmed, opacity }` state.
 - `threeD.linkObjectPositionUpdate(object, { start, end }, link)`: update a
@@ -572,13 +574,24 @@ link geometry as endpoints move. A custom `linkObject` takes precedence over
 the built-in dashed line. Dash/gap lengths and `linkWidth` are world units.
 
 Canvas reference-counts each distinct geometry, material, and reachable texture
-across active custom visuals. A replacement acquires its new resources before
-releasing the old visual's lease; Canvas calls `dispose()` once the final active
-visual releases a resource. Graph-engine cleanup cannot dispose a still-leased
-resource early. References outside active Canvas visuals are not tracked: do
-not reuse a resource after its last visual releases it. If application code
-needs the resource afterward, retain an independent copy. Resources hidden
-outside the returned object's material/geometry graph remain caller-owned.
+across active custom visuals. To defer `3d-force-graph` cleanup, Canvas replaces
+each leased resource object's `dispose()` method with a no-op. This mutates the
+Three.js object, so every alias—including references held by application code
+or another renderer—observes the replacement. Calls to `dispose()` through any
+alias are intercepted while the resource is leased; Canvas invokes the
+originally captured method once when the final visual releases it. The no-op
+remains installed afterward to suppress duplicate disposal.
+
+Replacement acquires the new visual's resources before releasing the old
+visual's lease. Removing a visual or tearing down the 3D renderer releases its
+lease; the final release disposes the resource even if an external owner still
+holds or uses it. External references do not create leases, and external use
+after the final Canvas release is not supported. Coordinate disposal with other
+owners; if a resource must remain usable independently, provide an independent
+copy of every needed resource. Resources hidden outside the returned object's
+traversed geometry/material graph remain caller-owned. See the
+[v1 migration guide](./MIGRATION-v1.md#custom-threejs-visual-lifecycle) for the
+full ownership contract and lifecycle tests.
 
 ## Utility Functions
 

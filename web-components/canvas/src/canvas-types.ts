@@ -361,7 +361,10 @@ export interface ThreeDConfig {
   nodeObject?: (node: GraphNode, state: ThreeDRenderState) => Object3D;
   /** Replaces a link's built-in line while retaining its relationship label. */
   linkObject?: (link: GraphLink, state: ThreeDRenderState) => Object3D;
-  /** Dash and gap lengths in world units; an empty pattern keeps the native solid link. */
+  /**
+   * Dash and gap lengths in world units; an empty pattern keeps the native solid link.
+   * A link-position update that would exceed 4096 rendered segments throws a RangeError.
+   */
   linkDashPattern?: (link: GraphLink) => number[];
   /** Updates a custom link visual with its current endpoints. */
   linkObjectPositionUpdate?: (

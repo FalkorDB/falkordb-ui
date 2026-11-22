@@ -146,6 +146,8 @@
           const { nodes: graphNodes, links: graphLinks } = graph.graphData();
           const extentX = (columns - 1) * spacing;
           const extentY = (rows - 1) * spacing;
+          const camera = graph.camera();
+          const horizontalHalfView = 6000 * Math.tan(camera.fov * Math.PI / 360) * camera.aspect;
           for (const node of graphNodes) {
             const x = (node.id % columns) * spacing - extentX / 2;
             const y = Math.floor(node.id / columns) * spacing - extentY / 2;
@@ -159,8 +161,8 @@
           const views = [];
           for (const [name, targetX] of [
             ["mostly-visible", 0],
-            ["partial", extentX * 0.7],
-            ["mostly-offscreen", extentX * 4],
+            ["partial", horizontalHalfView],
+            ["mostly-offscreen", extentX / 2 + horizontalHalfView * 2],
           ]) {
             views.push(await runView(name, targetX));
             result.textContent = `${name} complete (${views.length}/3 views)…`;
