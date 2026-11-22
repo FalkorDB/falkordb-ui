@@ -201,6 +201,51 @@ describe("node rendering", () => {
     expect(ctx.fillText).toHaveBeenCalled();
   });
 
+  it("fits the full inside caption regardless of the fixed font size in auto-size mode", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: [["name", true]],
+      twoD: { largeGraph: { enabled: false } },
+    });
+    const caption = "A long caption that should not be truncated";
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: caption } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    node.size = 10;
+
+    const draw = () => {
+      const ctx = createCtxSpy();
+      ctx.measureText.mockImplementation((text: string) => {
+        const size = Number.parseFloat(ctx.font.split(" ")[1]);
+        const width = text.length * size * 0.6;
+        return {
+          width,
+          actualBoundingBoxAscent: size * 0.7,
+          actualBoundingBoxDescent: size * 0.2,
+          actualBoundingBoxLeft: 0,
+          actualBoundingBoxRight: width,
+        };
+      });
+      getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+      return ctx;
+    };
+
+    const first = draw();
+    expect(first.fillText).toHaveBeenCalledExactlyOnceWith(caption, 0, expect.any(Number));
+    const fittedFont = first.font;
+    const fittedSize = Number.parseFloat(fittedFont.split(" ")[1]);
+    const diagonal = Math.hypot(caption.length * fittedSize * 0.6, fittedSize * 0.9);
+    expect(diagonal).toBeCloseTo(2 * 0.85 * 9);
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 12 } } });
+    const second = draw();
+    expect(second.fillText).toHaveBeenCalledExactlyOnceWith(caption, 0, expect.any(Number));
+    expect(second.font).toBe(fittedFont);
+  });
+
   it("renders text with fixed fontSize when textFillRatio is 0", () => {
     const canvas = createCanvas();
     canvas.setConfig({

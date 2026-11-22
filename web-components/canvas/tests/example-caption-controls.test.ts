@@ -13,4 +13,18 @@ describe("example caption controls", () => {
     expect(side?.disabled).toBe(true);
     expect(side?.value).toBe("above");
   });
+
+  it("rejects an empty or negative caption gap when outside captions are enabled", () => {
+    const html = readFileSync(resolve("examples/falkordb-canvas.example.html"), "utf8");
+    const example = new DOMParser().parseFromString(html, "text/html");
+    const gap = example.querySelector<HTMLInputElement>("#caption-gap")!;
+    gap.disabled = false;
+
+    gap.value = "";
+    expect(gap.checkValidity()).toBe(false);
+    gap.value = "-1";
+    expect(gap.checkValidity()).toBe(false);
+    gap.value = "0";
+    expect(gap.checkValidity()).toBe(true);
+  });
 });

@@ -276,6 +276,62 @@ describe("viewport culling", () => {
     expect(farAway.fillText).not.toHaveBeenCalled();
   });
 
+  it("reuses offscreen caption measurements and refreshes them when text or fonts change", () => {
+    let selected = false;
+    const canvas = createCanvas();
+    canvas.setConfig({
+      width: 800, height: 600,
+      captionsKeys: [["name", true]],
+      isNodeSelected: () => selected,
+      twoD: {
+        nodeStyle: { captionPosition: "left", captionGap: 20 },
+        largeGraph: { viewportPadding: 0, skipLabelsAtLowZoom: false },
+      },
+    });
+    canvas.setData(SIMPLE_DATA);
+    const instance = getLastInstance();
+    setupInstanceDimensions(instance);
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 5000;
+    node.y = 0;
+    triggerZoom({ k: 1, x: 0, y: 0 });
+    const ctx = createCtxSpy();
+    const measure = vi.mocked(ctx.measureText);
+    const draw = () => instance.callbacks.nodeCanvasObject!(node, ctx);
+
+    draw();
+    draw();
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(ctx.fillText).not.toHaveBeenCalled();
+
+    selected = true;
+    draw();
+    expect(measure).toHaveBeenCalledTimes(2);
+    expect(ctx.font).toContain("700 ");
+
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 9 } } });
+    draw();
+    expect(measure).toHaveBeenCalledTimes(3);
+
+    node.data.name = "changed";
+    canvas.refresh();
+    draw();
+    expect(measure).toHaveBeenLastCalledWith("changed");
+    expect(measure).toHaveBeenCalledTimes(4);
+
+    const listeners = vi.mocked(document.fonts.addEventListener).mock.calls;
+    const listener = listeners.filter(([event]) => event === "loadingdone").at(-1)?.[1];
+    expect(listener).toBeTypeOf("function");
+    (listener as EventListener).call(document.fonts, new Event("loadingdone"));
+    draw();
+    expect(measure).toHaveBeenCalledTimes(5);
+
+    node.x = 420;
+    draw();
+    expect(measure).toHaveBeenCalledTimes(5);
+    expect(ctx.fillText).toHaveBeenCalledWith("changed", expect.any(Number), 0);
+  });
+
   it("culling bounds include viewport padding — borderline node is drawn", () => {
     const canvas = createCanvas();
     canvas.setConfig({

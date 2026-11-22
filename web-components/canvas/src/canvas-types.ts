@@ -23,7 +23,7 @@ export interface TwoDNodeStyleConfig {
   fontSize?: number;
   /**
    * Fraction of node radius that text fills (0–1). Default: 0.85.
-   * Text auto-scales to fit inside the node circle at this fill ratio.
+   * Inside captions auto-scale on one line to fit within this fraction of the node radius.
    * Takes precedence over fontSize when set.
    * Set to 0 and provide fontSize for fixed-size text.
    */
