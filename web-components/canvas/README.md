@@ -197,7 +197,7 @@ layout settings, captions, and event handlers remain shared.
 | `fontWeightUnselected` | `400` | Font weight when not selected |
 | `fontWeightSelected` | `700` | Font weight when selected |
 | `twoD.nodeStyle.fontSize` | `6` | 2D fixed font size (world units). Always used for outside-node captions |
-| `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fit the full inside caption on one line within this fraction of the node radius (0–1). Set to `0` to use `fontSize` and wrap or truncate as needed |
+| `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fit the full inside caption on one line within this fraction of the node radius (0–1). Set to `0` to use `fontSize` and wrap or truncate as needed. Inside captions are omitted when there is insufficient room |
 | `twoD.nodeStyle.captionPosition` | `'inside'` | 2D captions can be `'inside'`, `'above'`, `'below'`, `'left'`, or `'right'`. Outside captions use the canvas foreground color |
 | `twoD.nodeStyle.captionGap` | `1` | Non-negative, finite gap in world units from the node border to an outside caption in 2D. Invalid values throw `RangeError` |
 | `twoD.nodeStyle.strokeWidthSelected` | `1` | 2D border width when selected |
@@ -626,6 +626,8 @@ const data = graphDataToData(graphData);
 const text = getNodeDisplayText(node, [["name", false]], false);  // Caption keys, then whether to show the key prefix
 
 // Wrap text for circular nodes
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
 const [line1, line2] = wrapTextForCircularNode(ctx, text, radius);
 ```
 

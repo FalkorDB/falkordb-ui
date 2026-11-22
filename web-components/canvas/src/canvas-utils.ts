@@ -397,21 +397,50 @@ export const getNodeDisplayKey = (
 }
 
 /**
- * Wraps text into two lines with ellipsis handling for circular nodes
+ * Wraps text into two lines with ellipsis handling for circular nodes.
+ * The context must use center alignment and a middle baseline, matching the renderer.
+ * Returns empty lines when no text can fit.
  */
 export const wrapTextForCircularNode = (
   ctx: CanvasRenderingContext2D,
   text: string,
   maxRadius: number
 ): [string, string] => {
-  const ellipsis = "...";
-  const ellipsisWidth = ctx.measureText(ellipsis).width;
-  const halfTextHeight = 1.125;
-  const availableRadius = Math.sqrt(
-    Math.max(0, maxRadius * maxRadius - halfTextHeight * halfTextHeight)
-  );
-  const lineWidth = availableRadius * 2;
+  if (maxRadius <= 0) return ["", ""];
 
+  const fits = (value: string, offset: number): boolean => {
+    const metrics = ctx.measureText(value);
+    const halfWidth = Math.max(
+      metrics.width / 2,
+      Math.abs(metrics.actualBoundingBoxLeft ?? 0),
+      Math.abs(metrics.actualBoundingBoxRight ?? 0),
+    );
+    const height = Math.max(
+      Math.abs(offset - (metrics.actualBoundingBoxAscent ?? 0)),
+      Math.abs(offset + (metrics.actualBoundingBoxDescent ?? 0)),
+    );
+    return Math.hypot(halfWidth, height) <= maxRadius;
+  };
+  const lineOffset = (value: string): number => {
+    const metrics = ctx.measureText(value);
+    return ((metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)) * 0.75;
+  };
+  const ellipsis = "...";
+  const fitsCentered = (value: string): boolean => {
+    const metrics = ctx.measureText(value);
+    const correction = ((metrics.actualBoundingBoxAscent ?? 0) - (metrics.actualBoundingBoxDescent ?? 0)) / 2;
+    return fits(value, correction);
+  };
+  if (fitsCentered(text)) return [text, ""];
+
+  const truncateSingleLine = (): [string, string] => {
+    const suffix = fitsCentered(ellipsis) ? ellipsis : "";
+    let prefix = text;
+    while (prefix && !fitsCentered(prefix + suffix)) {
+      prefix = prefix.slice(0, -1);
+    }
+    return [prefix + suffix, ""];
+  };
   const words = text.split(/\s+/);
   let line1 = "";
   let line2 = "";
@@ -419,19 +448,19 @@ export const wrapTextForCircularNode = (
   for (let i = 0; i < words.length; i += 1) {
     const word = words[i];
     const testLine = line1 ? `${line1} ${word}` : word;
-    const testWidth = ctx.measureText(testLine).width;
 
-    if (testWidth <= lineWidth) {
+    if (fits(testLine, -lineOffset(testLine))) {
       line1 = testLine;
     } else if (!line1) {
       let partialWord = word;
       while (
         partialWord.length > 0 &&
-        ctx.measureText(partialWord).width > lineWidth
+        !fits(partialWord, -lineOffset(partialWord))
       ) {
         partialWord = partialWord.slice(0, -1);
       }
       line1 = partialWord;
+      if (!line1) return truncateSingleLine();
       const remainingWords = [
         word.slice(partialWord.length),
         ...words.slice(i + 1),
@@ -444,10 +473,12 @@ export const wrapTextForCircularNode = (
     }
   }
 
-  if (line2 && ctx.measureText(line2).width > lineWidth) {
+  const offset = lineOffset(line1);
+  if (line2 && !fits(line2, offset)) {
+    if (!fits(ellipsis, offset)) return [line1, ""];
     while (
       line2.length > 0 &&
-      ctx.measureText(line2).width + ellipsisWidth > lineWidth
+      !fits(line2 + ellipsis, offset)
     ) {
       line2 = line2.slice(0, -1);
     }

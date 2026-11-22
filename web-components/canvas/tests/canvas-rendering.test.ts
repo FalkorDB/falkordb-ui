@@ -246,6 +246,119 @@ describe("node rendering", () => {
     expect(second.font).toBe(fittedFont);
   });
 
+  it("does not render an auto-sized inside caption when the usable radius is non-positive", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ twoD: { largeGraph: { enabled: false } } });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 0.5, data: {} }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fill).toHaveBeenCalled();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+  });
+
+  it("keeps both fixed-size caption lines inside the usable circular radius", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: ["name"],
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { textFillRatio: 0, fontSize: 6 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 9, data: { name: "abcd efgh ijkl" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => {
+      const width = text.length * 2;
+      return {
+        width,
+        actualBoundingBoxAscent: 3,
+        actualBoundingBoxDescent: 2,
+        actualBoundingBoxLeft: width / 2,
+        actualBoundingBoxRight: width / 2,
+      };
+    });
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fillText).toHaveBeenCalledTimes(2);
+    for (const [text, x, y] of ctx.fillText.mock.calls) {
+      const halfWidth = String(text).length;
+      expect(x).toBe(0);
+      expect(Math.hypot(halfWidth, Math.max(Math.abs(y - 3), Math.abs(y + 2)))).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it("re-wraps fixed-size captions when selection changes the font weight", () => {
+    let selected = false;
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: ["name"],
+      isNodeSelected: () => selected,
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { textFillRatio: 0, fontSize: 6 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 9, data: { name: "abcd efgh ijkl" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => {
+      const width = text.length * (ctx.font.startsWith("700 ") ? 3 : 2);
+      return {
+        width,
+        actualBoundingBoxAscent: 3,
+        actualBoundingBoxDescent: 2,
+        actualBoundingBoxLeft: width / 2,
+        actualBoundingBoxRight: width / 2,
+      };
+    });
+    const draw = () => getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    draw();
+    ctx.fillText.mockClear();
+    selected = true;
+    draw();
+    expect(ctx.fillText).toHaveBeenCalled();
+    for (const [text, x, y] of ctx.fillText.mock.calls) {
+      const halfWidth = String(text).length * 1.5;
+      expect(x).toBe(0);
+      expect(Math.hypot(halfWidth, Math.max(Math.abs(y - 3), Math.abs(y + 2)))).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it("uses a truncated single line when two fixed-size lines cannot fit", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: ["name"],
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { textFillRatio: 0, fontSize: 6 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 7, data: { name: "abcdefghijk" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => ({
+      width: text.length * 2,
+      actualBoundingBoxAscent: 3,
+      actualBoundingBoxDescent: 2,
+      actualBoundingBoxLeft: text.length,
+      actualBoundingBoxRight: text.length,
+    }));
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fillText).toHaveBeenCalledExactlyOnceWith("ab...", 0, 0.5);
+  });
+
   it("renders text with fixed fontSize when textFillRatio is 0", () => {
     const canvas = createCanvas();
     canvas.setConfig({
@@ -270,6 +383,13 @@ describe("node rendering", () => {
     instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
 
     const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => ({
+      width: text.length * 2,
+      actualBoundingBoxAscent: 2,
+      actualBoundingBoxDescent: 1,
+      actualBoundingBoxLeft: text.length,
+      actualBoundingBoxRight: text.length,
+    }));
     instance.callbacks.nodeCanvasObject!(node, ctx);
 
     expect(ctx.fillText).toHaveBeenCalled();

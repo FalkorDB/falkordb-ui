@@ -2130,9 +2130,23 @@ class FalkorDBCanvas extends HTMLElement {
     ctx.fillStyle = getContrastTextColor(node.color, this.config.interaction.contrastThreshold);
     ctx.textBaseline = "middle";
 
-    let [line1, line2] = node.displayName;
     const textRadius = node.size - PADDING / 2;
 
+    if (textRadius <= 0) {
+      if (isDimmed) ctx.restore();
+      return;
+    }
+
+    const previousLayout = this.nodeTextLayout.get(node.id);
+    const cachedFontSize = this.nodeDisplayFontSize.get(node.id) ?? nodeStyle.fontSize;
+    const currentFont = `${nodeFontWeight} ${cachedFontSize}px ${nodeStyle.fontFamily}`;
+    if (previousLayout && previousLayout.font !== currentFont) {
+      node.displayName = ["", ""];
+      this.nodeDisplayFontSize.delete(node.id);
+      this.nodeTextLayout.delete(node.id);
+    }
+
+    let [line1, line2] = node.displayName;
     if (!line1 && !line2) {
       const text = getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
 
