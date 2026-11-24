@@ -180,7 +180,7 @@ describe("node rendering", () => {
       width: 800,
       height: 600,
       captionsKeys: [["name", true]],
-      twoD: { largeGraph: { lowZoomThreshold: 0.5 } },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5 }, nodeStyle: { captionPosition: "inside" } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
@@ -205,7 +205,7 @@ describe("node rendering", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       captionsKeys: [["name", true]],
-      twoD: { largeGraph: { enabled: false } },
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside" } },
     });
     const caption = "A long caption that should not be truncated";
     canvas.setData({
@@ -248,7 +248,7 @@ describe("node rendering", () => {
 
   it("does not render an auto-sized inside caption when the usable radius is non-positive", () => {
     const canvas = createCanvas();
-    canvas.setConfig({ twoD: { largeGraph: { enabled: false } } });
+    canvas.setConfig({ twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside" } } });
     canvas.setData({
       nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 0.5, data: {} }],
       links: [],
@@ -268,7 +268,7 @@ describe("node rendering", () => {
     canvas.setConfig({
       captionsKeys: ["name"],
       isNodeSelected: () => selected,
-      twoD: { largeGraph: { enabled: false }, nodeStyle: { textFillRatio: 0, fontSize: 6 } },
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 6 } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 2, data: { name: "abc" } }],
@@ -315,7 +315,7 @@ describe("node rendering", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       captionsKeys: ["name"],
-      twoD: { largeGraph: { enabled: false }, nodeStyle: { textFillRatio: 0, fontSize: 6 } },
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 6 } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 9, data: { name: "abcd efgh ijkl" } }],
@@ -350,7 +350,7 @@ describe("node rendering", () => {
     canvas.setConfig({
       captionsKeys: ["name"],
       isNodeSelected: () => selected,
-      twoD: { largeGraph: { enabled: false }, nodeStyle: { textFillRatio: 0, fontSize: 6 } },
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 6 } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 9, data: { name: "abcd efgh ijkl" } }],
@@ -387,7 +387,7 @@ describe("node rendering", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       captionsKeys: ["name"],
-      twoD: { largeGraph: { enabled: false }, nodeStyle: { textFillRatio: 0, fontSize: 6 } },
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 6 } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 7, data: { name: "abcdefghijk" } }],
@@ -414,7 +414,7 @@ describe("node rendering", () => {
       width: 800,
       height: 600,
       twoD: {
-        nodeStyle: { textFillRatio: 0, fontSize: 3 },
+        nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 3 },
         largeGraph: { lowZoomThreshold: 0.5 },
       },
       captionsKeys: [["name", true]],
@@ -444,6 +444,30 @@ describe("node rendering", () => {
     expect(ctx.fillText).toHaveBeenCalled();
   });
 
+  it("renders 2D captions above nodes by default", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: [["name", true]],
+      foregroundColor: "#345678",
+      twoD: { largeGraph: { enabled: false } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 12;
+    node.y = 25;
+    node.size = 10;
+
+    const ctx = createCtxSpy();
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+
+    expect(ctx.fillText).toHaveBeenCalledExactlyOnceWith("Alice", 12, expect.any(Number));
+    expect(ctx.fillText.mock.calls[0][2]).toBeLessThan(node.y - node.size);
+    expect(ctx.textBaseline).toBe("bottom");
+  });
+
   it("moves a 2D caption below a node and back inside without replacing the graph", () => {
     const canvas = createCanvas();
     canvas.setConfig({
@@ -451,6 +475,7 @@ describe("node rendering", () => {
       foregroundColor: "#345678",
       twoD: { largeGraph: { enabled: false } },
     });
+    canvas.setConfig({ twoD: { nodeStyle: { captionPosition: "inside" } } });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
       links: [],
@@ -722,7 +747,7 @@ describe("node label caching", () => {
       width: 800,
       height: 600,
       captionsKeys: [["name", true]],
-      twoD: { largeGraph: { lowZoomThreshold: 0.5 } },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5 }, nodeStyle: { captionPosition: "inside" } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "test", title: "other" } }],

@@ -3,15 +3,16 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("example caption controls", () => {
-  it("defaults the outside caption side to above while captions remain inside", () => {
+  it("enables outside captions above nodes by default", () => {
     const html = readFileSync(resolve("examples/falkordb-canvas.example.html"), "utf8");
     const example = new DOMParser().parseFromString(html, "text/html");
     const toggle = example.querySelector<HTMLInputElement>("#caption-position-toggle");
     const side = example.querySelector<HTMLSelectElement>("#caption-side");
 
-    expect(toggle?.checked).toBe(false);
-    expect(side?.disabled).toBe(true);
+    expect(toggle?.checked).toBe(true);
+    expect(side?.disabled).toBe(false);
     expect(side?.value).toBe("above");
+    expect(example.querySelector<HTMLInputElement>("#caption-gap")?.disabled).toBe(false);
   });
 
   it("rejects an empty or negative caption gap when outside captions are enabled", () => {

@@ -760,12 +760,12 @@
         <button class="btn-secondary btn-sm" onclick="zoomOut()">−</button>
         <button class="btn-secondary btn-sm" onclick="resetViewport()">Reset</button>
         <div class="field-inline">
-          <input type="checkbox" id="caption-position-toggle">
+          <input type="checkbox" id="caption-position-toggle" checked>
           <label for="caption-position-toggle">Captions outside nodes (2D)</label>
         </div>
         <div class="field-inline">
           <label for="caption-side">Caption side</label>
-          <select id="caption-side" disabled>
+          <select id="caption-side">
             <option value="below">Below</option>
             <option value="above" selected>Above</option>
             <option value="left">Left</option>
@@ -774,7 +774,7 @@
         </div>
         <div class="field-inline">
           <label for="caption-gap">Caption gap</label>
-          <input type="number" id="caption-gap" value="1" min="0" step="0.5" required disabled>
+          <input type="number" id="caption-gap" value="1" min="0" step="0.5" required>
         </div>
         <div class="separator" id="delete-separator" style="display:none"></div>
         <button class="btn-warning btn-sm" id="btn-delete-node" style="display:none" onclick="deleteSelectedNode()">Delete Node</button>
@@ -838,7 +838,7 @@
         <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Shared selected font weight</td></tr>
         <tr><td><code>twoD.nodeStyle.fontSize</code></td><td>number</td><td>6</td><td>2D base font size (world units)</td></tr>
         <tr><td><code>twoD.nodeStyle.textFillRatio</code></td><td>number</td><td>0.85</td><td>Fit inside captions on one line within this fraction of the node radius; set to 0 for fixed-size wrapping.</td></tr>
-        <tr><td><code>twoD.nodeStyle.captionPosition</code></td><td>'inside' | 'above' | 'below' | 'left' | 'right'</td><td>'inside'</td><td>2D caption placement. Outside captions use <code>fontSize</code> and the canvas foreground color.</td></tr>
+        <tr><td><code>twoD.nodeStyle.captionPosition</code></td><td>'inside' | 'above' | 'below' | 'left' | 'right'</td><td>'above'</td><td>2D caption placement. Outside captions use <code>fontSize</code> and the canvas foreground color.</td></tr>
         <tr><td><code>twoD.nodeStyle.captionGap</code></td><td>number</td><td>1</td><td>Non-negative gap between the node border and outside caption, in world units.</td></tr>
         <tr><td><code>twoD.nodeStyle.strokeWidthSelected</code></td><td>number</td><td>1</td><td>2D selected border width</td></tr>
         <tr><td><code>twoD.nodeStyle.strokeWidthUnselected</code></td><td>number</td><td>0.5</td><td>2D normal border width</td></tr>
@@ -1508,7 +1508,6 @@
     const captionPositionToggle = document.getElementById('caption-position-toggle');
     const captionSide = document.getElementById('caption-side');
     const captionGap = document.getElementById('caption-gap');
-    captionPositionToggle.checked = false;
     captionPositionToggle.addEventListener('change', () => {
       [captionSide, captionGap].forEach((control) => {
         control.disabled = !captionPositionToggle.checked;

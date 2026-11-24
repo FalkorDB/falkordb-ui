@@ -158,12 +158,25 @@ canvas.threeD.getGraph();           // 3d-force-graph instance
 canvas.threeD.getCullingStats();
 ```
 
-Dimension switches preserve each renderer’s latest viewport or camera for
-restoration. The corresponding getter is only available while that renderer is
-active. A full `setData()` replacement clears the inactive renderer’s saved
-view. The active 2D renderer still auto-fits as usual; an active 3D renderer
-keeps its live camera while the new layout is applied. Incremental
+While connected, mode-specific operations are available only for the active
+renderer. When disconnected, `twoD.getViewport()` or
+`threeD.getCameraState()` returns a copy of the saved view for the renderer
+that was active at disconnection; other mode-specific operations still throw.
+Dimension switches restore a renderer’s saved view when one exists, otherwise
+they fit the graph. A full `setData()` replacement clears saved views. The
+active 2D renderer still auto-fits after a full replacement, while an active
+3D renderer keeps its live camera as the new layout is applied. Incremental
 `setGraphData()` updates retain the inactive renderer’s saved view.
+
+Native graph handles and their live objects become invalid after a dimension
+switch or disconnect; reacquire them after the renderer is mounted again.
+Canvas owns the native interaction and lifecycle callbacks—including
+`onNodeClick`, `onLinkClick`, `onNodeRightClick`, `onLinkRightClick`,
+`onNodeHover`, `onLinkHover`, `onBackgroundClick`, `onBackgroundRightClick`,
+`onEngineTick`, and `onEngineStop`—as well as the 3D visual factory and
+position-update callbacks. Configure user event handlers through `eventHandlers`
+and custom visuals through `twoD` / `threeD` rather than replacing those
+callbacks on the native graph.
 
 ### Configuration Options
 
@@ -205,7 +218,7 @@ layout settings, captions, and event handlers remain shared.
 | `fontWeightSelected` | `700` | Font weight when selected |
 | `twoD.nodeStyle.fontSize` | `6` | 2D fixed font size (world units). Always used for outside-node captions |
 | `twoD.nodeStyle.textFillRatio` | `0.85` | 2D auto-size: fit the full inside caption on one line within this fraction of the node radius (0–1). Set to `0` to use `fontSize` and wrap or truncate as needed. Inside captions are omitted when there is insufficient room |
-| `twoD.nodeStyle.captionPosition` | `'inside'` | 2D captions can be `'inside'`, `'above'`, `'below'`, `'left'`, or `'right'`. Outside captions use the canvas foreground color |
+| `twoD.nodeStyle.captionPosition` | `'above'` | 2D captions can be `'inside'`, `'above'`, `'below'`, `'left'`, or `'right'`. Outside captions use the canvas foreground color |
 | `twoD.nodeStyle.captionGap` | `1` | Non-negative, finite gap in world units from the node border to an outside caption in 2D. Invalid values throw `RangeError` |
 | `twoD.nodeStyle.strokeWidthSelected` | `1` | 2D border width when selected |
 | `twoD.nodeStyle.strokeWidthUnselected` | `0.5` | 2D border width when not selected |
@@ -342,16 +355,21 @@ await canvas.setDimension('2d');
 
 The 3D renderer and three.js are loaded the first time 3D is used, so pages that stay in 2D never download them. Until the switch completes the current view stays up; `onDimensionChange` fires when it is done. Called before the element is connected, `setDimension` only records the dimension and its promise settles at once: the graph is shown in it when the element renders. For `'3d'`, `onDimensionChange` fires then; `'2d'` is how the canvas starts anyway, so no event fires. If 3D cannot be shown (the bundle will not load, or WebGL will not start), the promise rejects, the canvas stays in or falls back to 2D, and `onDimensionChange('2d')` fires.
 
-Switching lays the graph out afresh in the new dimension and fits it to the view. The data, selection, dimming, colors, captions and event handlers carry over. `twoD` and `threeD` configuration are retained independently across switches. Mode-specific operations throw when their renderer is inactive or unavailable. In 3D:
+Switching lays the graph out afresh in the new dimension, restoring that
+renderer’s saved view when available and fitting otherwise. The data,
+selection, dimming, colors, captions and event handlers carry over. `twoD` and
+`threeD` configuration are retained independently across switches.
+Mode-specific operations throw when their renderer is inactive or unavailable.
+In 3D:
 
-- Over empty space, left-drag to rotate, right-drag to pan without changing the viewing angle, and scroll to zoom. On touchscreens, one finger rotates; moving two fingers together pans, and pinching zooms. Start camera gestures away from nodes: dragging a node still moves that node. `zoom()` and `getZoom()` express the camera's distance as a zoom factor, so `zoom(getZoom() * 1.1)` zooms in as it does in 2D.
+- Over empty space, left-drag to rotate, right-drag to pan 1:1 with pointer movement without changing the viewing angle, and scroll to zoom. On touchscreens, one finger rotates; moving two fingers together pans, and pinching zooms. Start camera gestures away from nodes: dragging a node still moves that node. `zoom()` and `getZoom()` express the camera's distance as a zoom factor, so `zoom(getZoom() * 1.1)` zooms in as it does in 2D.
 - Edge shafts stop at the back of their arrowheads rather than continuing through the tip, including selected, curved and self-loop edges. When low-zoom settings hide arrows, shafts extend to the target node instead. 2D uses the same visual rule with its notched arrowheads.
 - Parallel edges occupy distinct curved paths in both dimensions, including edges running in opposite directions between the same nodes. Curvature lanes use a consistent node-pair direction so reciprocal edges do not overlap.
 - Selected shafts reuse their geometry while their path, width and clipping inputs are unchanged. Shaft materials are shared by color and selection; cache eviction above 256 entries affects unused materials only, so graphs with more active colors do not churn materials on hover.
 - `tree` and `radial` keep their 2D positions, so face-on they read exactly as in 2D with no node over another, and each level sits one level distance further back than the one above it, the root nearest. Seen side-on the levels step back like stairs: a tree's levels each line up as one point, and a radial ring as one line. Both are pinned, so they hold still; picking a layout turns the view face-on again.
 - Pausing the animation or pinning stops a `force` layout's simulation.
 - Nodes are spheres (cubes for `shape: 'square'`) with the caption underneath; selected nodes get an outline in their border color and selected links are drawn thicker. Individual captions are limited when either node or link count exceeds `threeD.largeGraph.maxLabeledElements` (default `1000`); the renderer continues to use Three.js frustum culling independently.
-- A dragged node stays where it is dropped when `pinOnDragEnd` is on.
+- A node that was already pinned before dragging returns to its starting position; with `pinOnDragEnd` enabled, an unpinned node is pinned at its drop position.
 - Custom `twoD.node` / `twoD.link` canvas renderers, `twoD.linkLineDash` and the expand glow apply to 2D only.
 - With 3D large-graph optimization enabled, offscreen node styling and caption calculations are deferred, offscreen captions are hidden, and offscreen link-caption opacity updates are deferred. Camera movement, resize, simulation ticks and data/style changes refresh visibility; pending node changes are applied on re-entry. Bounds include caption extent and `threeD.largeGraph.viewportPadding` (world units) to avoid clipping edge labels. All nodes and links remain in the simulation, and native Three.js frustum culling remains active.
 - `threeD.largeGraph` low-zoom settings hide labels and arrows at or below `lowZoomThreshold` and restore them when zooming in. `getZoom()` uses camera distance in 3D, not a 2D screen scale. Disable the relevant 3D optimization or `skip*AtLowZoom` setting to keep details visible. Hover tooltips remain available.
@@ -529,6 +547,9 @@ Internal format with resolved node references:
   curve2D: number;    // Computed 2D curvature
 }
 ```
+
+`curve` is the computed 3D curvature; `curve2D` is the computed 2D curvature.
+Input `Link` data omits both fields.
 
 #### TwoDViewportState
 ```typescript

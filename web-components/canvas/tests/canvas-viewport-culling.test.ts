@@ -613,6 +613,48 @@ describe("low-zoom draw skipping", () => {
       });
     });
 
+    it.each(["dashed", "custom"] as const)("shows %s link captions after moving onscreen", async (kind) => {
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+        measureText: (text: string) => ({ width: text.length * 10 }),
+        fillRect: () => {},
+        fillText: () => {},
+      }) as unknown as CanvasRenderingContext2D);
+      const visualConfig = kind === "dashed"
+        ? { linkDashPattern: () => [4, 2] }
+        : { linkObject: () => new Group() };
+      const canvas = createCanvas();
+      canvas.setConfig({
+        threeD: { largeGraph: { enabled: true, lowZoomThreshold: 0 }, ...visualConfig },
+      });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const link = canvas.getGraphData().links[0];
+      const factory = graph.callback("linkThreeObject") as (current: typeof link) => Object3D;
+      const object = factory(link);
+      const label = object.getObjectByProperty("type", "Sprite") as Sprite;
+      const update = graph.callback("linkPositionUpdate") as (
+        object: Object3D,
+        coordinates: { start: Vector3; end: Vector3 },
+        current: typeof link,
+      ) => void;
+      graph.sceneObject.add(object);
+
+      update(object, {
+        start: new Vector3(10000, 0, 0),
+        end: new Vector3(10100, 0, 0),
+      }, link);
+      graph.controlsChanged();
+      expect(label.visible).toBe(false);
+
+      update(object, {
+        start: new Vector3(0, 0, 0),
+        end: new Vector3(100, 0, 0),
+      }, link);
+      expect(label.visible).toBe(true);
+    });
+
     it("counts instanced node bodies using the total-node threshold when one node is hidden", async () => {
       const canvas = createCanvas();
       const nodes = Array.from({ length: 1000 }, (_, id) => ({

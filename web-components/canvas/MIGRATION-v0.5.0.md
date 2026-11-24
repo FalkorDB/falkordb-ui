@@ -8,6 +8,8 @@ aliases: update call sites and TypeScript imports before upgrading.
 
 - Shared configuration stays at the top level; 2D and 3D options move under
   `twoD` and `threeD`.
+- 2D captions now default to `above` nodes. Set
+  `twoD.nodeStyle.captionPosition: 'inside'` to keep the previous placement.
 - Mode-specific viewport, camera, graph-instance, and culling operations move
   to typed `canvas.twoD` / `canvas.threeD` namespaces.
 - Adds 3D camera save/restore, accurate frustum diagnostics, custom Three.js
@@ -87,14 +89,32 @@ Calling an operation while its renderer is inactive or unavailable throws an
 error that identifies the required and active dimension. Shared operations,
 including `setDimension`, data/layout/zoom/fit methods, stay on `canvas`.
 
+## Separate 2D and 3D link curvature
+
+`GraphLink.curve` now describes 3D curvature only; 2D rendering uses the
+separate `GraphLink.curve2D` value. Update code that changes a live link's
+curvature for 2D:
+
+```typescript
+// Before: changing curve also affected the 2D renderer.
+graphLink.curve = 0.4;
+
+// After: select the renderer-specific curvature.
+graphLink.curve2D = 0.4;
+```
+
+Both `curve` and `curve2D` are required on `GraphLink` object literals. They
+are computed runtime values and are omitted from input `Link` / `Data` values.
+
 The 3D camera snapshot includes `position`, `target`, and `up`, so it preserves
-camera roll. Dimension switches and element reconnects preserve each
-renderer’s latest view for restoration, but a mode-specific getter remains
-unavailable while that renderer is inactive. A full `setData()` replacement
-clears the inactive renderer’s saved view. The active 2D renderer still
-auto-fits as usual; an active 3D renderer keeps its live camera while the new
-layout is applied. Incremental `setGraphData()` updates retain the inactive
-renderer’s saved view.
+camera roll. Dimension switches restore a renderer’s saved view when one
+exists, and fit otherwise. After disconnection, the mode-specific getter for
+the renderer that was active returns a copy of its saved viewport or camera;
+while connected, getters remain unavailable when their renderer is inactive.
+A full `setData()` replacement clears saved views. The active 2D renderer
+auto-fits after a full replacement; an active 3D renderer keeps its live
+camera while the new layout is applied. Incremental `setGraphData()` updates
+retain the inactive renderer’s saved view.
 
 ## Custom Three.js visual lifecycle
 

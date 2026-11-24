@@ -12,7 +12,8 @@ import {
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
-import { BoxGeometry, Group, InstancedMesh, Line, LineBasicMaterial, LineSegments, Matrix4, MOUSE, Mesh, MeshBasicMaterial, Object3D, QuadraticBezierCurve3, Raycaster, Sprite, Vector3, type BufferGeometry, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { BoxGeometry, Group, InstancedMesh, Line, LineBasicMaterial, LineSegments, Matrix4, MOUSE, Mesh, MeshBasicMaterial, Object3D, QuadraticBezierCurve3, Raycaster, Sprite, Vector2, Vector3, type BufferGeometry, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
 import { LinkShaft } from "../src/link-shaft";
 import "../src/canvas";
 import type { CanvasConfig, CanvasTestElement, GraphNode, GraphLink } from "./test-types";
@@ -61,6 +62,17 @@ function createCanvas(): CanvasTestElement {
 
 function last3D(): MockForceGraph3DInstance {
   return forceGraph3DMockState.lastInstance!;
+}
+
+function dispatchPointer(
+  target: EventTarget,
+  type: string,
+  options: { button?: number; clientX?: number; clientY?: number; pointerId?: number } = {},
+) {
+  const { pointerId = 1, ...mouseOptions } = options;
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, ...mouseOptions });
+  Object.defineProperty(event, "pointerId", { value: pointerId });
+  target.dispatchEvent(event);
 }
 
 function finish3DLayout(graph = last3D()) {
@@ -312,6 +324,72 @@ describe("dimension", () => {
   });
 });
 
+describe("3D background panning", () => {
+  it.each([
+    { width: 800, height: 600, distance: 1000, up: { x: 0, y: 1, z: 0 }, dx: 12, dy: -9 },
+    { width: 640, height: 480, distance: 250, up: { x: 0, y: 1, z: 0 }, dx: -8, dy: 6 },
+    { width: 900, height: 500, distance: 500, up: { x: 1, y: 0, z: 0 }, dx: 13, dy: 7 },
+  ])("moves the target point by the pointer delta ($width x $height, distance $distance)", async ({
+    width, height, distance, up, dx, dy,
+  }) => {
+    const canvas = await canvasIn3D();
+    canvas.setWidth(width);
+    canvas.setHeight(height);
+    const graph = last3D();
+    graph.cameraObject.up.set(up.x, up.y, up.z);
+    graph.simulateDrag({ x: 0, y: 0, z: distance }, { x: 0, y: 0, z: 0 });
+
+    const target = new Vector3(0, 0, 0);
+    const before = target.clone().project(graph.camera());
+    const beforePixel = { x: (before.x + 1) * width / 2, y: (1 - before.y) * height / 2 };
+    dispatchPointer(graph.container, "pointerdown", { button: 2, clientX: 100, clientY: 100 });
+    expect(graph.controlsState.mouseButtons.RIGHT).toBe(null);
+    dispatchPointer(window, "pointermove", { clientX: 100 + dx, clientY: 100 + dy });
+    dispatchPointer(window, "pointerup");
+
+    const after = target.clone().project(graph.camera());
+    const afterPixel = { x: (after.x + 1) * width / 2, y: (1 - after.y) * height / 2 };
+    expect(afterPixel.x - beforePixel.x).toBeCloseTo(dx, 4);
+    expect(afterPixel.y - beforePixel.y).toBeCloseTo(dy, 4);
+    expect(graph.controlsState.noPan).toBe(false);
+    expect(graph.controlsState.mouseButtons.RIGHT).toBe(MOUSE.PAN);
+  });
+
+  it("does not pan when a right drag starts over a graph node", async () => {
+    const canvas = await canvasIn3D();
+    const graph = last3D();
+    const node = canvas.getGraphData().nodes[0];
+    graph.callback("onNodeHover")(node);
+    graph.simulateDrag({ x: 0, y: 0, z: 500 }, { x: 0, y: 0, z: 0 });
+    const start = graph.cameraPosition();
+
+    dispatchPointer(graph.container, "pointerdown", { button: 2, clientX: 100, clientY: 100 });
+    dispatchPointer(window, "pointermove", { clientX: 120, clientY: 100 });
+    dispatchPointer(window, "pointerup");
+
+    expect(graph.cameraPosition()).toEqual(start);
+    expect(graph.controlsState.noPan).toBe(false);
+  });
+
+  it.each(["pointerup", "pointercancel"])("stops panning after %s", async (endEvent) => {
+    await canvasIn3D();
+    const graph = last3D();
+    graph.simulateDrag({ x: 0, y: 0, z: 500 }, { x: 0, y: 0, z: 0 });
+    const start = graph.cameraPosition();
+
+    dispatchPointer(graph.container, "pointerdown", { button: 2, clientX: 100, clientY: 100 });
+    dispatchPointer(window, "pointermove", { clientX: 110, clientY: 100 });
+    const afterFirstMove = graph.cameraPosition();
+    expect(afterFirstMove).not.toEqual(start);
+
+    dispatchPointer(window, endEvent);
+    dispatchPointer(window, "pointermove", { clientX: 130, clientY: 100 });
+    expect(graph.cameraPosition()).toEqual(afterFirstMove);
+    expect(graph.controlsState.noPan).toBe(false);
+    expect(graph.controlsState.mouseButtons.RIGHT).toBe(MOUSE.PAN);
+  });
+});
+
 describe("2D viewport state", () => {
   it("survives dimension switches", async () => {
     const canvas = createCanvas();
@@ -376,6 +454,59 @@ describe("3D camera state", () => {
     expect(canvas.threeD.getCameraState()).toEqual(state);
     const snapshot = canvas.threeD.getCameraState();
     snapshot.position.x = 999;
+    expect(canvas.threeD.getCameraState()).toEqual(state);
+  });
+
+  it("clears pending TrackballControls motion before restoring a camera", async () => {
+    const canvas = await canvasIn3D();
+    const graph = last3D();
+    const controls = new TrackballControls(graph.cameraObject);
+    graph.controlsState = controls as unknown as typeof graph.controlsState;
+    const motion = controls as unknown as {
+      state: number;
+      keyState: number;
+      _movePrev: Vector2;
+      _moveCurr: Vector2;
+      _zoomStart: Vector2;
+      _zoomEnd: Vector2;
+      _panStart: Vector2;
+      _panEnd: Vector2;
+      _lastAngle: number;
+      _lastAxis: Vector3;
+      _lastRollAngle: number;
+      _touchRollAngle: number;
+      _touchRollPointerIds: string;
+    };
+    motion.state = 0;
+    motion.keyState = 2;
+    motion._movePrev.set(0, 0);
+    motion._moveCurr.set(0.2, 0.1);
+    motion._zoomStart.set(0, 0);
+    motion._zoomEnd.set(0, 0.1);
+    motion._panStart.set(0, 0);
+    motion._panEnd.set(0.1, 0);
+    motion._lastAngle = 0.25;
+    motion._lastAxis.set(0, 1, 0);
+    motion._lastRollAngle = 0.1;
+    motion._touchRollAngle = 0.3;
+    motion._touchRollPointerIds = "1,2";
+    const state = {
+      position: { x: 120, y: -80, z: 450 },
+      target: { x: 12, y: 34, z: -5 },
+      up: { x: 0.2, y: 0.9, z: 0.3 },
+    };
+
+    canvas.threeD.setCameraState(state);
+
+    expect(motion.state).toBe(-1);
+    expect(motion.keyState).toBe(-1);
+    expect(motion._movePrev).toEqual(motion._moveCurr);
+    expect(motion._zoomStart).toEqual(motion._zoomEnd);
+    expect(motion._panStart).toEqual(motion._panEnd);
+    expect(motion._lastAngle).toBe(0);
+    expect(motion._lastRollAngle).toBe(0);
+    expect(motion._touchRollAngle).toBe(0);
+    expect(motion._touchRollPointerIds).toBe("");
     expect(canvas.threeD.getCameraState()).toEqual(state);
   });
 
@@ -710,10 +841,59 @@ describe("3D rendering", () => {
 
     const node = canvas.getGraphData().nodes[0] as GraphNode & { z?: number; fz?: number };
     Object.assign(node, { x: 4, y: 5, z: 6 });
+    delete node.fx;
+    delete node.fy;
+    delete node.fz;
     last3D().callback("onNodeDragEnd")(node, { x: 0, y: 0, z: 0 });
 
     expect(node).toMatchObject({ fx: 4, fy: 5, fz: 6 });
     expect(onNodeDragEnd).toHaveBeenCalledWith(node);
+  });
+
+  it("restores a previously pinned node after dragging when pinning is on", async () => {
+    const onNodeDragEnd = vi.fn();
+    const canvas = await canvasIn3D();
+    canvas.setConfig({ eventHandlers: { onNodeDragEnd } });
+    canvas.setPinOnDragEnd(true);
+
+    const node = canvas.getGraphData().nodes[0] as GraphNode & {
+      x?: number; y?: number; z?: number; fx?: number; fy?: number; fz?: number;
+    };
+    Object.assign(node, { x: 4, y: 5, z: 6, fx: 4, fy: 5, fz: 6 });
+    Object.assign(node, { x: 10, y: 14, z: 18, fx: 10, fy: 14, fz: 18 });
+    last3D().callback("onNodeDragEnd")(node, { x: -6, y: -9, z: -12 });
+
+    expect(node).toMatchObject({ x: 4, y: 5, z: 6, fx: 4, fy: 5, fz: 6 });
+    expect(onNodeDragEnd).toHaveBeenCalledWith(node);
+  });
+
+  it("restores a pinned node after dragging even when pin-on-drag is off", async () => {
+    const canvas = await canvasIn3D();
+    const node = canvas.getGraphData().nodes[0] as GraphNode & {
+      x?: number; y?: number; z?: number; fx?: number; fy?: number; fz?: number;
+    };
+    Object.assign(node, { x: 4, y: 5, z: 6, fx: 4, fy: 5, fz: 6 });
+    Object.assign(node, { x: 10, y: 14, z: 18, fx: 10, fy: 14, fz: 18 });
+    last3D().callback("onNodeDragEnd")(node, { x: -6, y: -9, z: -12 });
+
+    expect(node).toMatchObject({ x: 4, y: 5, z: 6, fx: 4, fy: 5, fz: 6 });
+  });
+
+  it("treats a partially fixed node as unpinned and pins it at the drop point", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setPinOnDragEnd(true);
+
+    const node = canvas.getGraphData().nodes[0] as GraphNode & {
+      x?: number; y?: number; z?: number; fx?: number; fy?: number; fz?: number;
+    };
+    Object.assign(node, { x: 4, y: 5, z: 6, fx: 4 });
+    Object.assign(node, { x: 10, y: 14, z: 18, fx: 10 });
+    delete node.fy;
+    delete node.fz;
+    expect([node.fx, node.fy, node.fz]).toEqual([10, undefined, undefined]);
+    last3D().callback("onNodeDragEnd")(node, { x: -6, y: -9, z: -12 });
+
+    expect(node).toMatchObject({ x: 10, y: 14, z: 18, fx: 10, fy: 14, fz: 18 });
   });
 
   it("expresses camera distance as a zoom factor", async () => {
@@ -1430,6 +1610,7 @@ describe("3D scene objects", () => {
 
   it("updates shaft geometry on selection and disposes replacements and removed links", async () => {
     const canvas = await canvasIn3D();
+    finish3DLayout();
     const link = canvas.getGraphData().links[0];
     const factory = last3D().props.get("linkThreeObject") as (link: GraphLink) => LinkShaft;
     const first = factory(link);
@@ -1766,7 +1947,7 @@ describe("3D custom renderers and links", () => {
       (child) => child instanceof Mesh && child.geometry === geometry,
     )!;
 
-    canvas.setGraphData({ nodes: DATA.nodes, links: [] });
+    canvas.setGraphData({ nodes: [], links: [] });
     finish3DLayout(graph);
 
     expect(customVisual.parent).toBeNull();
@@ -1784,6 +1965,7 @@ describe("3D custom renderers and links", () => {
     await canvas.setDimension("3d");
 
     const graph = last3D();
+    finish3DLayout(graph);
     const factory = graph.callback("linkThreeObject") as (link: GraphLink) => Object3D;
     factory(canvas.getGraphData().links[0]);
     canvas.setData({
@@ -1826,6 +2008,41 @@ describe("3D custom renderers and links", () => {
     expect(disposeGeometry).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps replaced link resources alive until all incoming link factories run", async () => {
+    const sharedGeometry = new BoxGeometry();
+    const replacementGeometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const disposeGeometry = vi.spyOn(sharedGeometry, "dispose");
+    let incoming = false;
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, {
+      linkObject: (link) => new Mesh(incoming && link.id === 10 ? replacementGeometry : sharedGeometry, material),
+    });
+    canvas.setData({ nodes: DATA.nodes, links: [DATA.links[0]] });
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("linkThreeObject") as (link: GraphLink) => Object3D;
+    factory(canvas.getGraphData().links[0]);
+    incoming = true;
+    canvas.setData({
+      nodes: DATA.nodes,
+      links: [DATA.links[0], { ...DATA.links[0], id: 11 }],
+    });
+
+    const [replacedLink, sharedLink] = canvas.getGraphData().links;
+    factory(replacedLink);
+    expect(() => factory(sharedLink)).not.toThrow();
+    expect(disposeGeometry).not.toHaveBeenCalled();
+
+    finish3DLayout(graph);
+    expect(disposeGeometry).not.toHaveBeenCalled();
+
+    canvas.setGraphData({ nodes: [], links: [] });
+    finish3DLayout(graph);
+    expect(disposeGeometry).toHaveBeenCalledTimes(1);
+  });
+
   it("releases the current link visual after a same-id replacement following restyle", async () => {
     const geometries = [new BoxGeometry(), new BoxGeometry(), new BoxGeometry()];
     const disposeGeometries = geometries.map((geometry) => vi.spyOn(geometry, "dispose"));
@@ -1837,6 +2054,7 @@ describe("3D custom renderers and links", () => {
     await canvas.setDimension("3d");
 
     const graph = last3D();
+    finish3DLayout(graph);
     const factory = graph.callback("linkThreeObject") as (link: GraphLink) => Object3D;
     const link = canvas.getGraphData().links[0];
     factory(link);
@@ -1905,6 +2123,38 @@ describe("3D custom renderers and links", () => {
     finish3DLayout(graph);
     expect(disposeGeometry).toHaveBeenCalledTimes(1);
     expect(disposeMaterial).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps replaced node resources alive until all incoming node factories run", async () => {
+    const sharedGeometry = new BoxGeometry();
+    const replacementGeometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const disposeGeometry = vi.spyOn(sharedGeometry, "dispose");
+    let incoming = false;
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, {
+      nodeObject: (node) => new Mesh(incoming && node.id === 1 ? replacementGeometry : sharedGeometry, material),
+    });
+    canvas.setData({ nodes: [DATA.nodes[0]], links: [] });
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("nodeThreeObject") as (node: GraphNode) => Group;
+    factory(canvas.getGraphData().nodes[0]);
+    incoming = true;
+    canvas.setData({ nodes: DATA.nodes, links: [] });
+
+    const [replacedNode, sharedNode] = canvas.getGraphData().nodes;
+    factory(replacedNode);
+    expect(() => factory(sharedNode)).not.toThrow();
+    expect(disposeGeometry).not.toHaveBeenCalled();
+
+    finish3DLayout(graph);
+    expect(disposeGeometry).not.toHaveBeenCalled();
+
+    canvas.setGraphData({ nodes: [], links: [] });
+    finish3DLayout(graph);
+    expect(disposeGeometry).toHaveBeenCalledTimes(1);
   });
 
   it("retains node labels, selection outlines, visibility, and ray picking around custom visuals", async () => {
@@ -2185,6 +2435,72 @@ describe("3D custom renderers and links", () => {
 
     canvas.setConfig({ isLinkSelected: () => true });
     expect(renderWidth(object, link)).toBeCloseTo(6 * Math.sqrt(3) / 2);
+  });
+
+  it("preserves straight dash lengths when the actual pattern spans fit the cap", async () => {
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkDashPattern: () => [10, 0.001] });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const link = canvas.getGraphData().links[0];
+    const factory = graph.callback("linkThreeObject") as (current: GraphLink) => Object3D;
+    const object = factory(link);
+    const line = object.getObjectByProperty("type", "LineSegments") as LineSegments;
+    const update = graph.callback("linkPositionUpdate") as (
+      object: Object3D,
+      coordinates: Coordinates,
+      link: GraphLink,
+    ) => void;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    update(object, {
+      start: { x: 0, y: 0, z: 0 },
+      end: { x: 1000, y: 0, z: 0 },
+    }, link);
+
+    expect(Array.from(line.geometry.getAttribute("position").array).slice(0, 6)).toEqual([
+      0, 0, 0, 10, 0, 0,
+    ]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("preserves curved dash lengths when curve tessellation fits the cap", async () => {
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, { linkDashPattern: () => [100, 50] });
+    canvas.setData(DATA);
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const link = canvas.getGraphData().links[0] as GraphLink & { __curve?: QuadraticBezierCurve3 };
+    const factory = graph.callback("linkThreeObject") as (current: GraphLink) => Object3D;
+    const object = factory(link);
+    const line = object.getObjectByProperty("type", "LineSegments") as LineSegments;
+    const update = graph.callback("linkPositionUpdate") as (
+      object: Object3D,
+      coordinates: Coordinates,
+      link: GraphLink,
+    ) => void;
+    const curve = new QuadraticBezierCurve3(
+      new Vector3(0, 0, 0),
+      new Vector3(2500, 600, 0),
+      new Vector3(5000, 0, 0),
+    );
+    link.__curve = curve;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    update(object, {
+      start: { x: 0, y: 0, z: 0 },
+      end: { x: 5000, y: 0, z: 0 },
+    }, link);
+
+    const positions = line.geometry.getAttribute("position").array;
+    const firstDashEnd = new Vector3(positions[297], positions[298], positions[299]);
+    expect(firstDashEnd.distanceTo(curve.getPointAt(100 / curve.getLength()))).toBeLessThan(0.01);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("scales over-limit dash patterns while keeping curved links within the segment cap", async () => {

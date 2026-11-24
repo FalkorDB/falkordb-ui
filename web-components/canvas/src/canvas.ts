@@ -118,7 +118,7 @@ const DEFAULT_NODE_STYLE: Required<NodeStyleConfig & TwoDNodeStyleConfig> = {
   fontWeightSelected: 700,
   fontSize: 6,
   textFillRatio: 0.85,
-  captionPosition: 'inside',
+  captionPosition: 'above',
   captionGap: 1,
   strokeWidthSelected: 1,
   strokeWidthUnselected: 0.5,
@@ -718,7 +718,8 @@ class FalkorDBCanvas extends HTMLElement {
 
   /**
    * Show the graph flat in 2D or in 3D. Switching lays the graph out afresh
-   * in the new dimension and fits it to the view.
+   * and restores that renderer's saved view when available; otherwise it fits
+   * the graph to the view. A full setData replacement clears saved views.
    *
    * The 3D renderer (three.js) is downloaded the first time it is needed, so
    * the switch can take a moment; the returned promise settles once it is done,
@@ -1152,9 +1153,8 @@ class FalkorDBCanvas extends HTMLElement {
 
   /**
    * Get the current viewport state (zoom level and center position).
-   * Returns undefined if the graph hasn't been initialized yet, or is shown in
-   * 3D. Once the element is disconnected, returns the 2D viewport it was left
-   * at (still undefined if it was left in 3D).
+   * While disconnected, returns the saved 2D viewport if the element was left
+   * in 2D. Throws while 3D is active or when no 2D viewport is available.
    */
   private getTwoDViewport(): TwoDViewportState {
     // Disconnected: the view as it was left. Otherwise, a 2D zoom-and-centre

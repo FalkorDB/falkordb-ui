@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Scene } from "three";
+import { PerspectiveCamera, Scene, Vector2, Vector3 } from "three";
 
 type Vec3 = { x: number; y: number; z: number };
 
@@ -21,6 +21,22 @@ export class MockForceGraph3DInstance {
 
   public controlsState = {
     target: { x: 0, y: 0, z: 0 },
+    noPan: false,
+    noRotate: false,
+    noZoom: false,
+    state: -1,
+    keyState: -1,
+    _movePrev: new Vector2(),
+    _moveCurr: new Vector2(),
+    _zoomStart: new Vector2(),
+    _zoomEnd: new Vector2(),
+    _panStart: new Vector2(),
+    _panEnd: new Vector2(),
+    _lastAngle: 0,
+    _lastRollAngle: 0,
+    _touchRollAngle: 0,
+    _touchRollPointerIds: "",
+    mouseButtons: {} as Record<string, number | null>,
     update: () => {
       const { x, y, z } = this.controlsState.target;
       this.cameraObject.position.copy(this.cameraPos);
@@ -156,7 +172,11 @@ export class MockForceGraph3DInstance {
     this.cameraPos = { ...this.cameraPos, ...position };
     this.cameraObject.position.set(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
     if (lookAt) {
-      this.controlsState.target = { ...lookAt };
+      if (this.controlsState.target instanceof Vector3) {
+        this.controlsState.target.set(lookAt.x, lookAt.y, lookAt.z);
+      } else {
+        this.controlsState.target = { ...lookAt };
+      }
     }
     this.cameraObject.updateMatrixWorld(true);
     return this;

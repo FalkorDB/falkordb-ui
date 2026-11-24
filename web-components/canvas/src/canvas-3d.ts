@@ -74,6 +74,21 @@ type Vec3 = { x: number; y: number; z: number };
 
 type Node3D = GraphNode & { z?: number; vz?: number; fz?: number };
 
+interface TrackballControlsMotionState extends TrackballControls {
+  state: number;
+  keyState: number;
+  _movePrev: THREE.Vector2;
+  _moveCurr: THREE.Vector2;
+  _zoomStart: THREE.Vector2;
+  _zoomEnd: THREE.Vector2;
+  _panStart: THREE.Vector2;
+  _panEnd: THREE.Vector2;
+  _lastAngle: number;
+  _lastRollAngle: number;
+  _touchRollAngle: number;
+  _touchRollPointerIds: string;
+}
+
 /** The scene objects of one node, kept so a restyle can update them in place. */
 type NodeParts = {
   group: THREE.Group;
@@ -144,6 +159,10 @@ export class Graph3D {
 
   private pendingRemovedVisualCleanup = false;
 
+  private readonly replacedNodeParts: Array<{ id: number; parts: NodeParts }> = [];
+
+  private readonly replacedLinkParts: Array<{ id: number; parts: LinkParts }> = [];
+
   private warnedDashPatternScaling = false;
 
   private readonly linkShafts = new Map<GraphLink, LinkShaft>();
@@ -171,6 +190,10 @@ export class Graph3D {
   private engineRunning = true;
 
   private pointerDown = false;
+
+  private hoveredNode: GraphNode | null = null;
+
+  private hoveredLink: GraphLink | null = null;
 
   private destroyed = false;
 
@@ -441,6 +464,10 @@ export class Graph3D {
 
   private bindRenderActivity(container: HTMLElement) {
     const controls = this.graph.controls() as TrackballControls;
+    let rightPointer: number | undefined;
+    let panPointer: number | undefined;
+    let lastPointer: { x: number; y: number } | undefined;
+    let previousRightAction = controls.mouseButtons.RIGHT;
     const change = () => {
       this.updateDetailVisibility();
       this.requestRender();
@@ -448,25 +475,84 @@ export class Graph3D {
     const wake = () => this.requestRender();
     const down = () => { this.pointerDown = true; this.requestRender(); };
     const up = () => { this.pointerDown = false; this.requestRender(); };
-    const end = () => { if (this.pointerDown) up(); };
+    const rightDown = (event: PointerEvent) => {
+      if (event.button !== 2 || rightPointer !== undefined) return;
+      rightPointer = event.pointerId;
+      previousRightAction = controls.mouseButtons.RIGHT;
+      controls.mouseButtons.RIGHT = null;
+      if (!this.hoveredNode && !this.hoveredLink) {
+        panPointer = event.pointerId;
+        lastPointer = { x: event.clientX, y: event.clientY };
+      }
+    };
+    const panMove = (event: PointerEvent) => {
+      if (panPointer !== event.pointerId || !lastPointer) return;
+      const deltaX = event.clientX - lastPointer.x;
+      const deltaY = event.clientY - lastPointer.y;
+      lastPointer = { x: event.clientX, y: event.clientY };
+      if (deltaX !== 0 || deltaY !== 0) this.panCameraByScreenPixels(deltaX, deltaY);
+    };
+    const endRightPointer = (event?: PointerEvent) => {
+      if (rightPointer === undefined || (event && event.pointerId !== rightPointer)) return;
+      rightPointer = undefined;
+      panPointer = undefined;
+      lastPointer = undefined;
+      controls.mouseButtons.RIGHT = previousRightAction;
+    };
+    const end = (event: PointerEvent) => {
+      endRightPointer(event);
+      if (this.pointerDown) up();
+    };
+    const blur = () => {
+      endRightPointer();
+      up();
+    };
     controls.addEventListener("change", change);
     container.addEventListener("pointermove", wake, { passive: true });
     container.addEventListener("pointerleave", wake, { passive: true });
     container.addEventListener("pointerdown", down, { passive: true });
+    container.addEventListener("pointerdown", rightDown, { capture: true });
     container.addEventListener("wheel", wake, { passive: true });
+    window.addEventListener("pointermove", panMove, { passive: true });
     window.addEventListener("pointerup", end, { passive: true });
     window.addEventListener("pointercancel", end, { passive: true });
-    window.addEventListener("blur", up);
+    window.addEventListener("blur", blur);
     this.cleanupInteraction = () => {
+      endRightPointer();
       controls.removeEventListener("change", change);
       container.removeEventListener("pointermove", wake);
       container.removeEventListener("pointerleave", wake);
       container.removeEventListener("pointerdown", down);
+      container.removeEventListener("pointerdown", rightDown, true);
       container.removeEventListener("wheel", wake);
+      window.removeEventListener("pointermove", panMove);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
-      window.removeEventListener("blur", up);
+      window.removeEventListener("blur", blur);
     };
+  }
+
+  private panCameraByScreenPixels(deltaX: number, deltaY: number) {
+    const camera = this.graph.camera();
+    if (!(camera instanceof THREE.PerspectiveCamera)) return;
+    const controls = this.graph.controls() as TrackballControls;
+    const height = this.graph.height();
+    const distance = camera.position.distanceTo(controls.target);
+    if (height <= 0 || distance <= 0) return;
+
+    camera.updateMatrixWorld(true);
+    const worldPerPixel = (
+      2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV() / 2))
+    ) / height;
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+    const translation = right.multiplyScalar(-deltaX * worldPerPixel)
+      .addScaledVector(up, deltaY * worldPerPixel);
+    const position = camera.position.clone().add(translation);
+    const target = new THREE.Vector3(controls.target.x, controls.target.y, controls.target.z).add(translation);
+
+    this.graph.cameraPosition(position, target, 0);
+    controls.update();
   }
 
   private updateDetailVisibility() {
@@ -840,6 +926,7 @@ export class Graph3D {
     this.pendingFit = null;
     this.resetViewPending = false;
     const controls = this.graph.controls() as TrackballControls;
+    clearTrackballMotion(controls);
     const camera = this.graph.camera();
     camera.up.set(state.up.x, state.up.y, state.up.z);
     this.graph.cameraPosition(
@@ -1007,6 +1094,7 @@ export class Graph3D {
     for (const shaft of this.linkShafts.values()) shaft.dispose();
     this.linkShafts.clear();
     this.graph._destructor();
+    this.disposePendingReplacedVisuals();
     for (const parts of this.nodeParts.values()) this.disposeNodeParts(parts);
     for (const parts of this.linkParts.values()) this.disposeLinkParts(parts);
     this.nodeParts.clear();
@@ -1048,8 +1136,14 @@ export class Graph3D {
       .onLinkClick((link, event) => handlers()?.onLinkClick?.(link, event))
       .onNodeRightClick((node, event) => handlers()?.onNodeRightClick?.(node, event))
       .onLinkRightClick((link, event) => handlers()?.onLinkRightClick?.(link, event))
-      .onNodeHover((node) => handlers()?.onNodeHover?.(node))
-      .onLinkHover((link) => handlers()?.onLinkHover?.(link))
+      .onNodeHover((node) => {
+        this.hoveredNode = node;
+        handlers()?.onNodeHover?.(node);
+      })
+      .onLinkHover((link) => {
+        this.hoveredLink = link;
+        handlers()?.onLinkHover?.(link);
+      })
       .onBackgroundClick((event) => handlers()?.onBackgroundClick?.(event))
       .onBackgroundRightClick((event) => handlers()?.onBackgroundRightClick?.(event))
       .onNodeDrag((node) => {
@@ -1061,9 +1155,18 @@ export class Graph3D {
         this.updateViewport();
         this.requestRender();
       })
-      .onNodeDragEnd((node) => {
+      .onNodeDragEnd((node, translate: Vec3) => {
         // The library has released the drag's own pin by now.
-        if (this.host.config.pinOnDragEnd) pin3D(node);
+        const node3D = node as Node3D;
+        const wasPinned = node3D.fx !== undefined && node3D.fy !== undefined && node3D.fz !== undefined;
+        if (wasPinned) {
+          node3D.x = (node3D.x ?? 0) + translate.x;
+          node3D.y = (node3D.y ?? 0) + translate.y;
+          node3D.z = (node3D.z ?? 0) + translate.z;
+          pin3D(node3D);
+        } else if (this.host.config.pinOnDragEnd) {
+          pin3D(node3D);
+        }
         if (this.workerActive && this.dragging === node) {
           this.dragging = undefined;
           this.startWorker(0);
@@ -1240,7 +1343,8 @@ export class Graph3D {
     this.syncNode(node, parts);
     if (previous) {
       this.nodeParts.delete(previous.node);
-      this.disposeNodeParts(previous.parts, parts);
+      if (this.pendingRemovedVisualCleanup) this.replacedNodeParts.push({ id: node.id, parts: previous.parts });
+      else this.disposeNodeParts(previous.parts, parts);
     }
     this.nodeParts.set(node, parts);
     this.nodePartsById.set(node.id, { node, parts });
@@ -1372,7 +1476,8 @@ export class Graph3D {
     if (previous) {
       this.linkParts.delete(previous.link);
       this.linkShafts.delete(previous.link);
-      this.disposeLinkParts(previous.parts, parts);
+      if (this.pendingRemovedVisualCleanup) this.replacedLinkParts.push({ id: link.id, parts: previous.parts });
+      else this.disposeLinkParts(previous.parts, parts);
     }
     this.linkParts.set(link, parts);
     this.linkPartsById.set(link.id, { link, parts });
@@ -1530,7 +1635,10 @@ export class Graph3D {
         material.color.set(this.linkColor(link));
         material.opacity = 0.9;
         material.transparent = true;
-        if (parts.label) parts.label.position.copy(midpoint);
+        if (parts.label) {
+          parts.label.position.copy(midpoint);
+          this.syncLinkLabel(link, parts.label);
+        }
         object.position.set(0, 0, 0);
         return true;
       }
@@ -1540,11 +1648,13 @@ export class Graph3D {
         if (update) {
           object.position.set(0, 0, 0);
           update(parts.customVisual, coordinates, link);
-          if (parts.label) parts.label.position.copy(midpoint);
         } else {
           object.position.set(0, 0, 0);
           parts.customVisual.position.copy(midpoint);
-          if (parts.label) parts.label.position.copy(midpoint);
+        }
+        if (parts.label) {
+          parts.label.position.copy(midpoint);
+          this.syncLinkLabel(link, parts.label);
         }
         return true;
       }
@@ -1636,6 +1746,16 @@ export class Graph3D {
     if (!this.pendingRemovedVisualCleanup) return;
     this.pendingRemovedVisualCleanup = false;
     this.cleanupRemovedVisuals();
+    this.disposePendingReplacedVisuals();
+  }
+
+  private disposePendingReplacedVisuals() {
+    for (const { id, parts } of this.replacedNodeParts.splice(0)) {
+      this.disposeNodeParts(parts, this.nodePartsById.get(id)?.parts);
+    }
+    for (const { id, parts } of this.replacedLinkParts.splice(0)) {
+      this.disposeLinkParts(parts, this.linkPartsById.get(id)?.parts);
+    }
   }
 
   private disposeNodeParts(parts: NodeParts, replacement?: NodeParts) {
@@ -1672,6 +1792,20 @@ function sameRenderState(left: ThreeDRenderState, right: ThreeDRenderState): boo
   return left.selected === right.selected && left.dimmed === right.dimmed && left.opacity === right.opacity;
 }
 
+function clearTrackballMotion(controls: TrackballControls) {
+  // TrackballControls has no public API for clearing its damping state.
+  const motion = controls as TrackballControlsMotionState;
+  motion.state = -1;
+  motion.keyState = -1;
+  motion._movePrev.copy(motion._moveCurr);
+  motion._zoomStart.copy(motion._zoomEnd);
+  motion._panStart.copy(motion._panEnd);
+  motion._lastAngle = 0;
+  motion._lastRollAngle = 0;
+  motion._touchRollAngle = 0;
+  motion._touchRollPointerIds = "";
+}
+
 function isThreeObject(value: unknown): value is THREE.Object3D {
   return !!value
     && typeof value === "object"
@@ -1703,18 +1837,7 @@ function updateDashedLine(
     : length * endParameter;
   if (pattern.length === 0) return false;
 
-  let smallestPatternLength = Infinity;
-  let smallestDashLength = Infinity;
-  pattern.forEach((value, index) => {
-    smallestPatternLength = Math.min(smallestPatternLength, value);
-    if (index % 2 === 0) smallestDashLength = Math.min(smallestDashLength, value);
-  });
-  let patternScale = Math.max(
-    1,
-    renderedLength / (smallestPatternLength * (maxLineSegments * 2 - 1)),
-    renderedLength / (smallestDashLength * (Math.floor(maxLineSegments / 2) - 1)),
-    curve ? renderedLength / (maxLineSegments - 2) : 1,
-  );
+  let patternScale = 1;
   let positions: number[] = [];
 
   while (true) {
