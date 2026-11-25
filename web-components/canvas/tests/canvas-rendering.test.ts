@@ -53,6 +53,19 @@ function createCtxSpy() {
   return spy as typeof spy & CanvasRenderingContext2D;
 }
 
+function trackStrokeStyles(ctx: CanvasRenderingContext2D) {
+  const styles: string[] = [];
+  let strokeStyle = ctx.strokeStyle;
+  Object.defineProperty(ctx, "strokeStyle", {
+    get: () => strokeStyle,
+    set: (value: string) => {
+      strokeStyle = value;
+      styles.push(value);
+    },
+  });
+  return styles;
+}
+
 beforeAll(() => {
   class ResizeObserverMock {
     observe() {}
@@ -552,7 +565,7 @@ describe("node rendering", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      twoD: { nodeStyle: { glowSpread: 5, glowColor: [255, 0, 0] } },
+      nodeStyle: { glowSpread: 5, glowColor: [255, 0, 0] },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
@@ -571,6 +584,89 @@ describe("node rendering", () => {
 
     // Glow renders extra arc calls (outer glow circle)
     expect(ctx.arc.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("draws a persistent blue halo only for selected nodes", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      isNodeSelected: (node) => node.id === 1,
+    });
+    canvas.setData({
+      nodes: [
+        { id: 1, labels: ["A"], visible: true, color: "#f00", data: {} },
+        { id: 2, labels: ["B"], visible: true, color: "#0f0", data: {} },
+      ],
+      links: [],
+    });
+
+    const instance = getLastInstance();
+    const [selectedNode, unselectedNode] = canvas.getGraphData().nodes;
+    selectedNode.expand = [false, new Date(0)];
+    unselectedNode.expand = [false, new Date(0)];
+    instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+
+    const selectedCtx = createCtxSpy();
+    const selectedStyles = trackStrokeStyles(selectedCtx);
+    instance.callbacks.nodeCanvasObject!(selectedNode, selectedCtx);
+
+    const unselectedCtx = createCtxSpy();
+    const unselectedStyles = trackStrokeStyles(unselectedCtx);
+    instance.callbacks.nodeCanvasObject!(unselectedNode, unselectedCtx);
+
+    expect(selectedStyles.some((style) => style.includes("59, 130, 246"))).toBe(true);
+    expect(unselectedStyles.some((style) => style.includes("59, 130, 246"))).toBe(false);
+  });
+
+  it("overlays the yellow expansion pulse on a selected node's blue halo", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ isNodeSelected: () => true });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
+      links: [],
+    });
+
+    const instance = getLastInstance();
+    const node = canvas.getGraphData().nodes[0];
+    node.expand = [true, new Date()];
+    instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+
+    const ctx = createCtxSpy();
+    const styles = trackStrokeStyles(ctx);
+    instance.callbacks.nodeCanvasObject!(node, ctx);
+
+    expect(styles.some((style) => style.includes("59, 130, 246"))).toBe(true);
+    expect(styles.some((style) => style.includes("255, 234, 167"))).toBe(true);
+  });
+
+  it("fades the expansion pulse over its configured duration", () => {
+    const startedAt = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(startedAt);
+    try {
+      const canvas = createCanvas();
+      canvas.setData({
+        nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
+        links: [],
+      });
+      const instance = getLastInstance();
+      const node = canvas.getGraphData().nodes[0];
+      node.expand = [true, new Date(startedAt)];
+      instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+
+      const maxPulseOpacity = () => {
+        const ctx = createCtxSpy();
+        const styles = trackStrokeStyles(ctx);
+        instance.callbacks.nodeCanvasObject!(node, ctx);
+        return Math.max(...styles
+          .filter((style) => style.includes("255, 234, 167"))
+          .map((style) => Number(style.slice(style.lastIndexOf(",") + 1, -1))));
+      };
+
+      const initialOpacity = maxPulseOpacity();
+      now.mockReturnValue(startedAt + 5000);
+      expect(maxPulseOpacity()).toBeLessThan(initialOpacity);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("applies stroke to selected nodes", () => {
@@ -626,6 +722,31 @@ describe("node rendering", () => {
 
     // Node outside bounds should not draw arc
     expect(ctx.arc).not.toHaveBeenCalled();
+  });
+
+  it("keeps a selected glow visible when the node body is just outside the culling bounds", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      width: 800,
+      height: 600,
+      isNodeSelected: () => true,
+      nodeStyle: { glowSpread: 30, captionPosition: "inside" },
+      twoD: { largeGraph: { lowZoomThreshold: 0, skipLabelsAtLowZoom: false } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", size: 10, data: {} }],
+      links: [],
+    });
+
+    const instance = getLastInstance();
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 440, y: 0, expand: [false, new Date(0)] });
+    instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+
+    const ctx = createCtxSpy();
+    instance.callbacks.nodeCanvasObject!(node, ctx);
+
+    expect(ctx.arc).toHaveBeenCalled();
   });
 
   it("resolves caption from captionsKeys with fuzzy match", () => {

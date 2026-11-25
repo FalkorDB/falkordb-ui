@@ -41,6 +41,7 @@ const SELECTED_LINK_WIDTH = 1.5;
  * into world units. Higher is sharper and costs more texture memory.
  */
 const LABEL_TEXTURE_HEIGHT = 64;
+const LINK_LABEL_BACKGROUND_PADDING = 0.3;
 
 const MAX_CACHED_LABELS = 256;
 const MAX_CACHED_SHAFT_MATERIALS = 256;
@@ -93,7 +94,10 @@ interface TrackballControlsMotionState extends TrackballControls {
 type NodeParts = {
   group: THREE.Group;
   body: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>;
-  outline: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  outline: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial | THREE.ShaderMaterial>;
+  outlineMaterial: THREE.MeshBasicMaterial;
+  selectionOutlineMaterial: THREE.ShaderMaterial | null;
+  expansionGlow: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   label: THREE.Sprite | null;
   labelText: string;
   labelRevision: number;
@@ -175,7 +179,7 @@ export class Graph3D {
 
   private readonly shaftMaterials = new Map<string, THREE.LineBasicMaterial | THREE.MeshLambertMaterial>();
 
-  private readonly sphereGeometry = new THREE.SphereGeometry(1, 12, 8);
+  private readonly sphereGeometry = new THREE.SphereGeometry(1, 24, 16);
 
   private readonly boxGeometry = new THREE.BoxGeometry(2, 2, 2);
 
@@ -318,10 +322,15 @@ export class Graph3D {
   }
 
   private syncNode(node: Node3D, parts: NodeParts) {
-    // Include the widest possible caption and square-node diagonal at the edge.
-    const height = Math.max(node.size * 0.6, 3);
-    const radius = node.size * SELECTED_OUTLINE_SCALE * Math.sqrt(3) +
-      height * (MAX_LABEL_TEXTURE_WIDTH / LABEL_TEXTURE_HEIGHT + 1);
+    const shapeRadius = node.shape === "square" ? Math.sqrt(3) : 1;
+    const glowRadius = (
+      node.size * SELECTED_OUTLINE_SCALE + this.host.config.nodeStyle.glowSpread * 1.25
+    ) * shapeRadius;
+    const captionRadius = parts.label
+      ? Math.hypot(parts.label.position.x, parts.label.position.y, parts.label.position.z) +
+        parts.label.scale.length() / 2
+      : 0;
+    const radius = Math.max(glowRadius, captionRadius);
     const nodeVisible = node.visible !== false;
     const inView = this.inView(node, radius);
     const factory = this.host.config.modeConfig.threeD.nodeObject;
@@ -366,10 +375,20 @@ export class Graph3D {
     if (largeGraph.enabled && largeGraph.nodeInstancing && this.host.data.nodes.length >= LARGE_GRAPH_NODE_THRESHOLD) {
       for (const node of this.host.data.nodes as Node3D[]) {
         const parts = this.nodeParts.get(node);
-        // Keep selected bodies with their shells to preserve contour depth.
-        if (!parts || node.visible === false || parts.customVisual || parts.outline.visible || parts.body.material.opacity !== 1) continue;
-        if (!this.inView(node, node.size * Math.sqrt(3))) continue;
-        items.push({ body: parts.body, x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0, size: node.size });
+        if (!parts || node.visible === false || parts.customVisual || parts.renderState.selected || parts.body.material.opacity !== 1) continue;
+        const shapeRadius = node.shape === "square" ? Math.sqrt(3) : 1;
+        const nodeRadius = (
+          node.size * SELECTED_OUTLINE_SCALE + this.host.config.nodeStyle.glowSpread * 1.25
+        ) * shapeRadius;
+        if (!this.inView(node, nodeRadius)) continue;
+        items.push({
+          body: parts.body,
+          outline: parts.outline,
+          x: node.x ?? 0,
+          y: node.y ?? 0,
+          z: node.z ?? 0,
+          size: node.size,
+        });
       }
     }
     this.instances.update(items);
@@ -980,7 +999,7 @@ export class Graph3D {
         && largeGraph.enabled
         && largeGraph.nodeInstancing
         && this.host.data.nodes.length >= LARGE_GRAPH_NODE_THRESHOLD
-        && !parts.outline.visible
+        && !parts.renderState.selected
         && parts.body.material.opacity === 1;
       const bodyInFrustum = body && (parts && instancedBody
         ? this.drawableBoundsInFrustum(frustum, parts.body)
@@ -1338,9 +1357,16 @@ export class Graph3D {
       : this.sphereGeometry;
 
     const body = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial());
-    const outline = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.BackSide }));
+    body.name = "node-body";
+    const outline = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      side: THREE.BackSide,
+      transparent: false,
+      opacity: 1,
+      depthWrite: false,
+    }));
+    outline.name = "node-outline";
     body.scale.setScalar(node.size);
-    outline.scale.setScalar(node.size * SELECTED_OUTLINE_SCALE);
+    outline.scale.setScalar(node.size * 1.05);
 
     const group = new THREE.Group();
     group.add(body, outline);
@@ -1349,6 +1375,9 @@ export class Graph3D {
       group,
       body,
       outline,
+      outlineMaterial: outline.material,
+      selectionOutlineMaterial: null,
+      expansionGlow: null,
       label: null,
       labelText: "",
       labelRevision: -1,
@@ -1412,52 +1441,190 @@ export class Graph3D {
       parts.color = node.color;
     }
 
-    outline.visible = state.selected;
+    outline.visible = true;
+    outline.scale.setScalar(state.selected
+      ? node.size * SELECTED_OUTLINE_SCALE + config.nodeStyle.glowSpread * 1.25
+      : node.size * 1.05);
     const borderColor = node.borderColor ?? config.foregroundColor;
     if (parts.borderColor !== borderColor) {
-      outline.material.color.set(borderColor);
+      parts.outlineMaterial.color.set(borderColor);
       parts.borderColor = borderColor;
     }
+    parts.outlineMaterial.opacity = opacity;
+    parts.outlineMaterial.transparent = opacity < 1;
+    if (state.selected) {
+      const selectionOutline = parts.selectionOutlineMaterial ??=
+        this.createSelectionOutlineMaterial();
+      const [red, green, blue] = config.nodeStyle.selectedGlowColor;
+      selectionOutline.uniforms.borderColor.value.copy(parts.outlineMaterial.color);
+      selectionOutline.uniforms.borderOpacity.value = opacity;
+      selectionOutline.uniforms.glowColor.value.setRGB(
+        red / 255, green / 255, blue / 255, THREE.SRGBColorSpace,
+      );
+      selectionOutline.uniforms.glowOpacity.value =
+        config.nodeStyle.glowMaxOpacity * 0.75 * opacity;
+      const outerRadius = node.size * SELECTED_OUTLINE_SCALE + config.nodeStyle.glowSpread * 1.25;
+      selectionOutline.uniforms.bodyFacingThreshold.value =
+        Math.sqrt(Math.max(0, 1 - (node.size / outerRadius) ** 2));
+      selectionOutline.uniforms.borderFacingThreshold.value =
+        Math.sqrt(Math.max(0, 1 - (node.size * SELECTED_OUTLINE_SCALE / outerRadius) ** 2));
+      selectionOutline.uniforms.squareShape.value = node.shape === "square" ? 1 : 0;
+      outline.material = selectionOutline;
+      outline.renderOrder = 2;
+    } else {
+      outline.material = parts.outlineMaterial;
+      outline.renderOrder = 0;
+    }
     if (parts.opacity !== opacity) {
-      body.material.opacity = outline.material.opacity = opacity;
-      body.material.transparent = outline.material.transparent = opacity < 1;
+      body.material.opacity = opacity;
+      body.material.transparent = opacity < 1;
       if (parts.label) parts.label.material.opacity = opacity;
       parts.opacity = opacity;
     }
 
-    if (parts.labelRevision === this.labelRevision) return;
-    parts.labelRevision = this.labelRevision;
-    const largeGraph = config.modeConfig.threeD.largeGraph;
-    const showCaption = !largeGraph.enabled || this.host.data.nodes.length <= largeGraph.maxLabeledElements;
-    const text = showCaption
-      ? getNodeDisplayText(node, config.captionsKeys, config.showPropertyKeyPrefix)
-      : "";
-    const labelStyle = JSON.stringify([node.size, config.nodeStyle.fontWeightUnselected, config.nodeStyle.fontFamily,
-      config.backgroundColor, config.interaction.contrastThreshold]);
-    if (text !== parts.labelText || labelStyle !== parts.labelStyle) {
-      if (parts.label) {
-        parts.label.removeFromParent();
-        // Textures can be shared by other labels; only this sprite's material
-        // belongs to the outgoing caption.
-        const texture = parts.label.material.map;
-        if (texture && !this.cachedTextures.has(texture)) texture.dispose();
-        parts.label.material.dispose();
-      }
-      parts.label = this.createTextSprite(text, {
-        height: Math.max(node.size * 0.6, 3),
-        font: `${config.nodeStyle.fontWeightUnselected} ${LABEL_TEXTURE_HEIGHT * 0.8}px ${config.nodeStyle.fontFamily}`,
-        color: getContrastTextColor(config.backgroundColor, config.interaction.contrastThreshold),
-      });
-      parts.labelText = text;
-      parts.labelStyle = labelStyle;
-      if (parts.label) {
-        // Under the node: inside it, the caption would be hidden by the surface.
-        parts.label.position.y = -(node.size * SELECTED_OUTLINE_SCALE + parts.label.scale.y / 2);
-        parts.group.add(parts.label);
-        parts.label.visible = this.details.nodes;
+    if (parts.labelRevision !== this.labelRevision) {
+      parts.labelRevision = this.labelRevision;
+      const largeGraph = config.modeConfig.threeD.largeGraph;
+      const showCaption = !largeGraph.enabled || this.host.data.nodes.length <= largeGraph.maxLabeledElements;
+      const text = showCaption
+        ? getNodeDisplayText(node, config.captionsKeys, config.showPropertyKeyPrefix)
+        : "";
+      const labelStyle = JSON.stringify([node.size, config.nodeStyle.fontWeightUnselected, config.nodeStyle.fontFamily,
+        config.backgroundColor, config.interaction.contrastThreshold]);
+      if (text !== parts.labelText || labelStyle !== parts.labelStyle) {
+        if (parts.label) {
+          parts.label.removeFromParent();
+          // Textures can be shared by other labels; only this sprite's material
+          // belongs to the outgoing caption.
+          const texture = parts.label.material.map;
+          if (texture && !this.cachedTextures.has(texture)) texture.dispose();
+          parts.label.material.dispose();
+        }
+        parts.label = this.createTextSprite(text, {
+          height: Math.max(node.size * 0.6, 3),
+          font: `${config.nodeStyle.fontWeightUnselected} ${LABEL_TEXTURE_HEIGHT * 0.8}px ${config.nodeStyle.fontFamily}`,
+          color: getContrastTextColor(config.backgroundColor, config.interaction.contrastThreshold),
+        });
+        parts.labelText = text;
+        parts.labelStyle = labelStyle;
+        if (parts.label) {
+          // Under the node: inside it, the caption would be hidden by the surface.
+          parts.label.position.y = -(node.size * SELECTED_OUTLINE_SCALE + parts.label.scale.y / 2);
+          parts.group.add(parts.label);
+          parts.label.visible = this.details.nodes;
+        }
       }
     }
     if (parts.label) parts.label.material.opacity = state.opacity;
+    this.updateExpansionGlow(node, parts);
+    if (parts.expansionGlow) {
+      parts.expansionGlow.removeFromParent();
+      parts.group.add(parts.expansionGlow);
+    }
+  }
+
+  private createNodeGlow(
+    geometry: THREE.BufferGeometry,
+    name: string,
+    renderOrder: number,
+  ): THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> {
+    const glow = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      side: THREE.BackSide,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    }));
+    glow.name = name;
+    glow.renderOrder = renderOrder;
+    return glow;
+  }
+
+  private createSelectionOutlineMaterial(): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        borderColor: { value: new THREE.Color() },
+        borderOpacity: { value: 1 },
+        glowColor: { value: new THREE.Color() },
+        glowOpacity: { value: 0 },
+        bodyFacingThreshold: { value: 0 },
+        borderFacingThreshold: { value: 0 },
+        squareShape: { value: 0 },
+      },
+      vertexShader: `
+        varying vec3 vOutlineNormal;
+        varying vec3 vOutlineViewPosition;
+
+        void main() {
+          vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+          vOutlineNormal = normalize(normalMatrix * normal);
+          vOutlineViewPosition = -viewPosition.xyz;
+          gl_Position = projectionMatrix * viewPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 borderColor;
+        uniform float borderOpacity;
+        uniform vec3 glowColor;
+        uniform float glowOpacity;
+        uniform float bodyFacingThreshold;
+        uniform float borderFacingThreshold;
+        uniform float squareShape;
+        varying vec3 vOutlineNormal;
+        varying vec3 vOutlineViewPosition;
+
+        void main() {
+          float facing = abs(dot(normalize(vOutlineNormal), normalize(vOutlineViewPosition)));
+          float bodyThreshold = mix(bodyFacingThreshold, 0.65, squareShape);
+          float borderThreshold = mix(borderFacingThreshold, 0.15, squareShape);
+          float borderInner = max(bodyThreshold, borderThreshold + 0.001);
+          float glowEdge = max(borderThreshold, 0.001);
+          float borderBand = smoothstep(borderThreshold, borderInner, facing);
+          float glowBand = squareShape > 0.5
+            ? 1.0 - smoothstep(0.0, bodyThreshold, facing)
+            : smoothstep(0.0, glowEdge, facing) *
+              (1.0 - smoothstep(glowEdge, borderInner, facing));
+          float alpha = max(borderOpacity * borderBand, glowOpacity * glowBand);
+          vec3 color = mix(glowColor, borderColor, borderBand);
+          gl_FragColor = vec4(color, alpha);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+      side: THREE.BackSide,
+      transparent: true,
+      depthWrite: false,
+    });
+  }
+
+  private disposeNodeGlow<T extends THREE.Material>(glow: THREE.Mesh<THREE.BufferGeometry, T>) {
+    glow.removeFromParent();
+    glow.material.dispose();
+  }
+
+  private updateExpansionGlow(node: GraphNode, parts: NodeParts) {
+    const { nodeStyle } = this.host.config;
+    const expandTime = node.expand?.[1];
+    const duration = nodeStyle.glowDuration;
+    const age = expandTime ? Math.max(0, Date.now() - expandTime.getTime()) : duration;
+    if (!expandTime || duration <= 0 || age >= duration) {
+      if (parts.expansionGlow) {
+        this.disposeNodeGlow(parts.expansionGlow);
+        parts.expansionGlow = null;
+      }
+      return;
+    }
+
+    const glow = parts.expansionGlow ??= this.createNodeGlow(parts.body.geometry, "expansion-node-glow", 3);
+    if (!glow.parent) parts.group.add(glow);
+    glow.onBeforeRender = () => this.updateExpansionGlow(node, parts);
+    const progress = age / duration;
+    const baseScale = node.size * (parts.renderState.selected ? SELECTED_OUTLINE_SCALE : 1.05);
+    const [red, green, blue] = nodeStyle.glowColor;
+    glow.material.color.setRGB(red / 255, green / 255, blue / 255, THREE.SRGBColorSpace);
+    glow.scale.setScalar(baseScale + nodeStyle.glowSpread * progress);
+    glow.material.opacity = nodeStyle.glowMaxOpacity * (1 - progress) * parts.renderState.opacity;
+    glow.visible = true;
+    this.requestRender(duration - age);
   }
 
   private createLinkObject(link: GraphLink): THREE.Object3D {
@@ -1519,21 +1686,27 @@ export class Graph3D {
       font: `${config.linkStyle.fontWeightUnselected} ${LABEL_TEXTURE_HEIGHT * 0.8}px ${config.linkStyle.fontFamily}`,
       color: getContrastTextColor(config.backgroundColor, config.interaction.contrastThreshold),
       background: config.backgroundColor,
+      backgroundPadding: LINK_LABEL_BACKGROUND_PADDING,
     });
     if (!sprite) return new THREE.Object3D();
 
     sprite.material.opacity = this.linkOpacity(link);
+    sprite.material.depthTest = false;
     sprite.visible = this.details.links;
+    sprite.renderOrder = 1;
     return sprite;
   }
 
   private createTextSprite(
     text: string,
-    options: { height: number; font: string; color: string; background?: string },
+    options: { height: number; font: string; color: string; background?: string; backgroundPadding?: number },
   ): THREE.Sprite | null {
     if (!text) return null;
 
-    const key = JSON.stringify([text, options.font, options.color, options.background]);
+    const padding = options.background && options.height > 0
+      ? (options.backgroundPadding ?? 0) * LABEL_TEXTURE_HEIGHT / options.height
+      : 0;
+    const key = JSON.stringify([text, options.font, options.color, options.background, padding]);
     let texture = this.labelTextures.get(key);
     if (texture) {
       this.labelTextures.delete(key);
@@ -1544,7 +1717,6 @@ export class Graph3D {
       const ctx = canvas.getContext("2d");
       if (!ctx) return null;
 
-      const padding = options.background ? LABEL_TEXTURE_HEIGHT * 0.2 : 0;
       ctx.font = options.font;
       canvas.width = Math.min(Math.max(Math.ceil(ctx.measureText(text).width + padding * 2), 1), MAX_LABEL_TEXTURE_WIDTH);
       canvas.height = LABEL_TEXTURE_HEIGHT;
@@ -1811,6 +1983,8 @@ export class Graph3D {
       parts.customVisual.removeFromParent();
     }
     this.releaseCustomVisual(parts.releaseCustomVisual);
+    parts.selectionOutlineMaterial?.dispose();
+    if (parts.expansionGlow) this.disposeNodeGlow(parts.expansionGlow);
     parts.group.removeFromParent();
   }
 

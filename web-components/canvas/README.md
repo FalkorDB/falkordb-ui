@@ -4,9 +4,9 @@
 
 A standalone web component for visualizing FalkorDB graphs using force-directed layouts.
 
-> **Canvas 0.5.0 includes breaking API changes.** Renderer-specific settings and
+> **Canvas 1.0.0 includes breaking API changes.** Renderer-specific settings and
 > operations are now grouped under `twoD` and `threeD`; legacy flat names are
-> removed. Follow the [0.5.0 migration guide](./MIGRATION-v0.5.0.md) before
+> removed. Follow the [1.0.0 migration guide](./MIGRATION-v1.0.0.md) before
 > upgrading.
 
 ## Features
@@ -222,11 +222,12 @@ layout settings, captions, and event handlers remain shared.
 | `twoD.nodeStyle.captionGap` | `1` | Non-negative, finite gap in world units from the node border to an outside caption in 2D. Invalid values throw `RangeError` |
 | `twoD.nodeStyle.strokeWidthSelected` | `1` | 2D border width when selected |
 | `twoD.nodeStyle.strokeWidthUnselected` | `0.5` | 2D border width when not selected |
-| `twoD.nodeStyle.glowDuration` | `10000` | 2D glow duration (ms) after expand/collapse |
-| `twoD.nodeStyle.glowSpread` | `12` | 2D glow spread radius (px) |
-| `twoD.nodeStyle.glowSteps` | `16` | 2D gradient rings in glow |
-| `twoD.nodeStyle.glowColor` | `[59, 130, 246]` | 2D glow color as `[r, g, b]` |
-| `twoD.nodeStyle.glowMaxOpacity` | `0.6` | 2D maximum glow opacity (0–1) |
+| `nodeStyle.glowDuration` | `10000` | Shared expansion/collapse pulse duration (ms) |
+| `nodeStyle.glowSpread` | `12` | Shared expansion/collapse pulse spread (2D px / 3D world units) |
+| `nodeStyle.glowSteps` | `16` | Gradient rings in the 2D pulse |
+| `nodeStyle.glowColor` | `[255, 234, 167]` | Shared expansion/collapse pulse color as `[r, g, b]` |
+| `nodeStyle.glowMaxOpacity` | `0.6` | Shared maximum pulse opacity (0–1) |
+| `nodeStyle.selectedGlowColor` | `[59, 130, 246]` | Persistent selected-node halo color as `[r, g, b]` |
 
 #### Shared `linkStyle` and `twoD.linkStyle`
 
@@ -469,7 +470,7 @@ instead. Owned 2D callbacks include `nodeCanvasObject`, `linkCanvasObject`,
 `onLinkHover`, `onBackgroundClick`, `onBackgroundRightClick`, `onNodeDrag`,
 `onNodeDragEnd`, `onEngineTick`, `onEngineStop`, and `onDagError`.
 
-See [the interactive 3D example](./examples/3d-parity.example.html) for switching, camera persistence, custom visuals, dashed links, and culling diagnostics. See [the repeatable 3D performance check](./examples/3d-performance.example.html) for seeded visible, partial, and offscreen views.
+See [the interactive example](./examples/falkordb-canvas.example.html) for switching between 2D and 3D and exploring the Canvas controls.
 
 ### Data Types
 
@@ -649,7 +650,7 @@ after the final Canvas release is not supported. Coordinate disposal with other
 owners; if a resource must remain usable independently, provide an independent
 copy of every needed resource. Resources hidden outside the returned object's
 traversed geometry/material graph remain caller-owned. See the
-[0.5.0 migration guide](./MIGRATION-v0.5.0.md#custom-threejs-visual-lifecycle)
+[1.0.0 migration guide](./MIGRATION-v1.0.0.md#custom-threejs-visual-lifecycle)
 for the full ownership contract and lifecycle tests.
 
 ## Utility Functions

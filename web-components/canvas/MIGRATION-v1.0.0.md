@@ -1,13 +1,16 @@
-# Migrate to Canvas 0.5.0
+# Migrate to Canvas 1.0.0
 
-Canvas 0.5.0 includes breaking API changes. It replaces the flat renderer API
+Canvas 1.0.0 includes breaking API changes. It replaces the flat renderer API
 with explicit mode groups and mode-specific namespaces. There are no deprecated
 aliases: update call sites and TypeScript imports before upgrading.
 
-## 0.5.0 release notes
+## 1.0.0 release notes
 
 - Shared configuration stays at the top level; 2D and 3D options move under
   `twoD` and `threeD`.
+- Glow settings are shared: move `twoD.nodeStyle.glow*` to `nodeStyle.glow*`.
+  The expansion glow default changes from blue to yellow (`[255, 234, 167]`),
+  and `nodeStyle.selectedGlowColor` adds a persistent blue selection halo.
 - 2D captions now default to `above` nodes. Set
   `twoD.nodeStyle.captionPosition: 'inside'` to keep the previous placement.
 - Mode-specific viewport, camera, graph-instance, and culling operations move
@@ -35,7 +38,7 @@ canvas.setConfig({
   linkLineDash: (link) => link.relationship === 'KNOWS' ? [8, 4] : [],
 });
 
-// After (Canvas 0.5.0)
+// After (Canvas 1.0.0)
 canvas.setConfig({
   nodeStyle: { fontFamily: 'SofiaSans' }, // shared by both renderers
   twoD: {
@@ -53,6 +56,10 @@ Move the following 2D-only settings into `twoD`:
 - Canvas-only fields of `nodeStyle`, `linkStyle`, and `interaction`
 - 2D viewport/low-zoom `largeGraph` settings, `linkLineDash`, and custom Canvas
   `node` / `link` renderers
+
+Glow settings are shared between renderers and belong in top-level `nodeStyle`.
+For example, move `twoD.nodeStyle.glowColor` to `nodeStyle.glowColor` and set
+`nodeStyle.selectedGlowColor` to customize the persistent selection halo.
 
 Shared font family/weight fields in `nodeStyle` and `linkStyle`, shared
 interaction settings, simulation, selection/dimming predicates, layout options,
@@ -76,7 +83,7 @@ defaults to `0`, preserving the native hairline; selected links remain thicker.
 
 ## Move mode operations into namespaces
 
-| Before | After (Canvas 0.5.0) |
+| Before | After (Canvas 1.0.0) |
 |---|---|
 | `canvas.getGraph()` | `canvas.twoD.getGraph()` or `canvas.threeD.getGraph()` |
 | `canvas.getViewport()` | `canvas.twoD.getViewport()` |
@@ -173,9 +180,9 @@ nodes or links from the force simulation.
 
 ## Release
 
-This breaking API ships in the combined Canvas 0.5.0 release. Wait until PRs
-#45 and #46 are merged, then create a GitHub Release from the combined release
-commit with the tag `canvas-v0.5.0`. The repository release workflow derives the
+This breaking API ships in the Canvas 1.0.0 major release. After PR #45 is
+merged, create a GitHub Release from the merged commit with the tag
+`canvas-v1.0.0`. The repository release workflow derives the
 package version from that tag and publishes `@falkordb/canvas`; do not manually
 edit the placeholder version in `package.json` or publish the package
 separately.

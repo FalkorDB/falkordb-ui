@@ -12,7 +12,7 @@ import {
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
-import { BoxGeometry, Group, InstancedMesh, Line, LineBasicMaterial, LineSegments, Matrix4, MOUSE, Mesh, MeshBasicMaterial, Object3D, QuadraticBezierCurve3, Raycaster, Sprite, Vector2, Vector3, type BufferGeometry, type MeshLambertMaterial, type SpriteMaterial } from "three";
+import { BoxGeometry, Group, InstancedMesh, Line, LineBasicMaterial, LineSegments, Matrix4, MOUSE, Mesh, MeshBasicMaterial, Object3D, QuadraticBezierCurve3, Raycaster, ShaderMaterial, SphereGeometry, Sprite, Vector2, Vector3, type BufferGeometry, type MeshLambertMaterial, type SpriteMaterial } from "three";
 import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
 import { LinkShaft } from "../src/link-shaft";
 import "../src/canvas";
@@ -1190,11 +1190,37 @@ describe("3D scene objects", () => {
     expect(linkLabelFactory()(link).scale.y).toBeCloseTo(2.4);
   });
 
+  it("renders link labels over their shafts", async () => {
+    const canvas = await canvasIn3D();
+    const label = linkLabelFactory()(canvas.getGraphData().links[0]);
+
+    expect(label.material.depthTest).toBe(false);
+    expect(label.renderOrder).toBeGreaterThan(0);
+  });
+
+  it("keeps 3D link-label background padding consistent across label sizes", async () => {
+    const canvas = await canvasIn3D();
+    const link = canvas.getGraphData().links[0];
+    const getPaddingInWorldUnits = (label: Sprite) => {
+      const texture = label.material.map!;
+      return ((texture.image.width - link.relationship.length * 10) / 2) * label.scale.y / texture.image.height;
+    };
+
+    expect(getPaddingInWorldUnits(linkLabelFactory()(link))).toBeCloseTo(0.3, 1);
+    expect(getPaddingInWorldUnits(linkLabelFactory()({ ...link, fontSize: 10 }))).toBeCloseTo(0.3, 1);
+
+    canvas.setConfig({ twoD: { linkStyle: { labelBackgroundPadding: 0.9 } } });
+
+    expect(getPaddingInWorldUnits(linkLabelFactory()(link))).toBeCloseTo(0.3, 1);
+  });
+
   /** Build `id`'s scene object through the factory the canvas hands the library. */
   function nodeObject(canvas: CanvasTestElement, id: number): Parts {
     const factory = last3D().props.get("nodeThreeObject") as (node: GraphNode) => Group;
     const group = factory(canvas.getGraphData().nodes.find((n) => n.id === id)!);
-    const [body, outline, caption] = group.children as [Mesh<BufferGeometry, MeshLambertMaterial>, Mesh, Sprite?];
+    const body = group.children.find(child => child.name === "node-body") as Mesh<BufferGeometry, MeshLambertMaterial>;
+    const outline = group.children.find(child => child.name === "node-outline") as Mesh;
+    const caption = group.children.find(child => child instanceof Sprite) as Sprite | undefined;
     return { body, outline, caption };
   }
 
@@ -1219,9 +1245,260 @@ describe("3D scene objects", () => {
     const { body, outline, caption } = nodeObject(canvas, 1);
 
     expect(`#${body.material.color.getHexString()}`).toBe("#ff0000");
-    expect(outline.visible).toBe(false);
+    expect(body.geometry).toBeInstanceOf(SphereGeometry);
+    expect((body.geometry as SphereGeometry).parameters).toMatchObject({
+      widthSegments: 24,
+      heightSegments: 16,
+    });
+    expect(outline.visible).toBe(true);
+    expect(outline.material.opacity).toBe(1);
+    expect(body.parent!.children.some(child =>
+      child.name === "selected-node-glow" || child.name === "expansion-node-glow",
+    )).toBe(false);
     expect(caption).toBeInstanceOf(Sprite);
     expect(caption!.position.y).toBeLessThan(0);
+  });
+
+  it("matches the 2D border opacity for unselected nodes and strengthens selected outlines", async () => {
+    const canvas = await canvasIn3D();
+    const node = canvas.getGraphData().nodes[0];
+    const unselected = nodeObject(canvas, 1).outline;
+
+    expect(unselected.visible).toBe(true);
+    expect(unselected.scale.x).toBeCloseTo(node.size * 1.05);
+    expect(unselected.material.opacity).toBe(1);
+
+    canvas.setConfig({ isNodeSelected: current => current.id === 1 });
+    const selected = nodeObject(canvas, 1).outline;
+    expect(selected.visible).toBe(true);
+    expect(selected.material).toBeInstanceOf(ShaderMaterial);
+    expect(selected.scale.x).toBeCloseTo(node.size * 1.2 + 12 * 1.25);
+    expect((selected.material as ShaderMaterial).uniforms.borderOpacity.value).toBe(1);
+    expect((selected.material as ShaderMaterial).uniforms.glowOpacity.value).toBeCloseTo(0.45);
+    expect((nodeObject(canvas, 1).body.parent as Group).children
+      .filter(child => child.name === "node-outline" || child.name === "selected-node-glow"))
+      .toHaveLength(1);
+  });
+
+  it("renders a persistent selection halo and an expansion pulse with dim opacity", async () => {
+    const canvas = await canvasIn3D();
+    const node = canvas.getGraphData().nodes[0];
+    node.expand = [true, new Date()];
+    canvas.setConfig({
+      isNodeSelected: () => true,
+      dimmed: true,
+      isNodeDimmed: () => true,
+      dimOpacity: 0.2,
+    });
+
+    const root = nodeObject(canvas, 1).body.parent as Group;
+    const outline = root.children.find(child => child.name === "node-outline") as Mesh;
+    const material = outline.material as ShaderMaterial;
+    const expansionGlow = root.children.find(child => child.name === "expansion-node-glow") as Mesh | undefined;
+
+    expect(root.children.filter(child => child.name === "node-outline" || child.name === "selected-node-glow"))
+      .toHaveLength(1);
+    expect(expansionGlow).toBeDefined();
+    Reflect.apply(expansionGlow!.onBeforeRender, expansionGlow, []);
+    expect(outline.visible).toBe(true);
+    expect(material.uniforms.glowColor.value.getHexString()).toBe("3b82f6");
+    expect(material.uniforms.glowOpacity.value).toBeCloseTo(0.09);
+    expect(outline.scale.x).toBeCloseTo(node.size * 1.2 + 12 * 1.25);
+    expect(material.transparent).toBe(true);
+    expect(material.depthWrite).toBe(false);
+    expect(expansionGlow!.visible).toBe(true);
+    expect((expansionGlow!.material as MeshBasicMaterial).color.getHexString()).toBe("ffeaa7");
+    expect((expansionGlow!.material as MeshBasicMaterial).opacity).toBeCloseTo(0.12, 2);
+    expect(expansionGlow!.renderOrder).toBeGreaterThan(outline.renderOrder);
+    expect(material.uniforms.borderOpacity.value).toBeCloseTo(0.2);
+  });
+
+  it("uses shared glow settings and preserves square node shape in 3D", async () => {
+    const canvas = await canvasIn3D();
+    const node = canvas.getGraphData().nodes[0];
+    node.shape = "square";
+    canvas.setConfig({
+      isNodeSelected: () => true,
+      nodeStyle: {
+        selectedGlowColor: [1, 2, 3],
+        glowMaxOpacity: 0.8,
+        glowSpread: 20,
+      },
+    });
+
+    const { outline } = nodeObject(canvas, 1);
+    const material = outline.material as ShaderMaterial;
+
+    expect(outline.geometry).toBeInstanceOf(BoxGeometry);
+    expect(material.uniforms.glowColor.value.getHexString()).toBe("010203");
+    expect(material.uniforms.glowOpacity.value).toBeCloseTo(0.6);
+    expect(outline.scale.x).toBeCloseTo(node.size * 1.2 + 20 * 1.25);
+  });
+
+  it("fades the 3D expansion pulse across its configured duration", async () => {
+    const canvas = await canvasIn3D();
+    const startedAt = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(startedAt);
+    try {
+      const node = canvas.getGraphData().nodes[0];
+      node.expand = [true, new Date(startedAt)];
+      const root = nodeObject(canvas, 1).body.parent as Group;
+      const pulse = root.children.find(child => child.name === "expansion-node-glow") as Mesh;
+      Reflect.apply(pulse.onBeforeRender, pulse, []);
+      const initialOpacity = (pulse.material as MeshBasicMaterial).opacity;
+
+      now.mockReturnValue(startedAt + 5000);
+      Reflect.apply(pulse.onBeforeRender, pulse, []);
+      expect((pulse.material as MeshBasicMaterial).opacity).toBeLessThan(initialOpacity);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("restores the selected halo and active expansion pulse across dimension switches", async () => {
+    const startedAt = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(startedAt + 5000);
+    try {
+      const canvas = createCanvas();
+      canvas.setConfig({ isNodeSelected: node => node.id === 1 });
+      canvas.setData({
+        nodes: [DATA.nodes[0]],
+        links: [],
+      });
+      const node = canvas.getGraphData().nodes[0];
+      node.expand = [true, new Date(startedAt)];
+
+      const expect2DGlows = () => {
+        const strokeStyles: string[] = [];
+        const context = new Proxy({
+          strokeStyle: "#000",
+          fillStyle: "#000",
+          globalAlpha: 1,
+          canvas: { width: 800, height: 600 },
+          measureText: () => ({
+            width: 10,
+            actualBoundingBoxAscent: 2,
+            actualBoundingBoxDescent: 1,
+            actualBoundingBoxLeft: 0,
+            actualBoundingBoxRight: 10,
+          }),
+          stroke(this: { strokeStyle: string }) {
+            strokeStyles.push(this.strokeStyle);
+          },
+        }, {
+          get(target, property, receiver) {
+            return property in target ? Reflect.get(target, property, receiver) : vi.fn();
+          },
+        }) as unknown as CanvasRenderingContext2D;
+        const graph = forceGraphMockState.lastInstance!;
+        graph.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+        graph.callbacks.nodeCanvasObject?.(node, context);
+
+        expect(strokeStyles.some(style => style.includes("59, 130, 246"))).toBe(true);
+        expect(strokeStyles.some(style => style.includes("255, 234, 167"))).toBe(true);
+      };
+
+      expect2DGlows();
+      await canvas.setDimension("3d");
+
+      const expect3DGlows = () => {
+        const { body, outline } = nodeObject(canvas, 1);
+        const root = body.parent as Group;
+        const material = outline.material as ShaderMaterial;
+        const expansionGlow = root.children.find(child => child.name === "expansion-node-glow") as Mesh;
+        Reflect.apply(expansionGlow.onBeforeRender, expansionGlow, []);
+
+        expect(outline.visible).toBe(true);
+        expect(material.uniforms.glowColor.value.getHexString()).toBe("3b82f6");
+        expect(root.children.filter(child => child.name === "node-outline" || child.name === "selected-node-glow"))
+          .toHaveLength(1);
+        expect(expansionGlow.visible).toBe(true);
+        expect((expansionGlow.material as MeshBasicMaterial).opacity).toBeCloseTo(0.3, 2);
+      };
+
+      expect3DGlows();
+      await canvas.setDimension("2d");
+      expect(canvas.getGraphData().nodes[0].expand).toEqual([true, new Date(startedAt)]);
+      expect2DGlows();
+      await canvas.setDimension("3d");
+      expect(canvas.getGraphData().nodes[0].expand).toEqual([true, new Date(startedAt)]);
+      expect3DGlows();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("disposes an active 3D expansion pulse when its node is removed", async () => {
+    const canvas = await canvasIn3D();
+    const node = canvas.getGraphData().nodes[0];
+    node.expand = [true, new Date()];
+    const { body } = nodeObject(canvas, 1);
+    const pulse = (body.parent as Group).children.find(
+      child => child.name === "expansion-node-glow",
+    ) as Mesh;
+    const disposed = vi.spyOn(pulse.material, "dispose");
+    const graph = last3D();
+
+    canvas.setGraphData({ nodes: [], links: [] });
+    finish3DLayout(graph);
+
+    expect(pulse.parent).toBeNull();
+    expect(disposed).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a selection halo visible when the node body is outside the frustum", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({
+      isNodeSelected: () => true,
+      nodeStyle: { glowSpread: 200 },
+      threeD: { largeGraph: { enabled: true, viewportPadding: 0, maxLabeledElements: 0 } },
+    });
+    const node = canvas.getGraphData().nodes[0];
+    const camera = last3D().cameraObject;
+    const halfWidth = camera.position.z * Math.tan(camera.fov * Math.PI / 360) * camera.aspect;
+    Object.assign(node, { x: halfWidth + 235, y: 0, z: 0 });
+
+    const root = nodeObject(canvas, 1).body.parent as Group;
+    root.position.set(node.x!, 0, node.z ?? 0);
+    last3D().scene().add(root);
+    const outline = root.children.find(child => child.name === "node-outline") as Mesh | undefined;
+
+    expect(root.visible).toBe(true);
+    expect(outline?.visible).toBe(true);
+    expect(outline?.material).toBeInstanceOf(ShaderMaterial);
+    expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(0);
+  });
+
+  it("uses the full square halo extent for large-graph culling", async () => {
+    const canvas = await canvasIn3D();
+    canvas.setConfig({
+      isNodeSelected: () => true,
+      nodeStyle: { glowSpread: 20 },
+      threeD: { largeGraph: { enabled: true, viewportPadding: 0 } },
+    });
+    canvas.threeD.setCameraState({
+      position: { x: 1000, y: 0, z: 1000 },
+      target: { x: 0, y: 0, z: 0 },
+      up: { x: 0, y: 1, z: 0 },
+    });
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { size: 10, shape: "square" });
+    const camera = last3D().cameraObject;
+    const halfWidth = Math.hypot(camera.position.x, camera.position.z) *
+      Math.tan(camera.fov * Math.PI / 360) * camera.aspect;
+    const right = Math.SQRT1_2;
+    Object.assign(node, {
+      x: (halfWidth + 60) * right,
+      y: 0,
+      z: -(halfWidth + 60) * right,
+    });
+
+    const root = nodeObject(canvas, 1).body.parent as Group;
+    root.position.set(node.x!, 0, node.z!);
+    last3D().scene().add(root);
+
+    expect(root.visible).toBe(true);
+    expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(0);
   });
 
   it("instances large opaque graphs while keeping outlines, transparent nodes and picking objects", async () => {
@@ -1240,9 +1517,12 @@ describe("3D scene objects", () => {
     const third = nodeObject(canvas, 2);
     last3D().callback("onEngineStop")();
     const batches = () => last3D().scene().children.filter((object): object is InstancedMesh => object instanceof InstancedMesh);
-    expect(batches()).toHaveLength(1);
+    const outlineBatches = () => batches().filter(batch => batch.material instanceof MeshBasicMaterial);
+    expect(batches()).toHaveLength(2);
     expect(batches()[0].count).toBe(3);
+    expect(outlineBatches()[0].count).toBe(3);
     expect(first.body.visible).toBe(false);
+    expect(first.outline.visible).toBe(false);
     expect(first.body.parent).not.toBeNull();
 
     nodes[0].x = 40;
@@ -1260,18 +1540,19 @@ describe("3D scene objects", () => {
     expect(second.body.visible).toBe(true);
     expect(second.body.material.opacity).toBe(0.2);
     expect(batches()[0].count).toBe(1);
+    expect(outlineBatches()[0].count).toBe(1);
 
     canvas.setConfig({ threeD: { largeGraph: { nodeInstancing: false } } });
     expect(batches()).toHaveLength(0);
     expect(first.body.visible).toBe(true);
     canvas.setConfig({ threeD: { largeGraph: { nodeInstancing: true } } });
-    expect(batches()).toHaveLength(1);
+    expect(batches()).toHaveLength(2);
     nodes[2].visible = false;
     last3D().controlsChanged();
     expect(batches()).toHaveLength(0);
     nodes[2].visible = true;
     last3D().controlsChanged();
-    expect(batches()).toHaveLength(1);
+    expect(batches()).toHaveLength(2);
     canvas.setConfig({ threeD: { largeGraph: { enabled: false } } });
     expect(batches()).toHaveLength(0);
     expect(first.body.visible).toBe(true);
@@ -1307,7 +1588,7 @@ describe("3D scene objects", () => {
     expect(borderColor).not.toHaveBeenCalled();
     expect(last3D().callsTo("linkColor")).toHaveLength(colors);
     expect(last3D().callsTo("linkDirectionalArrowColor")).toHaveLength(arrows);
-    expect(parts.outline.visible).toBe(false);
+    expect(parts.outline.visible).toBe(true);
   });
 
   it("defers offscreen captions and selection work until the camera reveals the node", async () => {
@@ -1535,7 +1816,7 @@ describe("3D scene objects", () => {
     expect(nodeObject(canvas, 1).body.geometry).toBeInstanceOf(BoxGeometry);
   });
 
-  it("shares low-poly geometry across different node sizes without sharing materials", async () => {
+  it("shares smooth sphere geometry across different node sizes without sharing materials", async () => {
     const canvas = createCanvas();
     canvas.setData({
       nodes: [{ ...DATA.nodes[0], size: 10 }, { ...DATA.nodes[1], size: 30 }],
@@ -1547,10 +1828,10 @@ describe("3D scene objects", () => {
 
     expect(first.body.geometry).toBe(second.body.geometry);
     expect(first.body.geometry).toBe(first.outline.geometry);
-    expect(first.body.geometry.getAttribute("position").count).toBe(117);
+    expect(first.body.geometry.getAttribute("position").count).toBe(425);
     expect(first.body.scale.x).toBe(10);
     expect(second.body.scale.x).toBe(30);
-    expect(first.outline.scale.x).toBe(12);
+    expect(first.outline.scale.x).toBe(10.5);
     expect(first.body.material).not.toBe(second.body.material);
   });
 
@@ -2294,7 +2575,7 @@ describe("3D custom renderers and links", () => {
     const node = canvas.getGraphData().nodes[0];
     const factory = graph.callback("nodeThreeObject") as (current: GraphNode) => Group;
     const root = factory(node);
-    const outline = root.children.find((child) => child instanceof Mesh && child.material instanceof MeshBasicMaterial);
+    const outline = root.children.find((child) => child.name === "node-outline") as Mesh | undefined;
     const label = root.children.find((child) => child instanceof Sprite);
     const nodeLabel = graph.callback("nodeLabel") as (current: GraphNode) => string;
     const raycaster = new Raycaster(new Vector3(0, 0, 10), new Vector3(0, 0, -1));
@@ -2304,6 +2585,7 @@ describe("3D custom renderers and links", () => {
 
     expect(root.children).toContain(customMesh);
     expect(outline?.visible).toBe(true);
+    expect(outline?.material).toBeInstanceOf(ShaderMaterial);
     expect(label).toBeInstanceOf(Sprite);
     expect(nodeLabel(node)).toBe("n1");
     expect(graph.props.get("nodeVisibility")).toBe("visible");

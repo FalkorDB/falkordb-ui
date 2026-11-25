@@ -87,12 +87,14 @@ function rejectFlatTwoDConfig(config: Partial<CanvasConfig>) {
     "textFillRatio",
     "strokeWidthSelected",
     "strokeWidthUnselected",
-    "glowDuration",
-    "glowSpread",
-    "glowSteps",
-    "glowColor",
-    "glowMaxOpacity",
   ]);
+  if (config.twoD?.nodeStyle) {
+    for (const option of ["glowDuration", "glowSpread", "glowSteps", "glowColor", "glowMaxOpacity"]) {
+      if (Object.prototype.hasOwnProperty.call(config.twoD.nodeStyle, option)) {
+        throw new TypeError(`Configuration option "twoD.nodeStyle.${option}" has moved to "nodeStyle.${option}".`);
+      }
+    }
+  }
   rejectMovedSubOptions("linkStyle", config.linkStyle, [
     "arrowWidthRatio",
     "arrowNotchRatio",
@@ -125,8 +127,9 @@ const DEFAULT_NODE_STYLE: Required<NodeStyleConfig & TwoDNodeStyleConfig> = {
   glowDuration: 10000,
   glowSpread: 12,
   glowSteps: 16,
-  glowColor: [59, 130, 246],
+  glowColor: [255, 234, 167],
   glowMaxOpacity: 0.6,
+  selectedGlowColor: [59, 130, 246],
 };
 
 const DEFAULT_LINK_STYLE: Required<LinkStyleConfig & TwoDLinkStyleConfig> = {
@@ -316,11 +319,6 @@ class FalkorDBCanvas extends HTMLElement {
           captionGap: DEFAULT_NODE_STYLE.captionGap,
           strokeWidthSelected: DEFAULT_NODE_STYLE.strokeWidthSelected,
           strokeWidthUnselected: DEFAULT_NODE_STYLE.strokeWidthUnselected,
-          glowDuration: DEFAULT_NODE_STYLE.glowDuration,
-          glowSpread: DEFAULT_NODE_STYLE.glowSpread,
-          glowSteps: DEFAULT_NODE_STYLE.glowSteps,
-          glowColor: DEFAULT_NODE_STYLE.glowColor,
-          glowMaxOpacity: DEFAULT_NODE_STYLE.glowMaxOpacity,
         },
         linkStyle: {
           arrowWidthRatio: DEFAULT_LINK_STYLE.arrowWidthRatio,
@@ -1354,7 +1352,7 @@ class FalkorDBCanvas extends HTMLElement {
     let visibleNodes = totalNodes;
     let visibleLinks = totalLinks;
     if (enabled && this.cullingBounds) {
-      visibleNodes = this.data.nodes.filter(n => this.isNodeInCullingBounds(n)).length;
+      visibleNodes = this.data.nodes.filter(n => this.isNodeInRenderBounds(n)).length;
       visibleLinks = this.data.links.filter(l => this.isLinkInCullingBounds(l)).length;
     }
     return {
@@ -1863,6 +1861,18 @@ class FalkorDBCanvas extends HTMLElement {
     return FalkorDBCanvas.overlaps(this.nodeExtent(node), this.cullingBounds);
   }
 
+  private isNodeInRenderBounds(node: GraphNode): boolean {
+    if (!this.cullingBounds) return true;
+    const extent = this.nodeExtent(node);
+    const spread = this.config.nodeStyle.glowSpread;
+    return FalkorDBCanvas.overlaps({
+      minX: extent.minX - spread,
+      maxX: extent.maxX + spread,
+      minY: extent.minY - spread,
+      maxY: extent.maxY + spread,
+    }, this.cullingBounds);
+  }
+
   private outsideCaptionLayout(node: GraphNode, position: Exclude<Required<TwoDNodeStyleConfig>['captionPosition'], 'inside'>) {
     const strokeWidth = this.config.isNodeSelected?.(node)
       ? this.config.nodeStyle.strokeWidthSelected
@@ -2057,7 +2067,7 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Viewport culling: skip nodes that are entirely outside the visible area.
-    if (this.config.largeGraph?.enabled && !this.isNodeInCullingBounds(node) && !this.isOutsideCaptionInCullingBounds(node, ctx)) return;
+    if (this.config.largeGraph?.enabled && !this.isNodeInRenderBounds(node) && !this.isOutsideCaptionInCullingBounds(node, ctx)) return;
 
     // Focus mode dimming: reduce opacity for nodes outside the focused set.
     const isDimmed = this.config.dimmed === true && (this.config.isNodeDimmed?.(node) ?? false);
@@ -2066,32 +2076,40 @@ class FalkorDBCanvas extends HTMLElement {
       ctx.globalAlpha = this.config.dimOpacity ?? 0.15;
     }
 
-    ctx.lineWidth = this.config.isNodeSelected?.(node) ? this.config.nodeStyle.strokeWidthSelected : this.config.nodeStyle.strokeWidthUnselected;
+    const isSelected = this.config.isNodeSelected?.(node) ?? false;
+    ctx.lineWidth = isSelected ? this.config.nodeStyle.strokeWidthSelected : this.config.nodeStyle.strokeWidthUnselected;
     ctx.strokeStyle = node.borderColor ?? this.config.foregroundColor;
     ctx.fillStyle = node.color;
 
     const radius = node.size + ctx.lineWidth / 2;
+    const glowRadius = this.config.nodeStyle.glowSpread;
+    const glowSteps = this.config.nodeStyle.glowSteps;
+    const drawGlow = (color: [number, number, number], maxOpacity: number) => {
+      ctx.save();
+      const [gr, gg, gb] = color;
+      for (let i = glowSteps; i >= 1; i--) {
+        const t = i / glowSteps;
+        const spread = t * glowRadius;
+        const alpha = maxOpacity * (1 - t) * (1 - t);
+        ctx.strokeStyle = `rgba(${gr}, ${gg}, ${gb}, ${alpha})`;
+        ctx.lineWidth = glowRadius / glowSteps;
+        this.traceNodeShape(node, ctx, radius + spread);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    if (isSelected) {
+      drawGlow(this.config.nodeStyle.selectedGlowColor, this.config.nodeStyle.glowMaxOpacity / 2);
+    }
 
     // Draw glow after expand/collapse state change
     const [, expandTime] = node.expand;
     const expandAge = Date.now() - expandTime.getTime();
     const glowDuration = this.config.nodeStyle.glowDuration;
-    if (expandAge < glowDuration) {
-      ctx.save();
-      const glowRadius = this.config.nodeStyle.glowSpread;
-      const steps = this.config.nodeStyle.glowSteps;
-      const [gr, gg, gb] = this.config.nodeStyle.glowColor;
-      const glowMaxOpacity = this.config.nodeStyle.glowMaxOpacity;
-      for (let i = steps; i >= 1; i--) {
-        const t = i / steps;
-        const spread = t * glowRadius;
-        const alpha = glowMaxOpacity * (1 - t) * (1 - t);
-        ctx.strokeStyle = `rgba(${gr}, ${gg}, ${gb}, ${alpha})`;
-        ctx.lineWidth = glowRadius / steps;
-        this.traceNodeShape(node, ctx, radius + spread);
-        ctx.stroke();
-      }
-      ctx.restore();
+    if (glowDuration > 0 && expandAge < glowDuration) {
+      const progress = Math.max(0, expandAge) / glowDuration;
+      drawGlow(this.config.nodeStyle.glowColor, this.config.nodeStyle.glowMaxOpacity * (1 - progress));
       this.scheduleGlowRender(node.id, glowDuration - expandAge);
     }
 
@@ -2114,7 +2132,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     // Draw text
     const nodeStyle = this.config.nodeStyle;
-    const nodeFontWeight = this.config.isNodeSelected?.(node) ? nodeStyle.fontWeightSelected : nodeStyle.fontWeightUnselected;
+    const nodeFontWeight = isSelected ? nodeStyle.fontWeightSelected : nodeStyle.fontWeightUnselected;
     ctx.textAlign = "center";
 
     if (nodeStyle.captionPosition !== "inside") {

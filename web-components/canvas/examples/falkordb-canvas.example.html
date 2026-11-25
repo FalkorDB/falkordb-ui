@@ -72,16 +72,38 @@
     }
 
     .toolbar {
-      padding: 8px 12px;
-      background: #fff;
-      border-bottom: 1px solid #e2e8f0;
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 5;
       display: flex;
-      gap: 6px;
+      gap: 8px;
       flex-wrap: wrap;
       align-items: center;
+      max-width: calc(100% - 24px);
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+      backdrop-filter: blur(8px);
     }
 
     .toolbar input[type="number"] { width: 60px; }
+
+    .canvas-control-group {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-right: 8px;
+      border-right: 1px solid #e2e8f0;
+    }
+
+    .canvas-control-group:last-child {
+      padding-right: 0;
+      border-right: 0;
+    }
 
     .graph-container {
       flex: 1;
@@ -89,6 +111,15 @@
       background: white;
       overflow: hidden;
       min-height: 0;
+    }
+
+    .sidebar-scope-label {
+      padding: 7px 2px 2px;
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .graph-container falkordb-canvas {
@@ -438,123 +469,63 @@
         </div>
       </details>
 
-      <!-- Layout -->
-      <details class="sidebar-section" open>
-        <summary>Layout</summary>
-        <div class="section-body">
-          <div class="field-row">
-            <div class="field">
-              <label for="layout-select">Mode</label>
-              <select id="layout-select" onchange="changeLayout(this.value)">
-                <option value="force">Force</option>
-                <option value="tree">Tree</option>
-                <option value="radial">Radial</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="direction-select">Direction</label>
-              <select id="direction-select" onchange="changeDirection(this.value)">
-                <option value="td">Top-Down</option>
-                <option value="bu">Bottom-Up</option>
-              </select>
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="level-distance">Level Dist</label>
-              <input id="level-distance" type="number" value="80" min="30" max="500" step="10" oninput="changeSpacing()">
-            </div>
-            <div class="field">
-              <label for="node-spacing">Node Space</label>
-              <input id="node-spacing" type="number" value="60" min="20" max="300" step="10" oninput="changeSpacing()">
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field-inline">
-              <input type="checkbox" id="animation-toggle" onchange="toggleAnimation()">
-              <label for="animation-toggle">Animation</label>
-            </div>
-            <div class="field-inline">
-              <input type="checkbox" id="pin-toggle" onchange="togglePin()">
-              <label for="pin-toggle">Pin on Drag</label>
-            </div>
-          </div>
-        </div>
-      </details>
+      <div class="sidebar-scope-label">Shared / Root</div>
 
-      <!-- Node Style -->
       <details class="sidebar-section">
         <summary>Node Style</summary>
         <div class="section-body">
           <div class="field-row">
             <div class="field">
-              <label>Font</label>
+              <label for="ns-fontFamily">Font</label>
               <input type="text" id="ns-fontFamily" value="SofiaSans" style="width: 90px;">
             </div>
             <div class="field">
-              <label for="ns-fontSize">Text Size</label>
-              <input type="number" id="ns-fontSize" value="6" min="0.5" step="0.5" required>
-            </div>
-            <div class="field">
-              <label>Fill Ratio</label>
-              <input type="number" id="ns-textFillRatio" value="0.85" min="0.1" max="1" step="0.05">
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label>Weight (normal)</label>
+              <label for="ns-fontWeightUnselected">Weight (normal)</label>
               <input type="number" id="ns-fontWeightUnselected" value="400" min="100" max="900" step="100">
             </div>
             <div class="field">
-              <label>Weight (selected)</label>
+              <label for="ns-fontWeightSelected">Weight (selected)</label>
               <input type="number" id="ns-fontWeightSelected" value="700" min="100" max="900" step="100">
             </div>
           </div>
           <div class="field-row">
             <div class="field">
-              <label>Stroke (normal)</label>
-              <input type="number" id="ns-strokeWidthUnselected" value="0.5" min="0" max="5" step="0.25">
+              <label for="ns-glowColor">Expansion Glow</label>
+              <input type="color" id="ns-glowColor" value="#ffeaa7">
             </div>
             <div class="field">
-              <label>Stroke (selected)</label>
-              <input type="number" id="ns-strokeWidthSelected" value="1" min="0" max="5" step="0.5">
+              <label for="ns-selectedGlowColor">Selected Halo</label>
+              <input type="color" id="ns-selectedGlowColor" value="#3b82f6">
             </div>
           </div>
           <div class="field-row">
             <div class="field">
-              <label>Glow Color</label>
-              <input type="color" id="ns-glowColor" value="#3b82f6">
-            </div>
-            <div class="field">
-              <label>Glow Spread</label>
+              <label for="ns-glowSpread">Glow Spread</label>
               <input type="number" id="ns-glowSpread" value="12" min="0" max="40" step="2">
             </div>
             <div class="field">
-              <label>Glow Steps</label>
+              <label for="ns-glowSteps">Glow Steps</label>
               <input type="number" id="ns-glowSteps" value="16" min="1" max="32" step="1">
             </div>
-          </div>
-          <div class="field-row">
             <div class="field">
-              <label>Glow Duration</label>
+              <label for="ns-glowDuration">Glow Duration</label>
               <input type="number" id="ns-glowDuration" value="10000" min="0" max="30000" step="1000">
             </div>
             <div class="field">
-              <label>Glow Opacity</label>
+              <label for="ns-glowMaxOpacity">Glow Opacity</label>
               <input type="number" id="ns-glowMaxOpacity" value="0.6" min="0" max="1" step="0.1">
             </div>
           </div>
-          <button class="btn-primary btn-sm" onclick="applyNodeStyle()">Apply Node Style</button>
+          <button class="btn-primary btn-sm" onclick="applyNodeStyle()">Apply Shared Node Style</button>
         </div>
       </details>
 
-      <!-- Link Style -->
       <details class="sidebar-section">
         <summary>Link Style</summary>
         <div class="section-body">
           <div class="field-row">
             <div class="field">
-              <label>Font</label>
+              <label for="ls-fontFamily">Font</label>
               <input type="text" id="ls-fontFamily" value="SofiaSans" style="width: 90px;">
             </div>
             <div class="field">
@@ -564,71 +535,42 @@
           </div>
           <div class="field-row">
             <div class="field">
-              <label>Weight (normal)</label>
+              <label for="ls-fontWeightUnselected">Weight (normal)</label>
               <input type="number" id="ls-fontWeightUnselected" value="400" min="100" max="900" step="100">
             </div>
             <div class="field">
-              <label>Weight (selected)</label>
+              <label for="ls-fontWeightSelected">Weight (selected)</label>
               <input type="number" id="ls-fontWeightSelected" value="700" min="100" max="900" step="100">
             </div>
           </div>
-          <div class="field-row">
-            <div class="field">
-              <label>Arrow Width</label>
-              <input type="number" id="ls-arrowWidthRatio" value="1.6" min="0.5" max="4" step="0.2">
-            </div>
-            <div class="field">
-              <label>Arrow Notch</label>
-              <input type="number" id="ls-arrowNotchRatio" value="0.2" min="0" max="1" step="0.1">
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label>Self-Loop Curve</label>
-              <input type="number" id="ls-selfLoopCurveFactor" value="11.67" min="1" max="30" step="0.5">
-            </div>
-            <div class="field">
-              <label>Parallel Curve</label>
-              <input type="number" id="ls-parallelEdgeCurveMultiplier" value="0.4" min="0.1" max="2" step="0.1">
-            </div>
-          </div>
-          <div class="field">
-            <label>Label BG Padding</label>
-            <input type="number" id="ls-labelBackgroundPadding" value="0.3" min="0" max="2" step="0.1">
-          </div>
-          <div class="field">
-            <label for="edge-gap">Edge Gap</label>
-            <input id="edge-gap" type="number" value="2" min="0" max="15" step="1" oninput="changeEdgeGap()">
-          </div>
-          <button class="btn-primary btn-sm" onclick="applyLinkStyle()">Apply Link Style</button>
+          <button class="btn-primary btn-sm" onclick="applyLinkStyle()">Apply Shared Link Style</button>
         </div>
       </details>
 
-      <!-- Simulation -->
       <details class="sidebar-section">
         <summary>Simulation</summary>
         <div class="section-body">
           <div class="field-row">
             <div class="field">
-              <label>Center Force</label>
+              <label for="sim-centerStrength">Center Force</label>
               <input type="number" id="sim-centerStrength" value="0.03" min="0" max="1" step="0.01">
             </div>
             <div class="field">
-              <label>Charge</label>
+              <label for="sim-chargeStrength">Charge</label>
               <input type="number" id="sim-chargeStrength" value="-400" min="-2000" max="0" step="50">
             </div>
           </div>
           <div class="field-row">
             <div class="field">
-              <label>Velocity Decay</label>
+              <label for="sim-velocityDecay">Velocity Decay</label>
               <input type="number" id="sim-velocityDecay" value="0.4" min="0" max="1" step="0.05">
             </div>
             <div class="field">
-              <label>Alpha Min</label>
+              <label for="sim-alphaMin">Alpha Min</label>
               <input type="number" id="sim-alphaMin" value="0.05" min="0.001" max="0.5" step="0.01">
             </div>
             <div class="field">
-              <label>Warmup</label>
+              <label for="sim-warmupTicks">Warmup</label>
               <input type="number" id="sim-warmupTicks" value="300" min="0" max="1000" step="50">
             </div>
           </div>
@@ -636,53 +578,143 @@
         </div>
       </details>
 
-      <!-- Interaction -->
       <details class="sidebar-section">
         <summary>Interaction</summary>
         <div class="section-body">
           <div class="field-row">
             <div class="field">
-              <label>Tooltip Size</label>
+              <label for="int-tooltipFontSize">Tooltip Size</label>
               <input type="number" id="int-tooltipFontSize" value="12" min="8" max="24" step="1">
             </div>
             <div class="field">
-              <label>Tooltip Padding</label>
+              <label for="int-tooltipPadding">Tooltip Padding</label>
               <input type="text" id="int-tooltipPadding" value="4px 8px" style="width: 70px;">
             </div>
             <div class="field">
-              <label>Border Radius</label>
+              <label for="int-tooltipBorderRadius">Border Radius</label>
               <input type="text" id="int-tooltipBorderRadius" value="4px" style="width: 50px;">
             </div>
           </div>
           <div class="field-row">
             <div class="field">
-              <label>Z-Index</label>
+              <label for="int-tooltipZIndex">Tooltip Z-Index</label>
               <input type="number" id="int-tooltipZIndex" value="1000" min="1" max="10000" step="100">
             </div>
             <div class="field">
-              <label>Fit Padding</label>
+              <label for="int-zoomToFitPadding">Fit Padding</label>
               <input type="number" id="int-zoomToFitPadding" value="0.1" min="0" max="1" step="0.05">
             </div>
             <div class="field">
-              <label>Fit Delay</label>
-              <input type="number" id="int-zoomToFitDelay" value="50" min="0" max="500" step="10">
+              <label for="int-contrastThreshold">Contrast</label>
+              <input type="number" id="int-contrastThreshold" value="0.5" min="0" max="1" step="0.05">
+            </div>
+          </div>
+          <button class="btn-primary btn-sm" onclick="applyInteraction()">Apply Shared Interaction</button>
+        </div>
+      </details>
+
+      <details class="sidebar-section">
+        <summary>Colors & Display</summary>
+        <div class="section-body">
+          <div class="field-row">
+            <div class="field">
+              <label for="cfg-backgroundColor">Background</label>
+              <input type="color" id="cfg-backgroundColor" value="#ffffff">
+            </div>
+            <div class="field">
+              <label for="cfg-foregroundColor">Foreground</label>
+              <input type="color" id="cfg-foregroundColor" value="#1a1a1a">
+            </div>
+            <div class="field-inline">
+              <input type="checkbox" id="cfg-showPropertyKeyPrefix">
+              <label for="cfg-showPropertyKeyPrefix">Show Key Prefix</label>
+            </div>
+          </div>
+          <button class="btn-primary btn-sm" onclick="applyColors()">Apply Colors</button>
+        </div>
+      </details>
+
+      <div class="sidebar-scope-label">2D</div>
+
+      <details class="sidebar-section">
+        <summary>Node Style</summary>
+        <div class="section-body">
+          <div class="field-row">
+            <div class="field">
+              <label for="ns-fontSize">Text Size</label>
+              <input type="number" id="ns-fontSize" value="6" min="0.5" step="0.5" required>
+            </div>
+            <div class="field">
+              <label for="ns-textFillRatio">Fill Ratio</label>
+              <input type="number" id="ns-textFillRatio" value="0.85" min="0.1" max="1" step="0.05">
+            </div>
+            <div class="field">
+              <label for="ns-strokeWidthUnselected">Stroke (normal)</label>
+              <input type="number" id="ns-strokeWidthUnselected" value="0.5" min="0" max="5" step="0.25">
+            </div>
+            <div class="field">
+              <label for="ns-strokeWidthSelected">Stroke (selected)</label>
+              <input type="number" id="ns-strokeWidthSelected" value="1" min="0" max="5" step="0.5">
+            </div>
+          </div>
+          <button class="btn-primary btn-sm" onclick="applyTwoDNodeStyle()">Apply 2D Node Style</button>
+        </div>
+      </details>
+
+      <details class="sidebar-section">
+        <summary>Link Style</summary>
+        <div class="section-body">
+          <div class="field-row">
+            <div class="field">
+              <label for="ls-arrowWidthRatio">Arrow Width</label>
+              <input type="number" id="ls-arrowWidthRatio" value="1.6" min="0.5" max="4" step="0.2">
+            </div>
+            <div class="field">
+              <label for="ls-arrowNotchRatio">Arrow Notch</label>
+              <input type="number" id="ls-arrowNotchRatio" value="0.2" min="0" max="1" step="0.1">
             </div>
           </div>
           <div class="field-row">
             <div class="field">
-              <label>Link Hit Width</label>
-              <input type="number" id="int-linkHitWidth" value="10" min="1" max="30" step="1">
+              <label for="ls-selfLoopCurveFactor">Self-Loop Curve</label>
+              <input type="number" id="ls-selfLoopCurveFactor" value="11.67" min="1" max="30" step="0.5">
             </div>
             <div class="field">
-              <label>Contrast</label>
-              <input type="number" id="int-contrastThreshold" value="0.5" min="0" max="1" step="0.05">
+              <label for="ls-parallelEdgeCurveMultiplier">Parallel Curve</label>
+              <input type="number" id="ls-parallelEdgeCurveMultiplier" value="0.4" min="0.1" max="2" step="0.1">
             </div>
           </div>
-          <button class="btn-primary btn-sm" onclick="applyInteraction()">Apply Interaction</button>
+          <div class="field-row">
+            <div class="field">
+              <label for="ls-labelBackgroundPadding">Label BG Padding</label>
+              <input type="number" id="ls-labelBackgroundPadding" value="0.3" min="0" max="2" step="0.1">
+            </div>
+            <div class="field">
+              <label for="edge-gap">Edge Gap</label>
+              <input id="edge-gap" type="number" value="2" min="0" max="15" step="1" oninput="changeEdgeGap()">
+            </div>
+          </div>
+          <button class="btn-primary btn-sm" onclick="applyTwoDLinkStyle()">Apply 2D Link Style</button>
         </div>
       </details>
 
-      <!-- Large Graph -->
+      <details class="sidebar-section">
+        <summary>Interaction</summary>
+        <div class="section-body">
+          <div class="field-row">
+            <div class="field">
+              <label for="int-zoomToFitDelay">Fit Delay</label>
+              <input type="number" id="int-zoomToFitDelay" value="50" min="0" max="500" step="10">
+            </div>
+            <div class="field">
+              <label for="int-linkHitWidth">Link Hit Width</label>
+              <input type="number" id="int-linkHitWidth" value="10" min="1" max="30" step="1">
+            </div>
+          </div>
+          <button class="btn-primary btn-sm" onclick="applyTwoDInteraction()">Apply 2D Interaction</button>
+        </div>
+      </details>
+
       <details class="sidebar-section">
         <summary>Large Graph</summary>
         <div class="section-body">
@@ -694,11 +726,11 @@
           </div>
           <div class="field-row">
             <div class="field">
-              <label>Viewport Pad</label>
+              <label for="lg-viewportPadding">Viewport Pad</label>
               <input type="number" id="lg-viewportPadding" value="0" min="0" max="500" step="10">
             </div>
             <div class="field">
-              <label>Low Zoom Threshold</label>
+              <label for="lg-lowZoomThreshold">Low Zoom Threshold</label>
               <input type="number" id="lg-lowZoomThreshold" value="0.5" min="0.05" max="1" step="0.05">
             </div>
           </div>
@@ -716,7 +748,7 @@
               <label for="lg-skipLinkLabelsAtLowZoom">Skip Link Labels</label>
             </div>
           </div>
-          <button class="btn-primary btn-sm" onclick="applyLargeGraph()">Apply Large Graph</button>
+          <button class="btn-primary btn-sm" onclick="applyLargeGraph()">Apply 2D Large Graph</button>
           <div id="lg-debug" class="debug-panel">
             <div>Zoom: <span id="lg-debug-zoom">-</span> | Culling: <span id="lg-debug-culling-zoom">-</span></div>
             <div>Low-zoom: <span id="lg-debug-low-zoom">-</span> (≤ <span id="lg-debug-threshold">-</span>)</div>
@@ -725,25 +757,57 @@
         </div>
       </details>
 
-      <!-- Colors & Display -->
+      <div class="sidebar-scope-label">3D</div>
+
       <details class="sidebar-section">
-        <summary>Colors & Display</summary>
+        <summary>Link Style & Large Graph</summary>
         <div class="section-body">
           <div class="field-row">
             <div class="field">
-              <label>Background</label>
-              <input type="color" id="cfg-backgroundColor" value="#ffffff">
+              <label for="td-linkWidth">Unselected Link Width</label>
+              <input type="number" id="td-linkWidth" value="0" min="0" max="5" step="0.1">
             </div>
             <div class="field">
-              <label>Foreground</label>
-              <input type="color" id="cfg-foregroundColor" value="#1a1a1a">
+              <label for="td-maxLabeledElements">Max Labeled Elements</label>
+              <input type="number" id="td-maxLabeledElements" value="1000" min="0" max="10000" step="100">
             </div>
-            <div class="field-inline">
-              <input type="checkbox" id="cfg-showPropertyKeyPrefix">
-              <label for="cfg-showPropertyKeyPrefix">Show Key Prefix</label>
+            <div class="field">
+              <label for="td-viewportPadding">Viewport Pad</label>
+              <input type="number" id="td-viewportPadding" value="0" min="0" max="500" step="10">
+            </div>
+            <div class="field">
+              <label for="td-lowZoomThreshold">Low Zoom Threshold</label>
+              <input type="number" id="td-lowZoomThreshold" value="1" min="0.05" max="5" step="0.05">
             </div>
           </div>
-          <button class="btn-primary btn-sm" onclick="applyColors()">Apply Colors</button>
+          <div class="field-row">
+            <div class="field-inline">
+              <input type="checkbox" checked id="td-enabled">
+              <label for="td-enabled">Enable 3D Optimizations</label>
+            </div>
+            <div class="field-inline">
+              <input type="checkbox" checked id="td-nodeInstancing">
+              <label for="td-nodeInstancing">Node Instancing</label>
+            </div>
+            <div class="field-inline">
+              <input type="checkbox" checked id="td-skipLabelsAtLowZoom">
+              <label for="td-skipLabelsAtLowZoom">Skip Labels</label>
+            </div>
+            <div class="field-inline">
+              <input type="checkbox" checked id="td-skipArrowsAtLowZoom">
+              <label for="td-skipArrowsAtLowZoom">Skip Arrows</label>
+            </div>
+            <div class="field-inline">
+              <input type="checkbox" checked id="td-skipLinkLabelsAtLowZoom">
+              <label for="td-skipLinkLabelsAtLowZoom">Skip Link Labels</label>
+            </div>
+          </div>
+          <button class="btn-primary btn-sm" onclick="applyThreeDConfig()">Apply 3D Config</button>
+          <div id="three-d-debug" class="debug-panel">
+            <div>Visible bodies: <span id="td-debug-bodies">-</span></div>
+            <div>Visible links: <span id="td-debug-links">-</span> | Labels: <span id="td-debug-labels">-</span></div>
+            <div>Caption limit: <span id="td-debug-caption-limit">-</span></div>
+          </div>
         </div>
       </details>
 
@@ -752,37 +816,82 @@
     <!-- ===== Main Area ===== -->
     <main class="main-area">
 
-      <!-- Toolbar -->
-      <div class="toolbar">
-        <span class="group-label">View</span>
-        <button class="btn-secondary btn-sm" onclick="zoomToFit()">Fit</button>
-        <button class="btn-secondary btn-sm" onclick="zoomIn()">+</button>
-        <button class="btn-secondary btn-sm" onclick="zoomOut()">−</button>
-        <button class="btn-secondary btn-sm" onclick="resetViewport()">Reset</button>
-        <div class="field-inline">
-          <input type="checkbox" id="caption-position-toggle" checked>
-          <label for="caption-position-toggle">Captions outside nodes (2D)</label>
-        </div>
-        <div class="field-inline">
-          <label for="caption-side">Caption side</label>
-          <select id="caption-side">
-            <option value="below">Below</option>
-            <option value="above" selected>Above</option>
-            <option value="left">Left</option>
-            <option value="right">Right</option>
-          </select>
-        </div>
-        <div class="field-inline">
-          <label for="caption-gap">Caption gap</label>
-          <input type="number" id="caption-gap" value="1" min="0" step="0.5" required>
-        </div>
-        <div class="separator" id="delete-separator" style="display:none"></div>
-        <button class="btn-warning btn-sm" id="btn-delete-node" style="display:none" onclick="deleteSelectedNode()">Delete Node</button>
-        <button class="btn-warning btn-sm" id="btn-delete-link" style="display:none" onclick="deleteSelectedLink()">Delete Link</button>
-      </div>
-
-      <!-- Graph Canvas -->
       <div class="graph-container">
+        <div class="toolbar canvas-controls" role="toolbar" aria-label="Graph controls">
+          <div class="canvas-control-group">
+            <span class="group-label">View</span>
+            <div class="field-inline">
+              <label for="dimension-select">Dimension</label>
+              <select id="dimension-select" onchange="changeDimension(this.value)">
+                <option value="2d" selected>2D</option>
+                <option value="3d">3D</option>
+              </select>
+            </div>
+            <button class="btn-secondary btn-sm" onclick="zoomToFit()">Fit</button>
+            <button class="btn-secondary btn-sm" aria-label="Zoom in" onclick="zoomIn()">+</button>
+            <button class="btn-secondary btn-sm" aria-label="Zoom out" onclick="zoomOut()">−</button>
+            <button class="btn-secondary btn-sm" onclick="resetViewport()">Reset</button>
+          </div>
+          <div class="canvas-control-group">
+            <span class="group-label">Layout</span>
+            <div class="field-inline">
+              <label for="layout-select">Mode</label>
+              <select id="layout-select" onchange="changeLayout(this.value)">
+                <option value="force">Force</option>
+                <option value="tree">Tree</option>
+                <option value="radial">Radial</option>
+              </select>
+            </div>
+            <div class="field-inline">
+              <label for="direction-select">Direction</label>
+              <select id="direction-select" onchange="changeDirection(this.value)">
+                <option value="td">Top-Down</option>
+                <option value="bu">Bottom-Up</option>
+              </select>
+            </div>
+            <label class="field-inline" for="level-distance">Level
+              <input id="level-distance" type="number" value="80" min="30" max="500" step="10" oninput="changeSpacing()">
+            </label>
+            <label class="field-inline" for="node-spacing">Spacing
+              <input id="node-spacing" type="number" value="60" min="20" max="300" step="10" oninput="changeSpacing()">
+            </label>
+          </div>
+          <div class="canvas-control-group">
+            <span class="group-label">Behavior</span>
+            <label class="field-inline" for="animation-toggle">
+              <input type="checkbox" id="animation-toggle" onchange="toggleAnimation()">
+              Animation
+            </label>
+            <label class="field-inline" for="pin-toggle">
+              <input type="checkbox" id="pin-toggle" onchange="togglePin()">
+              Pin on drag
+            </label>
+          </div>
+          <div class="canvas-control-group">
+            <span class="group-label">Captions</span>
+            <label class="field-inline" for="caption-position-toggle">
+              <input type="checkbox" id="caption-position-toggle" checked>
+              Outside (2D)
+            </label>
+            <div class="field-inline">
+              <label for="caption-side">Side</label>
+              <select id="caption-side">
+                <option value="below">Below</option>
+                <option value="above" selected>Above</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+            <label class="field-inline" for="caption-gap">Gap
+              <input type="number" id="caption-gap" value="1" min="0" step="0.5" required>
+            </label>
+          </div>
+          <div class="canvas-control-group" id="selection-controls">
+            <span class="separator" id="delete-separator" style="display:none"></span>
+            <button class="btn-warning btn-sm" id="btn-delete-node" style="display:none" onclick="deleteSelectedNode()">Delete Node</button>
+            <button class="btn-warning btn-sm" id="btn-delete-link" style="display:none" onclick="deleteSelectedLink()">Delete Link</button>
+          </div>
+        </div>
         <falkordb-canvas id="graph"></falkordb-canvas>
       </div>
 
@@ -813,7 +922,8 @@
         <tr><td><code>getData()</code></td><td>Get current data (source format)</td></tr>
         <tr><td><code>getGraphData()</code></td><td>Get internal graph data (with x/y/size)</td></tr>
         <tr><td><code>refresh()</code></td><td>Repaint after mutating node/link properties</td></tr>
-        <tr><td><code>zoomToFit(padding?, filter?)</code></td><td>Fit all/filtered nodes in view</td></tr>
+        <tr><td><code>setDimension('2d' | '3d')</code></td><td>Switch renderer while retaining both mode configurations</td></tr>
+        <tr><td><code>zoomToFit(zoomMultiplier?, filter?)</code></td><td>Fit all/filtered nodes in view</td></tr>
         <tr><td><code>zoom(level)</code></td><td>Set zoom level</td></tr>
         <tr><td><code>getZoom()</code></td><td>Get current zoom level</td></tr>
         <tr><td><code>twoD.setViewport({zoom, centerX, centerY})</code></td><td>Set the 2D viewport position and zoom</td></tr>
@@ -827,6 +937,9 @@
         <tr><td><code>setForegroundColor(color)</code></td><td>Set stroke color</td></tr>
         <tr><td><code>twoD.getGraph()</code></td><td>Access the 2D force-graph instance</td></tr>
         <tr><td><code>twoD.getCullingStats()</code></td><td>Get 2D viewport culling stats</td></tr>
+        <tr><td><code>threeD.getGraph()</code></td><td>Access the 3D force-graph instance</td></tr>
+        <tr><td><code>threeD.getCameraState() / setCameraState(state)</code></td><td>Save or restore the 3D camera</td></tr>
+        <tr><td><code>threeD.getCullingStats()</code></td><td>Get 3D frustum visibility stats</td></tr>
         <tr><td><code>setDebug(enabled)</code></td><td>Enable/disable console debug logging</td></tr>
       </table>
 
@@ -836,17 +949,18 @@
         <tr><td><code>fontFamily</code></td><td>string</td><td>'SofiaSans'</td><td>Shared node-label font</td></tr>
         <tr><td><code>fontWeightUnselected</code></td><td>number</td><td>400</td><td>Shared unselected font weight</td></tr>
         <tr><td><code>fontWeightSelected</code></td><td>number</td><td>700</td><td>Shared selected font weight</td></tr>
+        <tr><td><code>nodeStyle.glowDuration</code></td><td>number</td><td>10000</td><td>Expansion pulse duration (ms), shared across renderers</td></tr>
+        <tr><td><code>nodeStyle.glowSpread</code></td><td>number</td><td>12</td><td>Glow radius, shared across renderers</td></tr>
+        <tr><td><code>nodeStyle.glowSteps</code></td><td>number</td><td>16</td><td>Number of gradient rings in the 2D glow</td></tr>
+        <tr><td><code>nodeStyle.glowColor</code></td><td>[r,g,b]</td><td>[255,234,167]</td><td>Expansion pulse RGB color</td></tr>
+        <tr><td><code>nodeStyle.selectedGlowColor</code></td><td>[r,g,b]</td><td>[59,130,246]</td><td>Persistent selected-node halo RGB color</td></tr>
+        <tr><td><code>nodeStyle.glowMaxOpacity</code></td><td>number</td><td>0.6</td><td>Maximum glow opacity (0-1)</td></tr>
         <tr><td><code>twoD.nodeStyle.fontSize</code></td><td>number</td><td>6</td><td>2D base font size (world units)</td></tr>
         <tr><td><code>twoD.nodeStyle.textFillRatio</code></td><td>number</td><td>0.85</td><td>Fit inside captions on one line within this fraction of the node radius; set to 0 for fixed-size wrapping.</td></tr>
         <tr><td><code>twoD.nodeStyle.captionPosition</code></td><td>'inside' | 'above' | 'below' | 'left' | 'right'</td><td>'above'</td><td>2D caption placement. Outside captions use <code>fontSize</code> and the canvas foreground color.</td></tr>
         <tr><td><code>twoD.nodeStyle.captionGap</code></td><td>number</td><td>1</td><td>Non-negative gap between the node border and outside caption, in world units.</td></tr>
         <tr><td><code>twoD.nodeStyle.strokeWidthSelected</code></td><td>number</td><td>1</td><td>2D selected border width</td></tr>
         <tr><td><code>twoD.nodeStyle.strokeWidthUnselected</code></td><td>number</td><td>0.5</td><td>2D normal border width</td></tr>
-        <tr><td><code>twoD.nodeStyle.glowDuration</code></td><td>number</td><td>10000</td><td>2D glow duration in ms</td></tr>
-        <tr><td><code>twoD.nodeStyle.glowSpread</code></td><td>number</td><td>12</td><td>2D glow radius in px</td></tr>
-        <tr><td><code>twoD.nodeStyle.glowSteps</code></td><td>number</td><td>16</td><td>2D gradient rings in glow</td></tr>
-        <tr><td><code>twoD.nodeStyle.glowColor</code></td><td>[r,g,b]</td><td>[59,130,246]</td><td>2D glow RGB color</td></tr>
-        <tr><td><code>twoD.nodeStyle.glowMaxOpacity</code></td><td>number</td><td>0.6</td><td>2D max glow opacity (0-1)</td></tr>
       </table>
 
       <h4>Shared <code>linkStyle</code> and <code>twoD.linkStyle</code></h4>
@@ -896,6 +1010,20 @@
         <tr><td><code>skipLabelsAtLowZoom</code></td><td>boolean</td><td>true</td><td>Skip node labels</td></tr>
         <tr><td><code>skipArrowsAtLowZoom</code></td><td>boolean</td><td>true</td><td>Skip arrowheads</td></tr>
         <tr><td><code>skipLinkLabelsAtLowZoom</code></td><td>boolean</td><td>true</td><td>Skip link labels</td></tr>
+      </table>
+
+      <h4>3D (<code>threeD</code>)</h4>
+      <table>
+        <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>linkWidth</code></td><td>number</td><td>0</td><td>Unselected tube width in world units; zero uses the hairline default.</td></tr>
+        <tr><td><code>largeGraph.enabled</code></td><td>boolean</td><td>true</td><td>Enable CPU-side frustum checks, caption limits, and instancing (native frustum culling remains active).</td></tr>
+        <tr><td><code>largeGraph.maxLabeledElements</code></td><td>number</td><td>1000</td><td>Maximum number of node/link elements with individual captions.</td></tr>
+        <tr><td><code>largeGraph.nodeInstancing</code></td><td>boolean</td><td>true</td><td>Batch eligible opaque node bodies at 1,000+ nodes.</td></tr>
+        <tr><td><code>largeGraph.viewportPadding</code></td><td>number</td><td>0</td><td>World-unit padding for CPU-side offscreen bounds.</td></tr>
+        <tr><td><code>largeGraph.lowZoomThreshold</code></td><td>number</td><td>1</td><td>Skip optional details at this zoom or below.</td></tr>
+        <tr><td><code>largeGraph.skipLabelsAtLowZoom</code></td><td>boolean</td><td>true</td><td>Skip node captions.</td></tr>
+        <tr><td><code>largeGraph.skipArrowsAtLowZoom</code></td><td>boolean</td><td>true</td><td>Skip link arrowheads.</td></tr>
+        <tr><td><code>largeGraph.skipLinkLabelsAtLowZoom</code></td><td>boolean</td><td>true</td><td>Skip relationship captions.</td></tr>
       </table>
 
       <h4>Top-Level Config</h4>
@@ -978,7 +1106,13 @@
     {
       "imports": {
         "d3": "https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm",
-        "force-graph": "https://cdn.jsdelivr.net/npm/force-graph@1.51.0/+esm"
+        "force-graph": "https://cdn.jsdelivr.net/npm/force-graph@1.51.0/+esm",
+        "3d-force-graph": "https://esm.sh/3d-force-graph@1.80.1?external=three",
+        "three": "https://esm.sh/three@0.186.1",
+        "three/webgpu": "https://esm.sh/three@0.186.1/webgpu",
+        "three/tsl": "https://esm.sh/three@0.186.1/tsl",
+        "three/addons/": "https://esm.sh/three@0.186.1/examples/jsm/",
+        "three/examples/": "https://esm.sh/three@0.186.1/examples/"
       }
     }
   </script>
@@ -987,6 +1121,7 @@
     import '../dist/index.js';
 
     let canvas;
+    let activeDimension = '2d';
 
     // ===== Color Utilities =====
     const labelColors = {};
@@ -1146,26 +1281,32 @@
 
     // ===== Config Apply Handlers =====
     window.applyNodeStyle = () => {
-      const fontSize = document.getElementById('ns-fontSize');
-      if (!fontSize.reportValidity()) return;
       canvas.setConfig({
         nodeStyle: {
           fontFamily: document.getElementById('ns-fontFamily').value,
           fontWeightUnselected: parseInt(document.getElementById('ns-fontWeightUnselected').value),
           fontWeightSelected: parseInt(document.getElementById('ns-fontWeightSelected').value),
-        },
-        twoD: {
-          nodeStyle: {
-          fontSize: parseFloat(document.getElementById('ns-fontSize').value),
-          textFillRatio: parseFloat(document.getElementById('ns-textFillRatio').value),
-          strokeWidthSelected: parseFloat(document.getElementById('ns-strokeWidthSelected').value),
-          strokeWidthUnselected: parseFloat(document.getElementById('ns-strokeWidthUnselected').value),
           glowDuration: parseInt(document.getElementById('ns-glowDuration').value),
           glowSpread: parseInt(document.getElementById('ns-glowSpread').value),
           glowSteps: parseInt(document.getElementById('ns-glowSteps').value),
           glowColor: hexToRgb(document.getElementById('ns-glowColor').value),
+          selectedGlowColor: hexToRgb(document.getElementById('ns-selectedGlowColor').value),
           glowMaxOpacity: parseFloat(document.getElementById('ns-glowMaxOpacity').value),
-          }
+        },
+      });
+    };
+
+    window.applyTwoDNodeStyle = () => {
+      const fontSize = document.getElementById('ns-fontSize');
+      if (!fontSize.reportValidity()) return;
+      canvas.setConfig({
+        twoD: {
+          nodeStyle: {
+            fontSize: fontSize.valueAsNumber,
+            textFillRatio: parseFloat(document.getElementById('ns-textFillRatio').value),
+            strokeWidthSelected: parseFloat(document.getElementById('ns-strokeWidthSelected').value),
+            strokeWidthUnselected: parseFloat(document.getElementById('ns-strokeWidthUnselected').value),
+          },
         },
       });
     };
@@ -1180,14 +1321,20 @@
           fontWeightUnselected: parseInt(document.getElementById('ls-fontWeightUnselected').value),
           fontWeightSelected: parseInt(document.getElementById('ls-fontWeightSelected').value),
         },
+      });
+    };
+
+    window.applyTwoDLinkStyle = () => {
+      canvas.setConfig({
         twoD: {
           linkStyle: {
-          arrowWidthRatio: parseFloat(document.getElementById('ls-arrowWidthRatio').value),
-          arrowNotchRatio: parseFloat(document.getElementById('ls-arrowNotchRatio').value),
-          selfLoopCurveFactor: parseFloat(document.getElementById('ls-selfLoopCurveFactor').value),
-          parallelEdgeCurveMultiplier: parseFloat(document.getElementById('ls-parallelEdgeCurveMultiplier').value),
-          labelBackgroundPadding: parseFloat(document.getElementById('ls-labelBackgroundPadding').value),
-          }
+            arrowWidthRatio: parseFloat(document.getElementById('ls-arrowWidthRatio').value),
+            arrowNotchRatio: parseFloat(document.getElementById('ls-arrowNotchRatio').value),
+            selfLoopCurveFactor: parseFloat(document.getElementById('ls-selfLoopCurveFactor').value),
+            parallelEdgeCurveMultiplier: parseFloat(document.getElementById('ls-parallelEdgeCurveMultiplier').value),
+            labelBackgroundPadding: parseFloat(document.getElementById('ls-labelBackgroundPadding').value),
+            edgeGap: parseFloat(document.getElementById('edge-gap').value),
+          },
         },
       });
     };
@@ -1214,11 +1361,16 @@
           zoomToFitPadding: parseFloat(document.getElementById('int-zoomToFitPadding').value),
           contrastThreshold: parseFloat(document.getElementById('int-contrastThreshold').value),
         },
+      });
+    };
+
+    window.applyTwoDInteraction = () => {
+      canvas.setConfig({
         twoD: {
           interaction: {
             zoomToFitDelay: parseInt(document.getElementById('int-zoomToFitDelay').value),
             linkHitWidth: parseInt(document.getElementById('int-linkHitWidth').value),
-          }
+          },
         },
       });
     };
@@ -1237,7 +1389,7 @@
           }
         }
       });
-      if (enabled && !lgDebugInterval) {
+      if (enabled && canvas.getDimension() === '2d' && !lgDebugInterval) {
         lgDebugInterval = setInterval(window.updateLgDebug, 200);
         window.updateLgDebug();
       } else if (!enabled && lgDebugInterval) {
@@ -1245,6 +1397,25 @@
         lgDebugInterval = null;
         document.getElementById('lg-debug').classList.remove('visible');
       }
+    };
+
+    window.applyThreeDConfig = () => {
+      canvas.setConfig({
+        threeD: {
+          linkWidth: parseFloat(document.getElementById('td-linkWidth').value),
+          largeGraph: {
+            enabled: document.getElementById('td-enabled').checked,
+            maxLabeledElements: parseInt(document.getElementById('td-maxLabeledElements').value),
+            nodeInstancing: document.getElementById('td-nodeInstancing').checked,
+            viewportPadding: parseInt(document.getElementById('td-viewportPadding').value),
+            lowZoomThreshold: parseFloat(document.getElementById('td-lowZoomThreshold').value),
+            skipLabelsAtLowZoom: document.getElementById('td-skipLabelsAtLowZoom').checked,
+            skipArrowsAtLowZoom: document.getElementById('td-skipArrowsAtLowZoom').checked,
+            skipLinkLabelsAtLowZoom: document.getElementById('td-skipLinkLabelsAtLowZoom').checked,
+          },
+        },
+      });
+      window.updateThreeDDebug();
     };
 
     window.applyColors = () => {
@@ -1324,6 +1495,8 @@
     // --- Selection state ---
     let selectedNode = null;
     let selectedLink = null;
+    let hoveredNode = null;
+    let hoveredLink = null;
 
     function updateDeleteButtons() {
       const sep = document.getElementById('delete-separator');
@@ -1332,6 +1505,28 @@
       btnNode.style.display = selectedNode ? '' : 'none';
       btnLink.style.display = selectedLink ? '' : 'none';
       sep.style.display = (selectedNode || selectedLink) ? '' : 'none';
+    }
+
+    function updateSelectionStyles() {
+      canvas.setConfig({
+        isNodeSelected: (node) => Boolean(
+          (selectedNode && node.id === selectedNode.id)
+          || (hoveredNode && node.id === hoveredNode.id)
+        ),
+        isLinkSelected: (link) => Boolean(
+          (selectedLink && link.id === selectedLink.id)
+          || (hoveredLink && link.id === hoveredLink.id)
+        ),
+      });
+    }
+
+    function updateInteractionInfo() {
+      const info = document.getElementById('selected-info');
+      if (hoveredNode) info.textContent = `Hovered node: ${hoveredNode.data.name || hoveredNode.id}`;
+      else if (hoveredLink) info.textContent = `Hovered link: ${hoveredLink.relationship}`;
+      else if (selectedNode) info.textContent = `Node: ${selectedNode.data.name || selectedNode.id} (${selectedNode.labels.join(', ')})`;
+      else if (selectedLink) info.textContent = `Link: ${selectedLink.relationship}`;
+      else info.textContent = 'Click on a node or link to see details';
     }
 
     window.deleteSelectedNode = () => {
@@ -1343,6 +1538,8 @@
       selectedNode = null;
       updateDeleteButtons();
       canvas.setGraphData(data);
+      updateSelectionStyles();
+      updateInteractionInfo();
     };
 
     window.deleteSelectedLink = () => {
@@ -1353,6 +1550,8 @@
       selectedLink = null;
       updateDeleteButtons();
       canvas.setGraphData(data);
+      updateSelectionStyles();
+      updateInteractionInfo();
     };
 
     window.duplicateGraph = () => {
@@ -1372,7 +1571,21 @@
     window.zoomToFit = () => { canvas.zoomToFit(); };
     window.zoomIn = () => { canvas.zoom(canvas.getZoom() * 1.5); };
     window.zoomOut = () => { canvas.zoom(canvas.getZoom() / 1.5); };
-    window.resetViewport = () => { canvas.twoD.setViewport({ zoom: 1, centerX: 0, centerY: 0 }); };
+    window.resetViewport = () => {
+      if (canvas.getDimension() === '3d') canvas.zoomToFit();
+      else canvas.twoD.setViewport({ zoom: 1, centerX: 0, centerY: 0 });
+    };
+
+    window.changeDimension = async (dimension) => {
+      try {
+        await canvas.setDimension(dimension);
+        document.getElementById('selected-info').textContent = `Showing ${dimension.toUpperCase()}`;
+      } catch (error) {
+        document.getElementById('selected-info').textContent = `Could not switch to ${dimension.toUpperCase()}: ${error.message}`;
+        console.error('Dimension switch error:', error);
+      }
+      updateDimensionControls();
+    };
 
     // ===== Style Actions =====
     window.randomizeAllColors = () => {
@@ -1410,7 +1623,7 @@
 
     window.updateLgDebug = () => {
       const debugEl = document.getElementById('lg-debug');
-      if (!document.getElementById('lg-enabled').checked) {
+      if (activeDimension !== '2d' || canvas.getDimension() !== '2d' || !document.getElementById('lg-enabled').checked) {
         debugEl.classList.remove('visible');
         return;
       }
@@ -1423,6 +1636,24 @@
       document.getElementById('lg-debug-threshold').textContent = threshold.toFixed(3);
       document.getElementById('lg-debug-nodes').textContent = `${stats.visibleNodes}/${stats.totalNodes}`;
       document.getElementById('lg-debug-links').textContent = `${stats.visibleLinks}/${stats.totalLinks}`;
+    };
+
+    window.updateThreeDDebug = () => {
+      const debugEl = document.getElementById('three-d-debug');
+      if (activeDimension !== '3d' || canvas.getDimension() !== '3d') {
+        debugEl.classList.remove('visible');
+        return;
+      }
+      debugEl.classList.add('visible');
+      const stats = canvas.threeD.getCullingStats();
+      document.getElementById('td-debug-bodies').textContent =
+        `${stats.frustumVisibleNodeBodies}/${stats.totalNodeBodies}`;
+      document.getElementById('td-debug-links').textContent =
+        `${stats.frustumVisibleLinks}/${stats.totalLinks}`;
+      document.getElementById('td-debug-labels').textContent =
+        `${stats.frustumVisibleNodeCaptions}/${stats.totalNodeCaptions} nodes, ${stats.frustumVisibleLinkLabels}/${stats.totalLinkLabels} links`;
+      document.getElementById('td-debug-caption-limit').textContent =
+        stats.captionLimitEnabled ? 'enabled' : 'disabled';
     };
 
     // ===== Query =====
@@ -1508,6 +1739,30 @@
     const captionPositionToggle = document.getElementById('caption-position-toggle');
     const captionSide = document.getElementById('caption-side');
     const captionGap = document.getElementById('caption-gap');
+    const dimensionSelect = document.getElementById('dimension-select');
+    function updateDimensionControls() {
+      const isTwoD = canvas.getDimension() === '2d';
+      const captionOptionsEnabled = isTwoD && captionPositionToggle.checked;
+      dimensionSelect.value = canvas.getDimension();
+      captionPositionToggle.disabled = !isTwoD;
+      [captionSide, captionGap].forEach((control) => {
+        control.disabled = !captionOptionsEnabled;
+      });
+      if (isTwoD) {
+        if (document.getElementById('lg-enabled').checked && !lgDebugInterval) {
+          lgDebugInterval = setInterval(window.updateLgDebug, 200);
+        }
+        window.updateLgDebug();
+      } else {
+        if (lgDebugInterval) {
+          clearInterval(lgDebugInterval);
+          lgDebugInterval = null;
+        }
+        document.getElementById('lg-debug').classList.remove('visible');
+      }
+      window.updateThreeDDebug();
+    }
+
     captionPositionToggle.addEventListener('change', () => {
       [captionSide, captionGap].forEach((control) => {
         control.disabled = !captionPositionToggle.checked;
@@ -1542,29 +1797,50 @@
     ro.observe(graphContainer);
 
     canvas.setConfig({
-      isNodeSelected: (node) => selectedNode && node.id === selectedNode.id,
-      isLinkSelected: (link) => selectedLink && link.id === selectedLink.id,
+      isNodeSelected: (node) => Boolean(
+        (selectedNode && node.id === selectedNode.id)
+        || (hoveredNode && node.id === hoveredNode.id)
+      ),
+      isLinkSelected: (link) => Boolean(
+        (selectedLink && link.id === selectedLink.id)
+        || (hoveredLink && link.id === hoveredLink.id)
+      ),
       eventHandlers: {
         onNodeClick: (node) => {
           selectedNode = node;
           selectedLink = null;
           updateDeleteButtons();
-          document.getElementById('selected-info').textContent = `Node: ${node.data.name || node.id} (${node.labels.join(', ')})`;
+          updateSelectionStyles();
+          updateInteractionInfo();
         },
         onLinkClick: (link) => {
           selectedLink = link;
           selectedNode = null;
           updateDeleteButtons();
-          document.getElementById('selected-info').textContent = `Link: ${link.relationship}`;
+          updateSelectionStyles();
+          updateInteractionInfo();
         },
         onBackgroundClick: () => {
           selectedNode = null;
           selectedLink = null;
           updateDeleteButtons();
-          document.getElementById('selected-info').textContent = 'Click on a node or link to see details';
+          updateSelectionStyles();
+          updateInteractionInfo();
         },
-        onNodeHover: (node) => { document.body.style.cursor = node ? 'pointer' : 'default'; },
-        onLinkHover: (link) => { document.body.style.cursor = link ? 'pointer' : 'default'; },
+        onNodeHover: (node) => {
+          hoveredNode = node;
+          if (node) hoveredLink = null;
+          document.body.style.cursor = node || hoveredLink ? 'pointer' : 'default';
+          updateSelectionStyles();
+          updateInteractionInfo();
+        },
+        onLinkHover: (link) => {
+          hoveredLink = link;
+          if (link) hoveredNode = null;
+          document.body.style.cursor = link || hoveredNode ? 'pointer' : 'default';
+          updateSelectionStyles();
+          updateInteractionInfo();
+        },
         onPinChange: (pinned) => {
           document.getElementById('pin-toggle').checked = pinned;
           document.getElementById('animation-toggle').disabled = document.getElementById('layout-select').value !== 'force' || pinned;
@@ -1576,9 +1852,18 @@
         },
         onZoom: (transform) => {
           document.getElementById('zoom-info').textContent = `Zoom: ${transform.k.toFixed(2)}x`;
-          if (lgDebugInterval) window.updateLgDebug();
+          if (canvas.getDimension() !== activeDimension) return;
+          if (activeDimension === '2d' && lgDebugInterval) window.updateLgDebug();
+          else if (activeDimension === '3d') window.updateThreeDDebug();
         },
-        onEngineStop: () => { console.log('Simulation stopped'); },
+        onDimensionChange: (dimension) => {
+          activeDimension = dimension;
+          updateDimensionControls();
+        },
+        onEngineStop: () => {
+          window.updateThreeDDebug();
+          console.log('Simulation stopped');
+        },
       },
     });
 

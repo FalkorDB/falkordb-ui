@@ -4,6 +4,7 @@ import {
   resetForceGraphMockState,
 } from "./mocks/force-graph";
 import { resetForceGraph3DMockState } from "./mocks/3d-force-graph";
+import type { CanvasConfig } from "../src/canvas-types";
 
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
 vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
@@ -69,6 +70,42 @@ describe("setConfig deep merge", () => {
     expect(internalConfig.nodeStyle.fontSize).toBe(3);
     expect(internalConfig.nodeStyle.textFillRatio).toBe(0.7);
   });
+
+  it("accepts shared glow settings at the top level and uses the new color defaults", () => {
+    const canvas = createCanvas();
+    const internalConfig = (canvas as any).config;
+    expect(internalConfig.nodeStyle).toMatchObject({
+      glowDuration: 10000,
+      glowSpread: 12,
+      glowSteps: 16,
+      glowColor: [255, 234, 167],
+      glowMaxOpacity: 0.6,
+      selectedGlowColor: [59, 130, 246],
+    });
+
+    const sharedConfig: Partial<CanvasConfig> = {
+      nodeStyle: {
+        glowDuration: 7000,
+        glowColor: [1, 2, 3],
+        selectedGlowColor: [4, 5, 6],
+      },
+    };
+    Reflect.apply(canvas.setConfig, canvas, [sharedConfig]);
+    expect(internalConfig.nodeStyle).toMatchObject({
+      glowDuration: 7000,
+      glowColor: [1, 2, 3],
+      selectedGlowColor: [4, 5, 6],
+    });
+  });
+
+  it.each(["glowDuration", "glowSpread", "glowSteps", "glowColor", "glowMaxOpacity"])(
+    "rejects the moved twoD.nodeStyle.%s option with its shared destination",
+    (option) => {
+      const canvas = createCanvas();
+      const config = { twoD: { nodeStyle: { [option]: 1 } } };
+      expect(() => Reflect.apply(canvas.setConfig, canvas, [config])).toThrow(`nodeStyle.${option}`);
+    },
+  );
 
   it("merges linkStyle partially — unset fields preserved", () => {
     const canvas = createCanvas();

@@ -11,6 +11,18 @@ export interface NodeStyleConfig {
   fontWeightUnselected?: number;
   /** Font weight when node is selected. Default: 700 */
   fontWeightSelected?: number;
+  /** Glow effect duration in ms after expand/collapse. Default: 10000 */
+  glowDuration?: number;
+  /** Glow spread radius in px. Default: 12 */
+  glowSpread?: number;
+  /** Number of gradient rings in glow. Default: 16 */
+  glowSteps?: number;
+  /** Expansion glow color as [r, g, b]. Default: [255, 234, 167] (yellow) */
+  glowColor?: [number, number, number];
+  /** Glow maximum opacity (0–1). Default: 0.6 */
+  glowMaxOpacity?: number;
+  /** Persistent selected-node halo color as [r, g, b]. Default: [59, 130, 246] (blue) */
+  selectedGlowColor?: [number, number, number];
 }
 
 /** Canvas-specific node style fields. */
@@ -36,16 +48,6 @@ export interface TwoDNodeStyleConfig {
   strokeWidthSelected?: number;
   /** Stroke width when node is not selected. Default: 0.5 */
   strokeWidthUnselected?: number;
-  /** Glow effect duration in ms after expand/collapse. Default: 10000 */
-  glowDuration?: number;
-  /** Glow spread radius in px. Default: 12 */
-  glowSpread?: number;
-  /** Number of gradient rings in glow. Default: 16 */
-  glowSteps?: number;
-  /** Glow color as [r, g, b]. Default: [59, 130, 246] (blue) */
-  glowColor?: [number, number, number];
-  /** Glow maximum opacity (0–1). Default: 0.6 */
-  glowMaxOpacity?: number;
 }
 
 /** Link style fields shared by the 2D and 3D renderers. */
