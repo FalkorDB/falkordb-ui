@@ -28,7 +28,7 @@ export interface TwoDNodeStyleConfig {
    * Set to 0 and provide fontSize for fixed-size text.
    */
   textFillRatio?: number;
-  /** 2D caption placement. Default: 'inside'. In 3D captions are always below the node. */
+  /** 2D caption placement. Default: 'above'. In 3D captions are always below the node. */
   captionPosition?: 'inside' | 'above' | 'below' | 'left' | 'right';
   /** Gap between the node border and an outside 2D caption, in world units. Must be non-negative and finite. Default: 1. */
   captionGap?: number;

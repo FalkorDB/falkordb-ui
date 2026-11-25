@@ -112,9 +112,9 @@ exists, and fit otherwise. After disconnection, the mode-specific getter for
 the renderer that was active returns a copy of its saved viewport or camera;
 while connected, getters remain unavailable when their renderer is inactive.
 A full `setData()` replacement clears saved views. The active 2D renderer
-auto-fits after a full replacement; an active 3D renderer keeps its live
-camera while the new layout is applied. Incremental `setGraphData()` updates
-retain the inactive renderer’s saved view.
+auto-fits after a full replacement; the active 3D renderer refits once the new
+layout lands, rather than preserving its live camera. Incremental
+`setGraphData()` updates retain the inactive renderer’s saved view.
 
 ## Custom Three.js visual lifecycle
 

@@ -20,7 +20,8 @@ export class MockForceGraph3DInstance {
   private controlChanges = new Set<() => void>();
 
   public controlsState = {
-    target: { x: 0, y: 0, z: 0 },
+    target: new Vector3(),
+    enabled: true,
     noPan: false,
     noRotate: false,
     noZoom: false,
@@ -160,7 +161,11 @@ export class MockForceGraph3DInstance {
   /** Moves the camera as a user's drag would, without it counting as a call. */
   simulateDrag(position: Vec3, target: Vec3) {
     this.cameraPos = { ...position };
-    this.controlsState.target = { ...target };
+    if (this.controlsState.target instanceof Vector3) {
+      this.controlsState.target.set(target.x, target.y, target.z);
+    } else {
+      this.controlsState.target = { ...target };
+    }
     this.cameraObject.position.set(position.x, position.y, position.z);
     this.cameraObject.lookAt(target.x, target.y, target.z);
     this.cameraObject.updateMatrixWorld(true);
@@ -172,13 +177,18 @@ export class MockForceGraph3DInstance {
     this.cameraPos = { ...this.cameraPos, ...position };
     this.cameraObject.position.set(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
     if (lookAt) {
-      if (this.controlsState.target instanceof Vector3) {
+      if (this.controlsState.enabled && this.controlsState.target instanceof Vector3) {
         this.controlsState.target.set(lookAt.x, lookAt.y, lookAt.z);
       } else {
-        this.controlsState.target = { ...lookAt };
+        this.cameraObject.lookAt(lookAt.x, lookAt.y, lookAt.z);
       }
     }
     this.cameraObject.updateMatrixWorld(true);
+    return this;
+  }
+
+  enableNavigationControls(enabled: boolean) {
+    this.controlsState.enabled = enabled;
     return this;
   }
 

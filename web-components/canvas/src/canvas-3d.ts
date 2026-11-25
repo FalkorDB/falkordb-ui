@@ -159,9 +159,15 @@ export class Graph3D {
 
   private pendingRemovedVisualCleanup = false;
 
+  private visualCleanupFrame: number | undefined;
+
   private readonly replacedNodeParts: Array<{ id: number; parts: NodeParts }> = [];
 
   private readonly replacedLinkParts: Array<{ id: number; parts: LinkParts }> = [];
+
+  private deferredCustomVisualReleaseDepth = 0;
+
+  private readonly deferredCustomVisualReleases: Array<() => void> = [];
 
   private warnedDashPatternScaling = false;
 
@@ -476,7 +482,7 @@ export class Graph3D {
     const down = () => { this.pointerDown = true; this.requestRender(); };
     const up = () => { this.pointerDown = false; this.requestRender(); };
     const rightDown = (event: PointerEvent) => {
-      if (event.button !== 2 || rightPointer !== undefined) return;
+      if (!controls.enabled || event.button !== 2 || rightPointer !== undefined) return;
       rightPointer = event.pointerId;
       previousRightAction = controls.mouseButtons.RIGHT;
       controls.mouseButtons.RIGHT = null;
@@ -487,6 +493,10 @@ export class Graph3D {
     };
     const panMove = (event: PointerEvent) => {
       if (panPointer !== event.pointerId || !lastPointer) return;
+      if (!controls.enabled) {
+        lastPointer = { x: event.clientX, y: event.clientY };
+        return;
+      }
       const deltaX = event.clientX - lastPointer.x;
       const deltaY = event.clientY - lastPointer.y;
       lastPointer = { x: event.clientX, y: event.clientY };
@@ -574,52 +584,58 @@ export class Graph3D {
    * and dimming. Cheap enough to run on every hover.
    */
   restyle(refreshCustomVisuals = false) {
-    const { config } = this.host;
-    const captionConfig = JSON.stringify([config.captionsKeys, config.showPropertyKeyPrefix]);
-    if (captionConfig !== this.captionConfig) {
-      this.captionConfig = captionConfig;
-      this.labelRevision += 1;
-    }
-    for (const parts of this.nodeParts.values()) {
-      parts.dirty = true;
-      if (refreshCustomVisuals) parts.refreshCustomVisual = true;
-    }
-
-    let colorsChanged = false;
-    for (const link of this.host.data.links) {
-      const before = this.linkColors.get(link);
-      this.linkColor(link);
-      if (before !== this.linkColors.get(link)) colorsChanged = true;
-      const parts = this.linkParts.get(link);
-      if (!parts) continue;
-      const state = this.linkRenderState(link);
-      const patternFactory = this.host.config.modeConfig.threeD.linkDashPattern;
-      const linkWidth = this.linkRenderWidth(link, state);
-      if (
-        refreshCustomVisuals
-        || !sameRenderState(state, parts.renderState)
-        || parts.factory !== this.host.config.modeConfig.threeD.linkObject
-        || parts.dashPatternFactory !== patternFactory
-        || parts.dashWidth !== linkWidth
-      ) {
-        this.replaceLinkVisual(link, parts, state);
-      } else if (parts.label?.visible) {
-        parts.label.material.opacity = state.opacity;
+    this.deferredCustomVisualReleaseDepth++;
+    try {
+      const { config } = this.host;
+      const captionConfig = JSON.stringify([config.captionsKeys, config.showPropertyKeyPrefix]);
+      if (captionConfig !== this.captionConfig) {
+        this.captionConfig = captionConfig;
+        this.labelRevision += 1;
       }
-      this.linkShafts.get(link)?.setStyle(linkWidth, this.shaftMaterial(link));
-    }
+      for (const parts of this.nodeParts.values()) {
+        parts.dirty = true;
+        if (refreshCustomVisuals) parts.refreshCustomVisual = true;
+      }
 
-    this.updateDetailVisibility();
+      let colorsChanged = false;
+      for (const link of this.host.data.links) {
+        const before = this.linkColors.get(link);
+        this.linkColor(link);
+        if (before !== this.linkColors.get(link)) colorsChanged = true;
+        const parts = this.linkParts.get(link);
+        if (!parts) continue;
+        const state = this.linkRenderState(link);
+        const patternFactory = this.host.config.modeConfig.threeD.linkDashPattern;
+        const linkWidth = this.linkRenderWidth(link, state);
+        if (
+          refreshCustomVisuals
+          || !sameRenderState(state, parts.renderState)
+          || parts.factory !== this.host.config.modeConfig.threeD.linkObject
+          || parts.dashPatternFactory !== patternFactory
+          || parts.dashWidth !== linkWidth
+        ) {
+          this.replaceLinkVisual(link, parts, state);
+        } else if (parts.label?.visible) {
+          parts.label.material.opacity = state.opacity;
+        }
+        this.linkShafts.get(link)?.setStyle(linkWidth, this.shaftMaterial(link));
+      }
 
-    // Colours are re-read when the accessors are set; that keeps the objects.
-    if (colorsChanged) {
-      this.graph
-        .linkColor((link) => this.linkColor(link))
-        .linkDirectionalArrowColor((link) => this.linkColor(link));
+      this.updateDetailVisibility();
+
+      // Colours are re-read when the accessors are set; that keeps the objects.
+      if (colorsChanged) {
+        this.graph
+          .linkColor((link) => this.linkColor(link))
+          .linkDirectionalArrowColor((link) => this.linkColor(link));
+      }
+      this.applyLinkSelection();
+      this.trimShaftMaterials();
+      this.requestRender();
+    } finally {
+      this.deferredCustomVisualReleaseDepth--;
+      if (this.deferredCustomVisualReleaseDepth === 0) this.flushDeferredCustomVisualReleases();
     }
-    this.applyLinkSelection();
-    this.trimShaftMaterials();
-    this.requestRender();
   }
 
   /** Refresh physics after callers mutate live graph structure or visibility. */
@@ -934,6 +950,7 @@ export class Graph3D {
       { ...state.target },
       0,
     );
+    controls.target.set(state.target.x, state.target.y, state.target.z);
     controls.update();
     this.updateDetailVisibility();
     this.requestRender();
@@ -1088,6 +1105,10 @@ export class Graph3D {
     this.destroyed = true;
     this.stopWorker();
     clearTimeout(this.idleTimer);
+    if (this.visualCleanupFrame !== undefined) {
+      cancelAnimationFrame(this.visualCleanupFrame);
+      this.visualCleanupFrame = undefined;
+    }
     this.cleanupInteraction?.();
     const renderer = this.graph.renderer();
     this.instances.dispose();
@@ -1159,7 +1180,7 @@ export class Graph3D {
         // The library has released the drag's own pin by now.
         const node3D = node as Node3D;
         const wasPinned = node3D.fx !== undefined && node3D.fy !== undefined && node3D.fz !== undefined;
-        if (wasPinned) {
+        if (wasPinned && this.host.config.pinOnDragEnd) {
           node3D.x = (node3D.x ?? 0) + translate.x;
           node3D.y = (node3D.y ?? 0) + translate.y;
           node3D.z = (node3D.z ?? 0) + translate.z;
@@ -1175,7 +1196,7 @@ export class Graph3D {
       })
       // The engine first ticks, or stops, right after a layout has been applied.
       .onEngineTick(() => {
-        this.cleanupPendingRemovedVisuals();
+        this.schedulePendingRemovedVisualCleanup();
         if (this.workerActive) return;
         this.engineRunning = true;
         this.layoutLanded();
@@ -1365,7 +1386,7 @@ export class Graph3D {
       const release = this.resourceTracker.acquire(visual);
       parts.group.add(visual);
       if (previousVisual && previousVisual !== visual) previousVisual.removeFromParent();
-      previousRelease?.();
+      this.releaseCustomVisual(previousRelease);
       parts.customVisual = visual;
       parts.releaseCustomVisual = release;
       parts.body.visible = false;
@@ -1743,10 +1764,37 @@ export class Graph3D {
   }
 
   private cleanupPendingRemovedVisuals() {
+    if (!this.pendingRemovedVisualCleanup || this.visualCleanupFrame !== undefined) return;
+    this.flushPendingRemovedVisuals();
+  }
+
+  private schedulePendingRemovedVisualCleanup() {
+    if (!this.pendingRemovedVisualCleanup || this.visualCleanupFrame !== undefined) return;
+    // Let the renderer's queued object digest run before releasing replaced resources.
+    this.visualCleanupFrame = requestAnimationFrame(() => {
+      this.visualCleanupFrame = undefined;
+      this.flushPendingRemovedVisuals();
+    });
+  }
+
+  private flushPendingRemovedVisuals() {
     if (!this.pendingRemovedVisualCleanup) return;
     this.pendingRemovedVisualCleanup = false;
     this.cleanupRemovedVisuals();
     this.disposePendingReplacedVisuals();
+  }
+
+  private releaseCustomVisual(release: (() => void) | null | undefined) {
+    if (!release) return;
+    if (this.deferredCustomVisualReleaseDepth > 0) {
+      this.deferredCustomVisualReleases.push(release);
+      return;
+    }
+    release();
+  }
+
+  private flushDeferredCustomVisualReleases() {
+    for (const release of this.deferredCustomVisualReleases.splice(0)) release();
   }
 
   private disposePendingReplacedVisuals() {
@@ -1762,7 +1810,7 @@ export class Graph3D {
     if (parts.customVisual && parts.customVisual !== replacement?.customVisual) {
       parts.customVisual.removeFromParent();
     }
-    parts.releaseCustomVisual?.();
+    this.releaseCustomVisual(parts.releaseCustomVisual);
     parts.group.removeFromParent();
   }
 
@@ -1770,7 +1818,7 @@ export class Graph3D {
     if (parts.customVisual && parts.customVisual !== replacement?.customVisual) {
       parts.customVisual.removeFromParent();
     }
-    parts.releaseCustomVisual?.();
+    this.releaseCustomVisual(parts.releaseCustomVisual);
     if (parts.shaft && parts.shaft !== replacement?.shaft) {
       parts.shaft.dispose();
       parts.shaft.removeFromParent();

@@ -164,9 +164,9 @@ renderer. When disconnected, `twoD.getViewport()` or
 that was active at disconnection; other mode-specific operations still throw.
 Dimension switches restore a renderer’s saved view when one exists, otherwise
 they fit the graph. A full `setData()` replacement clears saved views. The
-active 2D renderer still auto-fits after a full replacement, while an active
-3D renderer keeps its live camera as the new layout is applied. Incremental
-`setGraphData()` updates retain the inactive renderer’s saved view.
+active 2D renderer auto-fits after a full replacement; the active 3D renderer
+refits once the new layout lands, rather than preserving its live camera.
+Incremental `setGraphData()` updates retain the inactive renderer’s saved view.
 
 Native graph handles and their live objects become invalid after a dimension
 switch or disconnect; reacquire them after the renderer is mounted again.

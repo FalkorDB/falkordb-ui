@@ -371,6 +371,20 @@ describe("3D background panning", () => {
     expect(graph.controlsState.noPan).toBe(false);
   });
 
+  it("does not pan when navigation controls are disabled", async () => {
+    await canvasIn3D();
+    const graph = last3D();
+    graph.simulateDrag({ x: 0, y: 0, z: 500 }, { x: 0, y: 0, z: 0 });
+    graph.enableNavigationControls(false);
+    const start = graph.cameraPosition();
+
+    dispatchPointer(graph.container, "pointerdown", { button: 2, clientX: 100, clientY: 100 });
+    dispatchPointer(window, "pointermove", { clientX: 120, clientY: 100 });
+    dispatchPointer(window, "pointerup");
+
+    expect(graph.cameraPosition()).toEqual(start);
+  });
+
   it.each(["pointerup", "pointercancel"])("stops panning after %s", async (endEvent) => {
     await canvasIn3D();
     const graph = last3D();
@@ -454,6 +468,21 @@ describe("3D camera state", () => {
     expect(canvas.threeD.getCameraState()).toEqual(state);
     const snapshot = canvas.threeD.getCameraState();
     snapshot.position.x = 999;
+    expect(canvas.threeD.getCameraState()).toEqual(state);
+  });
+
+  it("restores the camera target when navigation controls are disabled", async () => {
+    const canvas = await canvasIn3D();
+    const graph = last3D();
+    graph.enableNavigationControls(false);
+    const state = {
+      position: { x: 120, y: -80, z: 450 },
+      target: { x: 12, y: 34, z: -5 },
+      up: { x: 0, y: 1, z: 0 },
+    };
+
+    canvas.threeD.setCameraState(state);
+
     expect(canvas.threeD.getCameraState()).toEqual(state);
   });
 
@@ -867,7 +896,7 @@ describe("3D rendering", () => {
     expect(onNodeDragEnd).toHaveBeenCalledWith(node);
   });
 
-  it("restores a pinned node after dragging even when pin-on-drag is off", async () => {
+  it("keeps an already-pinned node at its drop position when pinning is off", async () => {
     const canvas = await canvasIn3D();
     const node = canvas.getGraphData().nodes[0] as GraphNode & {
       x?: number; y?: number; z?: number; fx?: number; fy?: number; fz?: number;
@@ -876,7 +905,7 @@ describe("3D rendering", () => {
     Object.assign(node, { x: 10, y: 14, z: 18, fx: 10, fy: 14, fz: 18 });
     last3D().callback("onNodeDragEnd")(node, { x: -6, y: -9, z: -12 });
 
-    expect(node).toMatchObject({ x: 4, y: 5, z: 6, fx: 4, fy: 5, fz: 6 });
+    expect(node).toMatchObject({ x: 10, y: 14, z: 18, fx: 10, fy: 14, fz: 18 });
   });
 
   it("treats a partially fixed node as unpinned and pins it at the drop point", async () => {
@@ -2043,6 +2072,33 @@ describe("3D custom renderers and links", () => {
     expect(disposeGeometry).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps shared link resources alive across a restyle pass", async () => {
+    const sharedGeometry = new BoxGeometry();
+    const otherGeometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const disposeGeometry = vi.spyOn(sharedGeometry, "dispose");
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, {
+      linkObject: (_link, state) => new Mesh(state.selected ? sharedGeometry : otherGeometry, material),
+    });
+    canvas.setConfig({ isLinkSelected: (link) => link.id === 10 });
+    canvas.setData({
+      nodes: DATA.nodes,
+      links: [DATA.links[0], { ...DATA.links[0], id: 11 }],
+    });
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("linkThreeObject") as (link: GraphLink) => Object3D;
+    for (const link of canvas.getGraphData().links) factory(link);
+
+    expect(() => canvas.setConfig({ isLinkSelected: (link) => link.id === 11 })).not.toThrow();
+    expect(disposeGeometry).not.toHaveBeenCalled();
+
+    await canvas.setDimension("2d");
+    expect(disposeGeometry).toHaveBeenCalledOnce();
+  });
+
   it("releases the current link visual after a same-id replacement following restyle", async () => {
     const geometries = [new BoxGeometry(), new BoxGeometry(), new BoxGeometry()];
     const disposeGeometries = geometries.map((geometry) => vi.spyOn(geometry, "dispose"));
@@ -2155,6 +2211,74 @@ describe("3D custom renderers and links", () => {
     canvas.setGraphData({ nodes: [], links: [] });
     finish3DLayout(graph);
     expect(disposeGeometry).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps shared node resources alive across a restyle pass", async () => {
+    const sharedGeometry = new BoxGeometry();
+    const otherGeometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const disposeGeometry = vi.spyOn(sharedGeometry, "dispose");
+    const canvas = createCanvas();
+    setThreeDConfig(canvas, {
+      nodeObject: (_node, state) => new Mesh(state.selected ? sharedGeometry : otherGeometry, material),
+    });
+    canvas.setConfig({ isNodeSelected: (node) => node.id === 1 });
+    canvas.setData({ nodes: DATA.nodes, links: [] });
+    await canvas.setDimension("3d");
+
+    const graph = last3D();
+    const factory = graph.callback("nodeThreeObject") as (node: GraphNode) => Group;
+    for (const node of canvas.getGraphData().nodes) factory(node);
+
+    expect(() => canvas.setConfig({ isNodeSelected: (node) => node.id === 2 })).not.toThrow();
+    expect(disposeGeometry).not.toHaveBeenCalled();
+
+    await canvas.setDimension("2d");
+    expect(disposeGeometry).toHaveBeenCalledOnce();
+  });
+
+  it("does not release replaced node resources on an engine tick before refresh factories run", async () => {
+    let frame: FrameRequestCallback | undefined;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frame = callback;
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    try {
+      const sharedGeometry = new BoxGeometry();
+      const replacementGeometry = new BoxGeometry();
+      const material = new MeshBasicMaterial();
+      const disposeGeometry = vi.spyOn(sharedGeometry, "dispose");
+      let refreshed = false;
+      const canvas = createCanvas();
+      setThreeDConfig(canvas, {
+        nodeObject: (node) => new Mesh(
+          refreshed && node.id === 1 ? replacementGeometry : sharedGeometry,
+          material,
+        ),
+      });
+      canvas.setData({ nodes: [DATA.nodes[0]], links: [] });
+      await canvas.setDimension("3d");
+
+      const graph = last3D();
+      const factory = graph.callback("nodeThreeObject") as (node: GraphNode) => Group;
+      factory(canvas.getGraphData().nodes[0]);
+      refreshed = true;
+      const secondNode = { ...DATA.nodes[1] };
+      canvas.getGraphData().nodes.push(secondNode);
+      canvas.refresh();
+
+      graph.callback("onEngineTick")();
+      factory(canvas.getGraphData().nodes[0]);
+      expect(() => factory(secondNode)).not.toThrow();
+      expect(disposeGeometry).not.toHaveBeenCalled();
+
+      frame?.(0);
+      expect(disposeGeometry).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("retains node labels, selection outlines, visibility, and ray picking around custom visuals", async () => {
