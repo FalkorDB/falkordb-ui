@@ -391,6 +391,8 @@ class FalkorDBCanvas extends HTMLElement {
     height: number;
   }>();
 
+  private cullingContext: CanvasRenderingContext2D | null = null;
+
   // Pending glow repaints, keyed by node, so a glowing node queues one timer
   // rather than one per frame.
   private glowRenderScheduled: Map<number, ReturnType<typeof setTimeout>> = new Map();
@@ -786,6 +788,7 @@ class FalkorDBCanvas extends HTMLElement {
     this.lastTransform = null;
     this.cullingBounds = null;
     this.cullingZoom = 1;
+    this.cullingContext = null;
   }
 
   private mount3D(Graph3DRenderer: typeof Graph3D) {
@@ -1352,7 +1355,10 @@ class FalkorDBCanvas extends HTMLElement {
     let visibleNodes = totalNodes;
     let visibleLinks = totalLinks;
     if (enabled && this.cullingBounds) {
-      visibleNodes = this.data.nodes.filter(n => this.isNodeInRenderBounds(n)).length;
+      visibleNodes = this.data.nodes.filter(n =>
+        this.isNodeInRenderBounds(n) ||
+        (this.cullingContext !== null && this.isOutsideCaptionInCullingBounds(n, this.cullingContext)),
+      ).length;
       visibleLinks = this.data.links.filter(l => this.isLinkInCullingBounds(l)).length;
     }
     return {
@@ -2060,6 +2066,7 @@ class FalkorDBCanvas extends HTMLElement {
   }
 
   private drawNode(node: GraphNode, ctx: CanvasRenderingContext2D) {
+    this.cullingContext = ctx;
 
     if (node.x === undefined || node.y === undefined) {
       node.x = 0;

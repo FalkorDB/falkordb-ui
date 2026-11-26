@@ -1003,6 +1003,32 @@ describe("getCullingStats", () => {
     expect(stats.totalNodes).toBe(3);
   });
 
+  it("counts nodes whose outside captions remain visible after their bodies are culled", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      width: 800,
+      height: 600,
+      twoD: {
+        nodeStyle: { captionPosition: "left", captionGap: 60 },
+        largeGraph: { viewportPadding: 0, skipLabelsAtLowZoom: false },
+      },
+    });
+    canvas.setData(SIMPLE_DATA);
+
+    const instance = getLastInstance();
+    setupInstanceDimensions(instance);
+    const nodes = canvas.getGraphData().nodes;
+    Object.assign(nodes[0], { x: 450, y: 0, size: 6 });
+    for (const node of nodes.slice(1)) Object.assign(node, { x: 5000, y: 5000, size: 6 });
+    triggerZoom({ k: 1, x: 0, y: 0 });
+
+    const ctx = createCtxSpy();
+    instance.callbacks.nodeCanvasObject!(nodes[0], ctx);
+    expect(ctx.fillText).toHaveBeenCalledWith("1", 383.5, 0);
+
+    expect(canvas.twoD.getCullingStats().visibleNodes).toBe(1);
+  });
+
   it("panning updates visible counts correctly", () => {
     const canvas = createCanvas();
     canvas.setConfig({

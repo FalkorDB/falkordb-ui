@@ -730,8 +730,11 @@ describe("node rendering", () => {
       width: 800,
       height: 600,
       isNodeSelected: () => true,
-      nodeStyle: { glowSpread: 30, captionPosition: "inside" },
-      twoD: { largeGraph: { lowZoomThreshold: 0, skipLabelsAtLowZoom: false } },
+      nodeStyle: { glowSpread: 30 },
+      twoD: {
+        nodeStyle: { captionPosition: "inside" },
+        largeGraph: { lowZoomThreshold: 0, skipLabelsAtLowZoom: false },
+      },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", size: 10, data: {} }],
