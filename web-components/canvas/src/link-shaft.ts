@@ -34,6 +34,10 @@ export class LinkShaft extends THREE.Group {
     this.shaft.material = material;
   }
 
+  setShaftVisible(visible: boolean) {
+    this.shaft.visible = visible;
+  }
+
   get material() {
     return this.shaft.material;
   }

@@ -53,6 +53,19 @@ function createCtxSpy() {
   return spy as typeof spy & CanvasRenderingContext2D;
 }
 
+function trackStrokeStyles(ctx: CanvasRenderingContext2D) {
+  const styles: string[] = [];
+  let strokeStyle = ctx.strokeStyle;
+  Object.defineProperty(ctx, "strokeStyle", {
+    get: () => strokeStyle,
+    set: (value: string) => {
+      strokeStyle = value;
+      styles.push(value);
+    },
+  });
+  return styles;
+}
+
 beforeAll(() => {
   class ResizeObserverMock {
     observe() {}
@@ -180,7 +193,7 @@ describe("node rendering", () => {
       width: 800,
       height: 600,
       captionsKeys: [["name", true]],
-      largeGraph: { lowZoomThreshold: 0.5 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5 }, nodeStyle: { captionPosition: "inside" } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
@@ -201,14 +214,223 @@ describe("node rendering", () => {
     expect(ctx.fillText).toHaveBeenCalled();
   });
 
+  it("fits the full inside caption regardless of the fixed font size in auto-size mode", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: [["name", true]],
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside" } },
+    });
+    const caption = "A long caption that should not be truncated";
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: caption } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    node.size = 10;
+
+    const draw = () => {
+      const ctx = createCtxSpy();
+      ctx.measureText.mockImplementation((text: string) => {
+        const size = Number.parseFloat(ctx.font.split(" ")[1]);
+        const width = text.length * size * 0.6;
+        return {
+          width,
+          actualBoundingBoxAscent: size * 0.7,
+          actualBoundingBoxDescent: size * 0.2,
+          actualBoundingBoxLeft: 0,
+          actualBoundingBoxRight: width,
+        };
+      });
+      getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+      return ctx;
+    };
+
+    const first = draw();
+    expect(first.fillText).toHaveBeenCalledExactlyOnceWith(caption, 0, expect.any(Number));
+    const fittedFont = first.font;
+    const fittedSize = Number.parseFloat(fittedFont.split(" ")[1]);
+    const diagonal = Math.hypot(caption.length * fittedSize * 0.6, fittedSize * 0.9);
+    expect(diagonal).toBeCloseTo(2 * 0.85 * 9);
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 12 } } });
+    const second = draw();
+    expect(second.fillText).toHaveBeenCalledExactlyOnceWith(caption, 0, expect.any(Number));
+    expect(second.font).toBe(fittedFont);
+  });
+
+  it("does not render an auto-sized inside caption when the usable radius is non-positive", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside" } } });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 0.5, data: {} }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fill).toHaveBeenCalled();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+  });
+
+  it("caches a fixed-size caption that cannot fit and retries when its font changes", () => {
+    let selected = false;
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: ["name"],
+      isNodeSelected: () => selected,
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 6 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 2, data: { name: "abc" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => {
+      const small = ctx.font.startsWith("700 ");
+      const width = text.length * (small ? 0.4 : 4);
+      return {
+        width,
+        actualBoundingBoxAscent: text ? (small ? 0.2 : 3) : 0,
+        actualBoundingBoxDescent: text ? (small ? 0.2 : 2) : 0,
+        actualBoundingBoxLeft: width / 2,
+        actualBoundingBoxRight: width / 2,
+      };
+    });
+    const draw = () => getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+
+    draw();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+    expect(ctx.measureText).toHaveBeenCalled();
+    ctx.measureText.mockClear();
+    draw();
+    expect(ctx.measureText).not.toHaveBeenCalled();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+
+    selected = true;
+    draw();
+    expect(ctx.fillText).toHaveBeenCalledWith("abc", 0, 0);
+    selected = false;
+    ctx.fillText.mockClear();
+    draw();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+    canvas.setConfig({ twoD: { nodeStyle: { textFillRatio: 0.85 } } });
+    draw();
+    expect(ctx.fillText).toHaveBeenCalledWith("abc", 0, expect.any(Number));
+  });
+
+  it("keeps both fixed-size caption lines inside the usable circular radius", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: ["name"],
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 6 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 9, data: { name: "abcd efgh ijkl" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => {
+      const width = text.length * 2;
+      return {
+        width,
+        actualBoundingBoxAscent: 3,
+        actualBoundingBoxDescent: 2,
+        actualBoundingBoxLeft: width / 2,
+        actualBoundingBoxRight: width / 2,
+      };
+    });
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fillText).toHaveBeenCalledTimes(2);
+    for (const [text, x, y] of ctx.fillText.mock.calls) {
+      const halfWidth = String(text).length;
+      expect(x).toBe(0);
+      expect(Math.hypot(halfWidth, Math.max(Math.abs(y - 3), Math.abs(y + 2)))).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it("re-wraps fixed-size captions when selection changes the font weight", () => {
+    let selected = false;
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: ["name"],
+      isNodeSelected: () => selected,
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 6 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 9, data: { name: "abcd efgh ijkl" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => {
+      const width = text.length * (ctx.font.startsWith("700 ") ? 3 : 2);
+      return {
+        width,
+        actualBoundingBoxAscent: 3,
+        actualBoundingBoxDescent: 2,
+        actualBoundingBoxLeft: width / 2,
+        actualBoundingBoxRight: width / 2,
+      };
+    });
+    const draw = () => getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    draw();
+    ctx.fillText.mockClear();
+    selected = true;
+    draw();
+    expect(ctx.fillText).toHaveBeenCalled();
+    for (const [text, x, y] of ctx.fillText.mock.calls) {
+      const halfWidth = String(text).length * 1.5;
+      expect(x).toBe(0);
+      expect(Math.hypot(halfWidth, Math.max(Math.abs(y - 3), Math.abs(y + 2)))).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it("uses a truncated single line when two fixed-size lines cannot fit", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: ["name"],
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 6 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: [], visible: true, color: "#f00", size: 7, data: { name: "abcdefghijk" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 0;
+    node.y = 0;
+    const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => ({
+      width: text.length * 2,
+      actualBoundingBoxAscent: 3,
+      actualBoundingBoxDescent: 2,
+      actualBoundingBoxLeft: text.length,
+      actualBoundingBoxRight: text.length,
+    }));
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fillText).toHaveBeenCalledExactlyOnceWith("ab...", 0, 0.5);
+  });
+
   it("renders text with fixed fontSize when textFillRatio is 0", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       width: 800,
       height: 600,
-      nodeStyle: { textFillRatio: 0, fontSize: 3 },
+      twoD: {
+        nodeStyle: { captionPosition: "inside", textFillRatio: 0, fontSize: 3 },
+        largeGraph: { lowZoomThreshold: 0.5 },
+      },
       captionsKeys: [["name", true]],
-      largeGraph: { lowZoomThreshold: 0.5 },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Bob" } }],
@@ -223,9 +445,119 @@ describe("node rendering", () => {
     instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
 
     const ctx = createCtxSpy();
+    ctx.measureText.mockImplementation((text: string) => ({
+      width: text.length * 2,
+      actualBoundingBoxAscent: 2,
+      actualBoundingBoxDescent: 1,
+      actualBoundingBoxLeft: text.length,
+      actualBoundingBoxRight: text.length,
+    }));
     instance.callbacks.nodeCanvasObject!(node, ctx);
 
     expect(ctx.fillText).toHaveBeenCalled();
+  });
+
+  it("renders 2D captions above nodes by default", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: [["name", true]],
+      foregroundColor: "#345678",
+      twoD: { largeGraph: { enabled: false } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 12;
+    node.y = 25;
+    node.size = 10;
+
+    const ctx = createCtxSpy();
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+
+    expect(ctx.fillText).toHaveBeenCalledExactlyOnceWith("Alice", 12, expect.any(Number));
+    expect(ctx.fillText.mock.calls[0][2]).toBeLessThan(node.y - node.size);
+    expect(ctx.textBaseline).toBe("bottom");
+  });
+
+  it("moves a 2D caption below a node and back inside without replacing the graph", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: [["name", true]],
+      foregroundColor: "#345678",
+      twoD: { largeGraph: { enabled: false } },
+    });
+    canvas.setConfig({ twoD: { nodeStyle: { captionPosition: "inside" } } });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
+      links: [],
+    });
+    const instance = getLastInstance();
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 12;
+    node.y = 25;
+
+    const draw = () => {
+      const ctx = createCtxSpy();
+      instance.callbacks.nodeCanvasObject!(node, ctx);
+      return ctx;
+    };
+
+    const inside = draw();
+    expect(inside.fillText).toHaveBeenCalledExactlyOnceWith("Alice", 12, 25.5);
+
+    canvas.setConfig({ twoD: { nodeStyle: { captionPosition: "below" } } });
+    const below = draw();
+    expect(below.fillText).toHaveBeenCalledExactlyOnceWith("Alice", 12, expect.any(Number));
+    expect(below.fillText.mock.calls[0][2]).toBeGreaterThan(25 + node.size);
+    expect(below.textBaseline).toBe("top");
+    expect(below.fillStyle).toBe("#345678");
+    expect(below.font).toBe("400 6px SofiaSans");
+
+    canvas.setConfig({ twoD: { nodeStyle: { captionPosition: "inside" } } });
+    expect(draw().fillText.mock.calls).toEqual(inside.fillText.mock.calls);
+    expect(canvas.getGraphData().nodes[0]).toBe(node);
+  });
+
+  it.each([
+    ["above", 12, 11.5, "center", "bottom"],
+    ["below", 12, 38.5, "center", "top"],
+    ["left", -1.5, 25, "right", "middle"],
+    ["right", 25.5, 25, "left", "middle"],
+  ] as const)("places a 2D caption %s the node with the configured gap and size", (side, x, y, align, baseline) => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      captionsKeys: [["name", true]],
+      twoD: { largeGraph: { enabled: false }, nodeStyle: { captionPosition: side, captionGap: 3, fontSize: 5 } },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "Alice" } }],
+      links: [],
+    });
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 12;
+    node.y = 25;
+    node.size = 10;
+
+    const ctx = createCtxSpy();
+    getLastInstance().callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fillText).toHaveBeenCalledExactlyOnceWith("Alice", x, y);
+    expect(ctx.textAlign).toBe(align);
+    expect(ctx.textBaseline).toBe(baseline);
+    expect(ctx.font).toBe("400 5px SofiaSans");
+
+    canvas.setConfig({ twoD: { nodeStyle: { captionGap: 0, fontSize: 3 } } });
+    const updated = createCtxSpy();
+    getLastInstance().callbacks.nodeCanvasObject!(node, updated);
+    expect(updated.font).toBe("400 3px SofiaSans");
+    const [updatedX, updatedY] = updated.fillText.mock.calls[0].slice(1);
+    expect(Math.abs(updatedX - 12) + Math.abs(updatedY - 25)).toBe(10.5);
+  });
+
+  it.each([-1, NaN, Infinity])("rejects invalid caption gap %s", (captionGap) => {
+    const canvas = createCanvas();
+    expect(() => canvas.setConfig({ twoD: { nodeStyle: { captionGap } } })).toThrow(RangeError);
   });
 
   it("applies glow effect when node has glow style", () => {
@@ -254,12 +586,95 @@ describe("node rendering", () => {
     expect(ctx.arc.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("draws a persistent blue halo only for selected nodes", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      isNodeSelected: (node) => node.id === 1,
+    });
+    canvas.setData({
+      nodes: [
+        { id: 1, labels: ["A"], visible: true, color: "#f00", data: {} },
+        { id: 2, labels: ["B"], visible: true, color: "#0f0", data: {} },
+      ],
+      links: [],
+    });
+
+    const instance = getLastInstance();
+    const [selectedNode, unselectedNode] = canvas.getGraphData().nodes;
+    selectedNode.expand = [false, new Date(0)];
+    unselectedNode.expand = [false, new Date(0)];
+    instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+
+    const selectedCtx = createCtxSpy();
+    const selectedStyles = trackStrokeStyles(selectedCtx);
+    instance.callbacks.nodeCanvasObject!(selectedNode, selectedCtx);
+
+    const unselectedCtx = createCtxSpy();
+    const unselectedStyles = trackStrokeStyles(unselectedCtx);
+    instance.callbacks.nodeCanvasObject!(unselectedNode, unselectedCtx);
+
+    expect(selectedStyles.some((style) => style.includes("59, 130, 246"))).toBe(true);
+    expect(unselectedStyles.some((style) => style.includes("59, 130, 246"))).toBe(false);
+  });
+
+  it("overlays the yellow expansion pulse on a selected node's blue halo", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ isNodeSelected: () => true });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
+      links: [],
+    });
+
+    const instance = getLastInstance();
+    const node = canvas.getGraphData().nodes[0];
+    node.expand = [true, new Date()];
+    instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+
+    const ctx = createCtxSpy();
+    const styles = trackStrokeStyles(ctx);
+    instance.callbacks.nodeCanvasObject!(node, ctx);
+
+    expect(styles.some((style) => style.includes("59, 130, 246"))).toBe(true);
+    expect(styles.some((style) => style.includes("255, 234, 167"))).toBe(true);
+  });
+
+  it("fades the expansion pulse over its configured duration", () => {
+    const startedAt = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(startedAt);
+    try {
+      const canvas = createCanvas();
+      canvas.setData({
+        nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
+        links: [],
+      });
+      const instance = getLastInstance();
+      const node = canvas.getGraphData().nodes[0];
+      node.expand = [true, new Date(startedAt)];
+      instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+
+      const maxPulseOpacity = () => {
+        const ctx = createCtxSpy();
+        const styles = trackStrokeStyles(ctx);
+        instance.callbacks.nodeCanvasObject!(node, ctx);
+        return Math.max(...styles
+          .filter((style) => style.includes("255, 234, 167"))
+          .map((style) => Number(style.slice(style.lastIndexOf(",") + 1, -1))));
+      };
+
+      const initialOpacity = maxPulseOpacity();
+      now.mockReturnValue(startedAt + 5000);
+      expect(maxPulseOpacity()).toBeLessThan(initialOpacity);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it("applies stroke to selected nodes", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       width: 800,
       height: 600,
-      nodeStyle: { strokeWidthSelected: 1.5 },
+      twoD: { nodeStyle: { strokeWidthSelected: 1.5 } },
       isNodeSelected: () => true,
     });
     canvas.setData({
@@ -286,7 +701,7 @@ describe("node rendering", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: { lowZoomThreshold: 0.5, viewportPadding: 10 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5, viewportPadding: 10 } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: {} }],
@@ -309,13 +724,41 @@ describe("node rendering", () => {
     expect(ctx.arc).not.toHaveBeenCalled();
   });
 
+  it("keeps a selected glow visible when the node body is just outside the culling bounds", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      width: 800,
+      height: 600,
+      isNodeSelected: () => true,
+      nodeStyle: { glowSpread: 30 },
+      twoD: {
+        nodeStyle: { captionPosition: "inside" },
+        largeGraph: { lowZoomThreshold: 0, skipLabelsAtLowZoom: false },
+      },
+    });
+    canvas.setData({
+      nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", size: 10, data: {} }],
+      links: [],
+    });
+
+    const instance = getLastInstance();
+    const node = canvas.getGraphData().nodes[0];
+    Object.assign(node, { x: 440, y: 0, expand: [false, new Date(0)] });
+    instance.callbacks.onZoom?.({ k: 1, x: 0, y: 0 });
+
+    const ctx = createCtxSpy();
+    instance.callbacks.nodeCanvasObject!(node, ctx);
+
+    expect(ctx.arc).toHaveBeenCalled();
+  });
+
   it("resolves caption from captionsKeys with fuzzy match", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       width: 800,
       height: 600,
       captionsKeys: [["Name", false]], // non-exact match (case-insensitive includes)
-      largeGraph: { lowZoomThreshold: 0.5 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5 } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { displayName: "Hello" } }],
@@ -344,7 +787,7 @@ describe("node rendering", () => {
       width: 800,
       height: 600,
       captionsKeys: ["Name"], // bare string → fuzzy, case-insensitive match
-      largeGraph: { lowZoomThreshold: 0.5 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5 } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { displayName: "Hello" } }],
@@ -372,7 +815,7 @@ describe("node rendering", () => {
       width: 800,
       height: 600,
       captionsKeys: [["nonexistent", true]],
-      largeGraph: { lowZoomThreshold: 0.5 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5 } },
     });
     canvas.setData({
       nodes: [{ id: 42, labels: ["A"], visible: true, color: "#f00", data: { x: "y" } }],
@@ -428,7 +871,7 @@ describe("node label caching", () => {
       width: 800,
       height: 600,
       captionsKeys: [["name", true]],
-      largeGraph: { lowZoomThreshold: 0.5 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5 }, nodeStyle: { captionPosition: "inside" } },
     });
     canvas.setData({
       nodes: [{ id: 1, labels: ["A"], visible: true, color: "#f00", data: { name: "test", title: "other" } }],
@@ -494,7 +937,7 @@ describe("link rendering", () => {
     { curve: 0.5, loop: true, selected: true },
   ])("ends the 2D stroke behind its arrow tip: %o", ({ curve, loop, selected }) => {
     const canvas = createCanvas();
-    canvas.setConfig({ largeGraph: { lowZoomThreshold: 0 }, isLinkSelected: () => selected });
+    canvas.setConfig({ twoD: { largeGraph: { lowZoomThreshold: 0 } }, isLinkSelected: () => selected });
     canvas.setData({
       nodes: [
         { id: 1, labels: ["A"], visible: true, color: "#f00", data: {} },
@@ -505,7 +948,7 @@ describe("link rendering", () => {
     const link = canvas.getGraphData().links[0];
     Object.assign(link.source, { x: 0, y: 0 });
     if (!loop) Object.assign(link.target, { x: 500, y: 0 });
-    link.curve = curve;
+    link.curve2D = curve;
     const ctx = createCtxSpy();
     getLastInstance().callbacks.linkCanvasObject!(link, ctx, 2);
     const stroke = loop ? ctx.bezierCurveTo.mock.calls[0] : ctx.quadraticCurveTo.mock.calls[0];
@@ -568,7 +1011,7 @@ describe("link rendering", () => {
     const instance = getLastInstance();
     const graphData = canvas.getGraphData();
     // Parallel links should have different curve values
-    expect(graphData.links[0].curve).not.toBe(graphData.links[1].curve);
+    expect(graphData.links[0].curve2D).not.toBe(graphData.links[1].curve2D);
 
     // Position nodes
     graphData.links[0].source.x = -50;
@@ -612,7 +1055,7 @@ describe("link rendering", () => {
 
   it("renders link label", () => {
     const canvas = createCanvas();
-    canvas.setConfig({ width: 800, height: 600, largeGraph: { lowZoomThreshold: 0.5 } });
+    canvas.setConfig({ width: 800, height: 600, twoD: { largeGraph: { lowZoomThreshold: 0.5 } } });
     canvas.setData({
       nodes: [
         { id: 1, labels: ["A"], visible: true, color: "#f00", data: {} },
@@ -646,7 +1089,7 @@ describe("link rendering", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: { lowZoomThreshold: 2, viewportPadding: 10 },
+      twoD: { largeGraph: { lowZoomThreshold: 2, viewportPadding: 10 } },
     });
     canvas.setData({
       nodes: [
@@ -684,7 +1127,7 @@ describe("link rendering", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      linkLineDash: () => [5, 3],
+      twoD: { linkLineDash: () => [5, 3] },
     });
     canvas.setData({
       nodes: [
@@ -709,6 +1152,37 @@ describe("link rendering", () => {
     instance.callbacks.linkCanvasObject!(graphData.links[0], ctx, 1);
 
     expect(ctx.setLineDash).toHaveBeenCalled();
+  });
+
+  it("uses the configured link text size while preserving per-link overrides", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({ twoD: { largeGraph: { enabled: false } } });
+    canvas.setData({
+      nodes: [
+        { id: 1, labels: ["A"], visible: true, color: "#f00", data: {} },
+        { id: 2, labels: ["B"], visible: true, color: "#0f0", data: {} },
+      ],
+      links: [
+        { id: 1, relationship: "DEFAULT", source: 1, target: 2, visible: true, color: "#888", data: {} },
+        { id: 2, relationship: "OVERRIDE", source: 1, target: 2, visible: true, color: "#888", fontSize: 13, data: {} },
+      ],
+    });
+    const links = canvas.getGraphData().links;
+    links[0].source.x = 0;
+    links[0].source.y = 0;
+    links[0].target.x = 100;
+    links[0].target.y = 0;
+    const paint = (index: number) => {
+      const ctx = createCtxSpy();
+      getLastInstance().callbacks.linkCanvasObject!(links[index], ctx, 1);
+      return ctx.font;
+    };
+    expect(paint(0)).toContain("6px");
+    canvas.setConfig({ linkStyle: { fontSize: 9 } });
+    expect(paint(0)).toContain("9px");
+    expect(paint(1)).toContain("13px");
+    canvas.setConfig({ linkStyle: { fontSize: 4 } });
+    expect(paint(0)).toContain("4px");
   });
 
   it("uses per-link width, fontSize and arrowSize overrides", () => {

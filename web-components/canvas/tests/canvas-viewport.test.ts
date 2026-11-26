@@ -109,7 +109,7 @@ describe("viewport methods", () => {
     canvas.setConfig({ width: 800, height: 600 });
     canvas.setData(SIMPLE_DATA);
 
-    const viewport = canvas.getViewport();
+    const viewport = canvas.twoD.getViewport();
     expect(viewport).toHaveProperty("zoom");
     expect(viewport).toHaveProperty("centerX");
     expect(viewport).toHaveProperty("centerY");
@@ -123,7 +123,7 @@ describe("viewport methods", () => {
     canvas.setConfig({ width: 800, height: 600 });
     canvas.setData(SIMPLE_DATA);
 
-    canvas.setViewport({ centerX: 100, centerY: 200, zoom: 2 });
+    canvas.twoD.setViewport({ centerX: 100, centerY: 200, zoom: 2 });
     const instance = getLastInstance();
     expect(instance.zoomValue).toBe(2);
     expect(instance.center.x).toBe(100);
@@ -213,7 +213,7 @@ describe("onZoom updates culling bounds", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: { lowZoomThreshold: 0.5, viewportPadding: 10 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5, viewportPadding: 10 } },
     });
     canvas.setData(SIMPLE_DATA);
 
@@ -242,7 +242,7 @@ describe("onZoom updates culling bounds", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: { lowZoomThreshold: 0.5, viewportPadding: 10 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5, viewportPadding: 10 } },
     });
     canvas.setData(SIMPLE_DATA);
 
@@ -271,7 +271,7 @@ describe("onZoom updates culling bounds", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: { lowZoomThreshold: 0.5, viewportPadding: 10 },
+      twoD: { largeGraph: { lowZoomThreshold: 0.5, viewportPadding: 10 } },
     });
     canvas.setData(SIMPLE_DATA);
 

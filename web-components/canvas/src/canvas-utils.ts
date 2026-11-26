@@ -41,7 +41,7 @@ export const DEFAULT_CANVAS_FOREGROUND = '#1A1A1A';
 
 /** Default link distance between connected nodes (world units) */
 export const LINK_DISTANCE = 45;
-/** Default node circle radius (world units) */
+/** Default circle/sphere radius or half the square/cube side length (world units). */
 export const NODE_SIZE = 9;
 /** Default link line width, in screen pixels (divided by globalScale so it stays constant while zooming) */
 export const LINK_WIDTH = 1;
@@ -102,7 +102,7 @@ function circularLayout(nodes: GraphNode[], center: { x: number; y: number }, ra
 
 /**
  * Converts Data format to GraphData format
- * Adds runtime properties (x, y, vx, vy, fx, fy, displayName, curve)
+ * Adds runtime properties (x, y, vx, vy, fx, fy, displayName, curve, curve2D)
  */
 export function dataToGraphData(
   data: Data,
@@ -190,7 +190,9 @@ export function dataToGraphData(
       target: targetNode,
       // Reversing endpoints reverses the curve's perpendicular. Keep each
       // unordered pair's assigned lane distinct in both rendering dimensions.
-      curve: calculateLinkCurve(duplicateIndex, sourceNode.id === targetNode.id, curveMultiplier)
+      curve: calculateLinkCurve(duplicateIndex, sourceNode.id === targetNode.id)
+        * (sourceNode.id > targetNode.id ? -1 : 1),
+      curve2D: calculateLinkCurve(duplicateIndex, sourceNode.id === targetNode.id, curveMultiplier)
         * (sourceNode.id > targetNode.id ? -1 : 1),
     };
   }).filter((link) => link !== undefined);
@@ -200,7 +202,7 @@ export function dataToGraphData(
 
 /**
  * Converts GraphData format to Data format
- * Removes runtime properties (x/y/z, layoutTargetX/Y, vx/vy/vz, fx/fy/fz, displayName, curve)
+ * Removes runtime properties (x/y/z, layoutTargetX/Y, vx/vy/vz, fx/fy/fz, displayName, curve, curve2D)
  * Preserves the expand boolean so the state survives round-trips through dataToGraphData.
  */
 export function graphDataToData(graphData: GraphData): Data {
@@ -210,7 +212,7 @@ export function graphDataToData(graphData: GraphData): Data {
   });
 
   const links: Link[] = graphData.links.map((link) => {
-    const { curve, source, target, ...rest } = link;
+    const { curve, curve2D, source, target, ...rest } = link;
     return {
       ...rest,
       source: source.id,
@@ -397,21 +399,50 @@ export const getNodeDisplayKey = (
 }
 
 /**
- * Wraps text into two lines with ellipsis handling for circular nodes
+ * Wraps text into two lines with ellipsis handling for circular nodes.
+ * The context must use center alignment and a middle baseline, matching the renderer.
+ * Returns empty lines when no text can fit.
  */
 export const wrapTextForCircularNode = (
   ctx: CanvasRenderingContext2D,
   text: string,
   maxRadius: number
 ): [string, string] => {
-  const ellipsis = "...";
-  const ellipsisWidth = ctx.measureText(ellipsis).width;
-  const halfTextHeight = 1.125;
-  const availableRadius = Math.sqrt(
-    Math.max(0, maxRadius * maxRadius - halfTextHeight * halfTextHeight)
-  );
-  const lineWidth = availableRadius * 2;
+  if (maxRadius <= 0) return ["", ""];
 
+  const fits = (value: string, offset: number): boolean => {
+    const metrics = ctx.measureText(value);
+    const halfWidth = Math.max(
+      metrics.width / 2,
+      Math.abs(metrics.actualBoundingBoxLeft ?? 0),
+      Math.abs(metrics.actualBoundingBoxRight ?? 0),
+    );
+    const height = Math.max(
+      Math.abs(offset - (metrics.actualBoundingBoxAscent ?? 0)),
+      Math.abs(offset + (metrics.actualBoundingBoxDescent ?? 0)),
+    );
+    return Math.hypot(halfWidth, height) <= maxRadius;
+  };
+  const lineOffset = (value: string): number => {
+    const metrics = ctx.measureText(value);
+    return ((metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)) * 0.75;
+  };
+  const ellipsis = "...";
+  const fitsCentered = (value: string): boolean => {
+    const metrics = ctx.measureText(value);
+    const correction = ((metrics.actualBoundingBoxAscent ?? 0) - (metrics.actualBoundingBoxDescent ?? 0)) / 2;
+    return fits(value, correction);
+  };
+  if (fitsCentered(text)) return [text, ""];
+
+  const truncateSingleLine = (): [string, string] => {
+    const suffix = fitsCentered(ellipsis) ? ellipsis : "";
+    let prefix = text;
+    while (prefix && !fitsCentered(prefix + suffix)) {
+      prefix = prefix.slice(0, -1);
+    }
+    return [prefix + suffix, ""];
+  };
   const words = text.split(/\s+/);
   let line1 = "";
   let line2 = "";
@@ -419,19 +450,19 @@ export const wrapTextForCircularNode = (
   for (let i = 0; i < words.length; i += 1) {
     const word = words[i];
     const testLine = line1 ? `${line1} ${word}` : word;
-    const testWidth = ctx.measureText(testLine).width;
 
-    if (testWidth <= lineWidth) {
+    if (fits(testLine, -lineOffset(testLine))) {
       line1 = testLine;
     } else if (!line1) {
       let partialWord = word;
       while (
         partialWord.length > 0 &&
-        ctx.measureText(partialWord).width > lineWidth
+        !fits(partialWord, -lineOffset(partialWord))
       ) {
         partialWord = partialWord.slice(0, -1);
       }
       line1 = partialWord;
+      if (!line1) return truncateSingleLine();
       const remainingWords = [
         word.slice(partialWord.length),
         ...words.slice(i + 1),
@@ -444,10 +475,12 @@ export const wrapTextForCircularNode = (
     }
   }
 
-  if (line2 && ctx.measureText(line2).width > lineWidth) {
+  const offset = lineOffset(line1);
+  if (line2 && !fits(line2, offset)) {
+    if (!fits(ellipsis, offset)) return [line1, ""];
     while (
       line2.length > 0 &&
-      ctx.measureText(line2).width + ellipsisWidth > lineWidth
+      !fits(line2 + ellipsis, offset)
     ) {
       line2 = line2.slice(0, -1);
     }

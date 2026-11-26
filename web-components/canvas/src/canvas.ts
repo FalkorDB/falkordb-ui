@@ -2,23 +2,30 @@ import ForceGraph from "force-graph";
 import * as d3 from "d3";
 import {
   CanvasDimension,
+  CanvasConfig,
   Data,
-  ForceGraphInstance,
+  TwoDGraphInstance,
+  ThreeDGraphInstance,
   GraphData,
   GraphLink,
   GraphNode,
-  ForceGraphConfig,
   LayoutMode,
   LayoutOptions,
-  ViewportState,
+  TwoDViewportState,
+  CameraState,
+  ThreeDCullingStats,
   Transform,
   CanvasRenderMode,
-  InternalForceGraphConfig,
+  InternalCanvasConfig,
   NodeStyleConfig,
+  TwoDNodeStyleConfig,
   LinkStyleConfig,
+  TwoDLinkStyleConfig,
   SimulationConfig,
   InteractionConfig,
-  LargeGraphConfig,
+  TwoDInteractionConfig,
+  TwoDLargeGraphConfig,
+  ThreeDLargeGraphConfig,
 } from "./canvas-types.js";
 import {
   dataToGraphData,
@@ -42,28 +49,92 @@ import type { Graph3D } from "./canvas-3d.js";
 
 const PADDING = 2;
 
+function cloneCameraState(state: CameraState): CameraState {
+  return {
+    position: { ...state.position },
+    target: { ...state.target },
+    up: { ...state.up },
+  };
+}
+
+function rejectFlatTwoDConfig(config: Partial<CanvasConfig>) {
+  const movedOptions = [
+    ["largeGraph", "twoD.largeGraph"],
+    ["linkLineDash", "twoD.linkLineDash"],
+    ["node", "twoD.node"],
+    ["link", "twoD.link"],
+  ] as const;
+  for (const [option, destination] of movedOptions) {
+    if (Object.prototype.hasOwnProperty.call(config, option)) {
+      throw new TypeError(`Configuration option "${option}" has moved to "${destination}".`);
+    }
+  }
+
+  const rejectMovedSubOptions = (
+    section: "nodeStyle" | "linkStyle" | "interaction",
+    values: object | undefined,
+    options: readonly string[],
+  ) => {
+    if (!values) return;
+    for (const option of options) {
+      if (Object.prototype.hasOwnProperty.call(values, option)) {
+        throw new TypeError(`Configuration option "${section}.${option}" has moved to "twoD.${section}.${option}".`);
+      }
+    }
+  };
+  rejectMovedSubOptions("nodeStyle", config.nodeStyle, [
+    "fontSize",
+    "textFillRatio",
+    "strokeWidthSelected",
+    "strokeWidthUnselected",
+  ]);
+  if (config.twoD?.nodeStyle) {
+    for (const option of ["glowDuration", "glowSpread", "glowSteps", "glowColor", "glowMaxOpacity"]) {
+      if (Object.prototype.hasOwnProperty.call(config.twoD.nodeStyle, option)) {
+        throw new TypeError(`Configuration option "twoD.nodeStyle.${option}" has moved to "nodeStyle.${option}".`);
+      }
+    }
+  }
+  rejectMovedSubOptions("linkStyle", config.linkStyle, [
+    "arrowWidthRatio",
+    "arrowNotchRatio",
+    "selfLoopCurveFactor",
+    "parallelEdgeCurveMultiplier",
+    "labelBackgroundPadding",
+    "edgeGap",
+  ]);
+  rejectMovedSubOptions("interaction", config.interaction, [
+    "zoomToFitDelay",
+    "linkHitWidth",
+  ]);
+}
+
 /** Selected links are drawn this many times wider, with a proportionally larger arrowhead. */
 const LINK_SELECTED_SCALE = 2;
 
 // ─── Default Sub-Configs ───────────────────────────────────────────────────────
 
-const DEFAULT_NODE_STYLE: Required<NodeStyleConfig> = {
+const DEFAULT_NODE_STYLE: Required<NodeStyleConfig & TwoDNodeStyleConfig> = {
   fontFamily: 'SofiaSans',
   fontWeightUnselected: 400,
   fontWeightSelected: 700,
-  fontSize: 2,
+  fontSize: 6,
   textFillRatio: 0.85,
+  captionPosition: 'above',
+  captionGap: 1,
   strokeWidthSelected: 1,
   strokeWidthUnselected: 0.5,
   glowDuration: 10000,
   glowSpread: 12,
   glowSteps: 16,
-  glowColor: [59, 130, 246],
+  glowColor: [255, 234, 167],
   glowMaxOpacity: 0.6,
+  selectedGlowColor: [59, 130, 246],
 };
 
-const DEFAULT_LINK_STYLE: Required<LinkStyleConfig> = {
+const DEFAULT_LINK_STYLE: Required<LinkStyleConfig & TwoDLinkStyleConfig> = {
   fontFamily: 'SofiaSans',
+  fontSize: LINK_FONT_SIZE,
   fontWeightUnselected: 400,
   fontWeightSelected: 700,
   arrowWidthRatio: 1.6,
@@ -85,7 +156,7 @@ const DEFAULT_SIMULATION: Required<SimulationConfig> = {
   disableCollisionAbove: 0,
 };
 
-const DEFAULT_INTERACTION: Required<InteractionConfig> = {
+const DEFAULT_INTERACTION: Required<InteractionConfig & TwoDInteractionConfig> = {
   tooltipFontSize: 12,
   tooltipPadding: '4px 8px',
   tooltipBorderRadius: '4px',
@@ -97,21 +168,31 @@ const DEFAULT_INTERACTION: Required<InteractionConfig> = {
   contrastThreshold: 0.5,
 };
 
-const DEFAULT_LARGE_GRAPH: Required<LargeGraphConfig> = {
+const DEFAULT_LARGE_GRAPH: Required<TwoDLargeGraphConfig> = {
   enabled: true,
   viewportPadding: 0,
   lowZoomThreshold: 1,
   skipLabelsAtLowZoom: true,
   skipArrowsAtLowZoom: true,
   skipLinkLabelsAtLowZoom: true,
+};
+
+const DEFAULT_THREE_D_LARGE_GRAPH: Required<ThreeDLargeGraphConfig> = {
+  enabled: true,
+  maxLabeledElements: 1000,
   nodeInstancing: true,
+  viewportPadding: 0,
+  lowZoomThreshold: 1,
+  skipLabelsAtLowZoom: true,
+  skipArrowsAtLowZoom: true,
+  skipLinkLabelsAtLowZoom: true,
 };
 
 /** A node as the 3D renderer leaves it: positioned, moving and pinned in depth too. */
 type Node3D = GraphNode & { z?: number; vz?: number; fz?: number };
 
 /** Axis-aligned bounding box in world-space coordinates. */
-export type WorldBounds = {
+export type TwoDWorldBounds = {
   minX: number;
   maxX: number;
   minY: number;
@@ -169,17 +250,19 @@ function createStyles(backgroundColor: string, foregroundColor: string, interact
  * ```
  */
 class FalkorDBCanvas extends HTMLElement {
-  private graph: ForceGraphInstance;
+  private graph: TwoDGraphInstance | undefined;
 
   /** The 3D renderer, set while the graph is shown in 3D (when `graph` is unset). */
   private graph3d: Graph3D | null = null;
 
-  /**
-   * The 2D viewport as it was when the element was disconnected. Hosts read it
-   * while unmounting, after the element has left the page and its renderer has
-   * been dropped, to restore the view where the user left it.
-   */
-  private detachedViewport: ViewportState = undefined;
+  /** The 2D viewport as it was when its renderer was last unmounted. */
+  private detachedViewport: TwoDViewportState = undefined;
+
+  /** The 3D camera as it was when its renderer was last unmounted. */
+  private detachedCameraState: CameraState | undefined;
+
+  /** The mode that was active when the element was disconnected, if any. */
+  private detachedDimension: CanvasDimension | undefined;
 
   /** Bumped by each setDimension call, so a 3D load that was overtaken is dropped. */
   private dimensionRequest = 0;
@@ -211,7 +294,7 @@ class FalkorDBCanvas extends HTMLElement {
 
   private debugEnabled: boolean = false;
 
-  private config: InternalForceGraphConfig = {
+  private config: InternalCanvasConfig = {
     // ─── Dimensions & Colors ─────────────────────────────────────────────────
     backgroundColor: DEFAULT_CANVAS_BACKGROUND,
     foregroundColor: DEFAULT_CANVAS_FOREGROUND,
@@ -227,13 +310,56 @@ class FalkorDBCanvas extends HTMLElement {
     simulation: { ...DEFAULT_SIMULATION },
     interaction: { ...DEFAULT_INTERACTION },
     largeGraph: { ...DEFAULT_LARGE_GRAPH },
+    modeConfig: {
+      twoD: {
+        nodeStyle: {
+          fontSize: DEFAULT_NODE_STYLE.fontSize,
+          textFillRatio: DEFAULT_NODE_STYLE.textFillRatio,
+          captionPosition: DEFAULT_NODE_STYLE.captionPosition,
+          captionGap: DEFAULT_NODE_STYLE.captionGap,
+          strokeWidthSelected: DEFAULT_NODE_STYLE.strokeWidthSelected,
+          strokeWidthUnselected: DEFAULT_NODE_STYLE.strokeWidthUnselected,
+        },
+        linkStyle: {
+          arrowWidthRatio: DEFAULT_LINK_STYLE.arrowWidthRatio,
+          arrowNotchRatio: DEFAULT_LINK_STYLE.arrowNotchRatio,
+          selfLoopCurveFactor: DEFAULT_LINK_STYLE.selfLoopCurveFactor,
+          parallelEdgeCurveMultiplier: DEFAULT_LINK_STYLE.parallelEdgeCurveMultiplier,
+          labelBackgroundPadding: DEFAULT_LINK_STYLE.labelBackgroundPadding,
+          edgeGap: DEFAULT_LINK_STYLE.edgeGap,
+        },
+        interaction: {
+          zoomToFitDelay: DEFAULT_INTERACTION.zoomToFitDelay,
+          linkHitWidth: DEFAULT_INTERACTION.linkHitWidth,
+        },
+        largeGraph: { ...DEFAULT_LARGE_GRAPH },
+      },
+      threeD: {
+        largeGraph: { ...DEFAULT_THREE_D_LARGE_GRAPH },
+        linkWidth: 0,
+      },
+    },
 
     // ─── Display Options ─────────────────────────────────────────────────────
     captionsKeys: [],
     showPropertyKeyPrefix: false,
     pinOnDragEnd: false,
     dimmed: false,
-  } as InternalForceGraphConfig;
+  } as InternalCanvasConfig;
+
+  readonly twoD = {
+    getGraph: (): TwoDGraphInstance => this.require2DGraph(),
+    getViewport: (): TwoDViewportState => this.getTwoDViewport(),
+    setViewport: (viewport: TwoDViewportState): void => this.setTwoDViewport(viewport),
+    getCullingStats: () => this.getTwoDCullingStats(),
+  };
+
+  readonly threeD = {
+    getGraph: (): ThreeDGraphInstance => this.require3DGraph(),
+    getCameraState: (): CameraState => this.getThreeDCameraState(),
+    setCameraState: (state: CameraState): void => this.setThreeDCameraState(state),
+    getCullingStats: (): ThreeDCullingStats => this.require3DRenderer().getCullingStats(),
+  };
 
   private nodeMode: CanvasRenderMode = 'replace';
 
@@ -256,9 +382,21 @@ class FalkorDBCanvas extends HTMLElement {
     }
   > = new Map();
 
+  private outsideCaptionMetrics = new Map<number, {
+    text: string;
+    font: string;
+    align: CanvasTextAlign;
+    baseline: CanvasTextBaseline;
+    width: number;
+    height: number;
+  }>();
+
+  private cullingContext: CanvasRenderingContext2D | null = null;
+
   // Pending glow repaints, keyed by node, so a glowing node queues one timer
   // rather than one per frame.
   private glowRenderScheduled: Map<number, ReturnType<typeof setTimeout>> = new Map();
+  private autoFitTimers = new Set<ReturnType<typeof setTimeout>>();
 
   private relationshipsTextCache: Map<
     string,
@@ -273,7 +411,7 @@ class FalkorDBCanvas extends HTMLElement {
    * viewport.  Updated on every zoom/pan event and on resize.
    * `null` means culling is disabled or not yet computed.
    */
-  private cullingBounds: WorldBounds | null = null;
+  private cullingBounds: TwoDWorldBounds | null = null;
 
   /** Current zoom level, cached alongside cullingBounds. */
   private cullingZoom: number = 1;
@@ -287,6 +425,7 @@ class FalkorDBCanvas extends HTMLElement {
     // The font string is unchanged, so only an explicit clear picks up the
     // metrics of the face that just replaced the fallback.
     this.nodeTextLayout.clear();
+    this.outsideCaptionMetrics.clear();
     for (const node of this.data.nodes) {
       node.displayName = ["" , ""];
     }
@@ -326,6 +465,7 @@ class FalkorDBCanvas extends HTMLElement {
   }
 
   connectedCallback() {
+    this.detachedDimension = undefined;
     // Read mode attributes when element is connected to DOM
     const nodeModeAttr = this.getAttribute('node-mode');
     if (nodeModeAttr === 'before' || nodeModeAttr === 'after' || nodeModeAttr === 'replace') {
@@ -350,13 +490,14 @@ class FalkorDBCanvas extends HTMLElement {
 
   disconnectedCallback() {
     this.log('Component disconnected from DOM');
+    this.detachedDimension = this.graph3d ? "3d" : this.graph ? "2d" : undefined;
     document.fonts.removeEventListener("loadingdone", this.onFontsLoadingDone);
     this.clearGlowTimers();
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
-    this.detachedViewport = this.getViewport();
+    if (this.graph) this.detachedViewport = this.getTwoDViewport();
     // Everything is dropped, so a reconnect renders afresh rather than next
     // to the old, full-height container.
     this.unmountRenderer();
@@ -367,66 +508,114 @@ class FalkorDBCanvas extends HTMLElement {
   /**
    * Update the canvas configuration. Accepts a partial config object —
    * only the provided fields are changed; others retain their current values.
-   * Nested objects (nodeStyle, linkStyle, simulation, interaction, largeGraph) are deep-merged.
+   * Shared settings stay at the top level; renderer-specific settings are
+   * deep-merged under `twoD` and `threeD`.
    * `captionsKeys` entries given as bare strings are normalized to `[key, false]` (fuzzy match).
    *
    * @param config - Partial configuration to apply
    */
-  setConfig(config: Partial<ForceGraphConfig>) {
+  setConfig(config: Partial<CanvasConfig>) {
+    rejectFlatTwoDConfig(config);
     this.log('Setting config:', config);
+
+    const captionGap = config.twoD?.nodeStyle?.captionGap;
+    if (captionGap !== undefined && (!Number.isFinite(captionGap) || captionGap < 0)) {
+      throw new RangeError('twoD.nodeStyle.captionGap must be a finite non-negative number');
+    }
 
     const captionsKeys = config.captionsKeys
       ? normalizeCaptionsKeys(config.captionsKeys)
       : undefined;
+    const { twoD, threeD, nodeStyle, linkStyle, interaction, simulation, eventHandlers, layoutOptions, captionsKeys: _captionsKeys, dimension, ...scalarConfig } = config;
 
+    const merge = <T extends object>(target: T, value: Partial<T> | undefined): boolean => {
+      if (!value) return false;
+      Object.assign(target, value);
+      return true;
+    };
+
+    const sharedNodeStyleChanged = merge(this.config.nodeStyle, nodeStyle);
+    const twoDNodeStyleChanged = merge(this.config.modeConfig.twoD.nodeStyle, twoD?.nodeStyle);
+    if (twoD?.nodeStyle) Object.assign(this.config.nodeStyle, twoD.nodeStyle);
+
+    const sharedLinkStyleChanged = merge(this.config.linkStyle, linkStyle);
+    const twoDLinkStyleChanged = merge(this.config.modeConfig.twoD.linkStyle, twoD?.linkStyle);
+    if (twoD?.linkStyle) Object.assign(this.config.linkStyle, twoD.linkStyle);
+
+    const sharedInteractionChanged = merge(this.config.interaction, interaction);
+    merge(this.config.modeConfig.twoD.interaction, twoD?.interaction);
+    if (twoD?.interaction) Object.assign(this.config.interaction, twoD.interaction);
+
+    const simulationChanged = merge(this.config.simulation, simulation);
+    const eventHandlersChanged = merge(this.config.eventHandlers ??= {}, eventHandlers);
+    if (twoD?.largeGraph) {
+      merge(this.config.modeConfig.twoD.largeGraph, twoD.largeGraph);
+      merge(this.config.largeGraph, twoD.largeGraph);
+    }
+    const threeDLargeGraphChanged = threeD?.largeGraph
+      ? merge(this.config.modeConfig.threeD.largeGraph, threeD.largeGraph)
+      : false;
+    let threeDVisualConfigChanged = false;
+    if (threeD && "nodeObject" in threeD) {
+      if (threeD.nodeObject !== this.config.modeConfig.threeD.nodeObject) threeDVisualConfigChanged = true;
+      this.config.modeConfig.threeD.nodeObject = threeD.nodeObject;
+    }
+    if (threeD && "linkObject" in threeD) {
+      if (threeD.linkObject !== this.config.modeConfig.threeD.linkObject) threeDVisualConfigChanged = true;
+      this.config.modeConfig.threeD.linkObject = threeD.linkObject;
+    }
+    if (threeD && "linkDashPattern" in threeD) {
+      if (threeD.linkDashPattern !== this.config.modeConfig.threeD.linkDashPattern) threeDVisualConfigChanged = true;
+      this.config.modeConfig.threeD.linkDashPattern = threeD.linkDashPattern;
+    }
+    if (threeD && "linkObjectPositionUpdate" in threeD) {
+      this.config.modeConfig.threeD.linkObjectPositionUpdate = threeD.linkObjectPositionUpdate;
+    }
+    if (threeD && "linkWidth" in threeD && threeD.linkWidth !== undefined) {
+      this.config.modeConfig.threeD.linkWidth = threeD.linkWidth;
+    }
+    if (twoD && "linkLineDash" in twoD) {
+      this.config.modeConfig.twoD.linkLineDash = twoD.linkLineDash;
+      this.config.linkLineDash = twoD.linkLineDash;
+    }
+    if (twoD && "node" in twoD) {
+      this.config.modeConfig.twoD.node = twoD.node;
+      this.config.node = twoD.node;
+    }
+    if (twoD && "link" in twoD) {
+      this.config.modeConfig.twoD.link = twoD.link;
+      this.config.link = twoD.link;
+    }
     // If captionsKeys or showPropertyKeyPrefix changed, invalidate cached display names and font sizes
     // so text is recomputed with the new keys on the next render.
     if ((captionsKeys && JSON.stringify(captionsKeys) !== JSON.stringify(this.config.captionsKeys))
       || (config.showPropertyKeyPrefix !== undefined && config.showPropertyKeyPrefix !== this.config.showPropertyKeyPrefix)) {
       this.nodeDisplayFontSize.clear();
       this.nodeTextLayout.clear();
+      this.outsideCaptionMetrics.clear();
       for (const node of this.data.nodes) {
         node.displayName = ["", ""];
       }
     }
 
-    // Deep-merge all nested object configs to preserve sibling fields on partial updates
-    const mergeTargets = [
-      ['largeGraph', config.largeGraph],
-      ['nodeStyle', config.nodeStyle],
-      ['linkStyle', config.linkStyle],
-      ['simulation', config.simulation],
-      ['interaction', config.interaction],
-      ['eventHandlers', config.eventHandlers],
-    ] as const;
-
-    for (const [key, value] of mergeTargets) {
-      if (value && typeof value === 'object') {
-        (this.config as any)[key] = { ...(this.config as any)[key], ...value };
-      }
-    }
-
-    // Shallow-assign top-level scalar/function fields (after deep-merge to avoid clobbering nested objects).
-    // `captionsKeys` is excluded so only the normalized tuples are ever written to the internal config.
-    // `dimension` is applied last, through setDimension, which needs to see the change.
-    const { largeGraph, nodeStyle, linkStyle, simulation, interaction, eventHandlers, layoutOptions, captionsKeys: _captionsKeys, dimension, ...scalarConfig } = config;
     Object.assign(this.config, scalarConfig);
 
     if (captionsKeys) {
       this.config.captionsKeys = captionsKeys;
     }
 
-    if (config.layoutOptions) {
-      const lo = config.layoutOptions;
+    if (layoutOptions) {
+      const lo = layoutOptions;
       if (lo.tree) this.config.layoutOptions.tree = { ...this.config.layoutOptions.tree, ...lo.tree };
       if (lo.radial) this.config.layoutOptions.radial = { ...this.config.layoutOptions.radial, ...lo.radial };
       if (lo.force) this.config.layoutOptions.force = { ...this.config.layoutOptions.force, ...lo.force };
     }
 
     // Clear cached font sizes and display names when node style changes so text gets recalculated
-    if (config.nodeStyle) {
+    if (sharedNodeStyleChanged || twoDNodeStyleChanged) {
       this.nodeDisplayFontSize.clear();
       this.nodeTextLayout.clear();
+      this.outsideCaptionMetrics.clear();
       for (const node of this.data.nodes) {
         node.displayName = ["", ""];
       }
@@ -436,20 +625,20 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Clear cached link label metrics when link style changes
-    if (config.linkStyle) {
+    if (sharedLinkStyleChanged || twoDLinkStyleChanged) {
       this.relationshipsTextCache.clear();
     }
 
     // Re-apply simulation forces when simulation config changes
-    if (config.simulation && this.graph) {
+    if (simulationChanged && this.graph) {
       this.setupForces();
     }
-    if ((config.simulation || config.layoutOptions) && this.graph3d) {
+    if ((simulationChanged || layoutOptions) && this.graph3d) {
       this.graph3d.setupForces();
     }
 
     // Recompute or clear culling bounds when largeGraph config changes.
-    if ('largeGraph' in config) {
+    if (twoD?.largeGraph) {
       if (this.config.largeGraph?.enabled) {
         this.recomputeCullingBoundsIfNeeded();
       } else {
@@ -458,7 +647,7 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Update event handlers if they were provided
-    if (config.eventHandlers) {
+    if (eventHandlersChanged) {
       this.log('Updating event handlers');
       this.updateEventHandlers();
     }
@@ -470,11 +659,20 @@ class FalkorDBCanvas extends HTMLElement {
     }
     if (config.backgroundColor && this.graph3d) {
       this.graph3d.setBackgroundColor(this.config.backgroundColor);
-    } else if ((config.nodeStyle || config.linkStyle || config.interaction) && this.graph3d) {
+    } else if (
+      (
+        sharedNodeStyleChanged
+        || sharedLinkStyleChanged
+        || sharedInteractionChanged
+        || threeDLargeGraphChanged
+        || threeDVisualConfigChanged
+      )
+      && this.graph3d
+    ) {
       // 3D captions are textures, drawn with these fonts and contrast settings.
       this.graph3d.rebuild();
     }
-    if (config.backgroundColor || config.foregroundColor || config.interaction) {
+    if (config.backgroundColor || config.foregroundColor || sharedInteractionChanged) {
       this.updateTooltipStyles();
     }
 
@@ -491,9 +689,37 @@ class FalkorDBCanvas extends HTMLElement {
     return this.config.dimension;
   }
 
+  private inactiveRendererError(required: "2D" | "3D"): Error {
+    const active = this.graph3d ? "3D" : this.graph ? "2D" : "uninitialized";
+    return new Error(`[FalkorDBCanvas] ${required} renderer is not active (current renderer: ${active})`);
+  }
+
+  private require2DGraph(): TwoDGraphInstance {
+    if (!this.graph) throw this.inactiveRendererError("2D");
+    return this.graph;
+  }
+
+  private require3DGraph(): ThreeDGraphInstance {
+    return this.require3DRenderer().graph;
+  }
+
+  private require3DRenderer(): Graph3D {
+    if (!this.graph3d) throw this.inactiveRendererError("3D");
+    return this.graph3d;
+  }
+
+  private getThreeDCameraState(): CameraState {
+    if (this.graph3d) return this.graph3d.getCameraState();
+    if (!this.container && this.detachedDimension === "3d" && this.detachedCameraState) {
+      return cloneCameraState(this.detachedCameraState);
+    }
+    throw this.inactiveRendererError("3D");
+  }
+
   /**
    * Show the graph flat in 2D or in 3D. Switching lays the graph out afresh
-   * in the new dimension and fits it to the view.
+   * and restores that renderer's saved view when available; otherwise it fits
+   * the graph to the view. A full setData replacement clears saved views.
    *
    * The 3D renderer (three.js) is downloaded the first time it is needed, so
    * the switch can take a moment; the returned promise settles once it is done,
@@ -546,6 +772,9 @@ class FalkorDBCanvas extends HTMLElement {
 
   /** Drop whichever renderer is mounted, leaving the container empty. */
   private unmountRenderer() {
+    this.clearAutoFitTimers();
+    if (this.graph) this.detachedViewport = this.getTwoDViewport();
+    if (this.graph3d) this.detachedCameraState = this.graph3d.getCameraState();
     if (this.graph) {
       this.graph._destructor();
       this.graph = undefined;
@@ -559,6 +788,7 @@ class FalkorDBCanvas extends HTMLElement {
     this.lastTransform = null;
     this.cullingBounds = null;
     this.cullingZoom = 1;
+    this.cullingContext = null;
   }
 
   private mount3D(Graph3DRenderer: typeof Graph3D) {
@@ -584,7 +814,9 @@ class FalkorDBCanvas extends HTMLElement {
     const { width, height } = this.container.getBoundingClientRect();
     if (width > 0 && height > 0) this.graph3d.setSize(width, height);
 
-    this.graph3d.applyLayout(true);
+    const cameraState = this.detachedCameraState;
+    this.graph3d.applyLayout(!cameraState);
+    if (cameraState) this.graph3d.setCameraState(cameraState);
   }
 
   private mount2D() {
@@ -600,7 +832,7 @@ class FalkorDBCanvas extends HTMLElement {
     const { width, height } = this.container.getBoundingClientRect();
     if (this.graph && width > 0 && height > 0) this.graph.width(width).height(height);
 
-    this.applyLayout();
+    this.applyLayout(!this.detachedViewport);
   }
 
   /**
@@ -823,7 +1055,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     // Delay zoomToFit so force-graph renders the new positions first
     if (zoomToFit) {
-      setTimeout(() => this.zoomToFit(), this.config.interaction.zoomToFitDelay);
+      this.scheduleAutoFit(() => this.zoomToFit(), this.config.interaction.zoomToFitDelay);
     }
   }
 
@@ -844,13 +1076,17 @@ class FalkorDBCanvas extends HTMLElement {
    */
   setData(data: Data) {
     this.log('setData called with', data.nodes.length, 'nodes and', data.links.length, 'links');
+    const graphData = dataToGraphData(data, undefined, undefined, this.config.linkStyle.parallelEdgeCurveMultiplier);
+    this.detachedViewport = undefined;
+    this.detachedCameraState = undefined;
     // Convert data and apply circular layout to new nodes only
-    this.data = dataToGraphData(data, undefined, undefined, this.config.linkStyle.parallelEdgeCurveMultiplier);
+    this.data = graphData;
 
     // A full replacement can reuse node ids for different nodes, so drop
     // everything cached per id; pending glow repaints belong to the old graph.
     this.nodeDisplayFontSize.clear();
     this.nodeTextLayout.clear();
+    this.outsideCaptionMetrics.clear();
     this.clearGlowTimers();
 
     // Initialize graph if it hasn't been initialized yet
@@ -903,7 +1139,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     // Auto zoom to fit (delay to let positions render)
     const nodeCount = this.data.nodes.length;
-    setTimeout(() => {
+    this.scheduleAutoFit(() => {
       this.zoomToFit(1);
       // For very small graphs the force simulation may push nodes far apart,
       // producing a near-zero zoom that makes them invisible.
@@ -918,17 +1154,19 @@ class FalkorDBCanvas extends HTMLElement {
 
   /**
    * Get the current viewport state (zoom level and center position).
-   * Returns undefined if the graph hasn't been initialized yet, or is shown in
-   * 3D. Once the element is disconnected, returns the 2D viewport it was left
-   * at (still undefined if it was left in 3D).
+   * While disconnected, returns the saved 2D viewport if the element was left
+   * in 2D. Throws while 3D is active or when no 2D viewport is available.
    */
-  getViewport(): ViewportState {
+  private getTwoDViewport(): TwoDViewportState {
     // Disconnected: the view as it was left. Otherwise, a 2D zoom-and-centre
     // does not describe a 3D camera.
     if (!this.graph) {
       // A copy, like the live path's fresh snapshot, so a caller adjusting it
       // cannot change what later reads return.
-      return this.container || !this.detachedViewport ? undefined : { ...this.detachedViewport };
+      if (!this.container && this.detachedDimension === "2d" && this.detachedViewport) {
+        return { ...this.detachedViewport };
+      }
+      throw this.inactiveRendererError("2D");
     }
 
     const { x: centerX, y: centerY } = this.graph.centerAt();
@@ -947,11 +1185,19 @@ class FalkorDBCanvas extends HTMLElement {
    * Ignored while the graph is shown in 3D.
    * @param viewport - The viewport state to restore
    */
-  setViewport(viewport: ViewportState) {
+  private setTwoDViewport(viewport: TwoDViewportState) {
     this.log('Setting viewport:', viewport);
-    if (!viewport || !this.graph) return;
-    this.graph.centerAt(viewport.centerX, viewport.centerY, 0);
-    this.graph.zoom(viewport.zoom, 0);
+    if (!viewport) return;
+    const graph = this.require2DGraph();
+    this.clearAutoFitTimers();
+    graph.centerAt(viewport.centerX, viewport.centerY, 0);
+    graph.zoom(viewport.zoom, 0);
+  }
+
+  private setThreeDCameraState(state: CameraState) {
+    const renderer = this.require3DRenderer();
+    this.clearAutoFitTimers();
+    renderer.setCameraState(state);
   }
 
   /**
@@ -973,6 +1219,7 @@ class FalkorDBCanvas extends HTMLElement {
     // Clear font size cache so text re-fits updated node sizes
     this.nodeDisplayFontSize.clear();
     this.nodeTextLayout.clear();
+    this.outsideCaptionMetrics.clear();
     // The repaint below re-schedules any node that is still glowing.
     this.clearGlowTimers();
     // Clear display names so text re-wraps for the new node sizes
@@ -1033,6 +1280,7 @@ class FalkorDBCanvas extends HTMLElement {
     // that affects text wrapping or font sizing.
     this.nodeDisplayFontSize.clear();
     this.nodeTextLayout.clear();
+    this.outsideCaptionMetrics.clear();
     for (const node of this.data.nodes) {
       node.displayName = ["", ""];
     }
@@ -1089,14 +1337,6 @@ class FalkorDBCanvas extends HTMLElement {
     }
   }
 
-  /**
-   * Get the underlying force-graph library instance for advanced customization.
-   * Returns undefined if the graph hasn't been initialized, or is shown in 3D.
-   */
-  getGraph(): ForceGraphInstance | undefined {
-    return this.graph;
-  }
-
   /** Get the current zoom level */
   public getZoom(): number {
     if (this.graph3d) return this.graph3d.getZoom();
@@ -1107,14 +1347,18 @@ class FalkorDBCanvas extends HTMLElement {
    * Get viewport culling statistics for debugging large-graph performance.
    * Shows how many nodes/links are visible vs total.
    */
-  public getCullingStats(): { enabled: boolean; bounds: WorldBounds | null; zoom: number; visibleNodes: number; totalNodes: number; visibleLinks: number; totalLinks: number } {
+  private getTwoDCullingStats(): { enabled: boolean; bounds: TwoDWorldBounds | null; zoom: number; visibleNodes: number; totalNodes: number; visibleLinks: number; totalLinks: number } {
+    this.require2DGraph();
     const enabled = this.config.largeGraph?.enabled ?? false;
     const totalNodes = this.data.nodes.length;
     const totalLinks = this.data.links.length;
     let visibleNodes = totalNodes;
     let visibleLinks = totalLinks;
     if (enabled && this.cullingBounds) {
-      visibleNodes = this.data.nodes.filter(n => this.isNodeInCullingBounds(n)).length;
+      visibleNodes = this.data.nodes.filter(n =>
+        this.isNodeInRenderBounds(n) ||
+        (this.cullingContext !== null && this.isOutsideCaptionInCullingBounds(n, this.cullingContext)),
+      ).length;
       visibleLinks = this.data.links.filter(l => this.isLinkInCullingBounds(l)).length;
     }
     return {
@@ -1132,7 +1376,7 @@ class FalkorDBCanvas extends HTMLElement {
    * Programmatically set the zoom level.
    * @param zoomLevel - The desired zoom scale (1 = 100%)
    */
-  public zoom(zoomLevel: number): ForceGraphInstance | undefined {
+  public zoom(zoomLevel: number): void {
     if (this.graph3d) {
       this.graph3d.zoom(zoomLevel);
       return;
@@ -1140,7 +1384,7 @@ class FalkorDBCanvas extends HTMLElement {
     if (!this.graph) return;
 
     this.log('Setting zoom level to:', zoomLevel);
-    return this.graph.zoom(zoomLevel);
+    this.graph.zoom(zoomLevel);
   }
 
   /**
@@ -1262,6 +1506,19 @@ class FalkorDBCanvas extends HTMLElement {
     this.glowRenderScheduled.clear();
   }
 
+  private clearAutoFitTimers() {
+    this.autoFitTimers.forEach(clearTimeout);
+    this.autoFitTimers.clear();
+  }
+
+  private scheduleAutoFit(callback: () => void, delay: number) {
+    const timer = setTimeout(() => {
+      this.autoFitTimers.delete(timer);
+      callback();
+    }, delay);
+    this.autoFitTimers.add(timer);
+  }
+
   private scheduleGlowRender(nodeId: number, delay: number) {
     if (this.glowRenderScheduled.has(nodeId)) return;
 
@@ -1376,7 +1633,7 @@ class FalkorDBCanvas extends HTMLElement {
     this.calculateNodeDegree();
 
     // Initialize force-graph
-    // Cast to any for the factory call pattern, result is properly typed as ForceGraphInstance
+    // Cast to any for the factory call pattern; the result has the 2D instance type.
     this.graph = (ForceGraph as any)()(this.container)
       .width(this.config.width || 800)
       .height(this.config.height || 600)
@@ -1403,6 +1660,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     // Setup forces
     this.setupForces();
+    if (this.detachedViewport) this.setTwoDViewport(this.detachedViewport);
     this.log('Force graph initialization complete');
   }
 
@@ -1609,6 +1867,59 @@ class FalkorDBCanvas extends HTMLElement {
     return FalkorDBCanvas.overlaps(this.nodeExtent(node), this.cullingBounds);
   }
 
+  private isNodeInRenderBounds(node: GraphNode): boolean {
+    if (!this.cullingBounds) return true;
+    const extent = this.nodeExtent(node);
+    const spread = this.config.nodeStyle.glowSpread;
+    return FalkorDBCanvas.overlaps({
+      minX: extent.minX - spread,
+      maxX: extent.maxX + spread,
+      minY: extent.minY - spread,
+      maxY: extent.maxY + spread,
+    }, this.cullingBounds);
+  }
+
+  private outsideCaptionLayout(node: GraphNode, position: Exclude<Required<TwoDNodeStyleConfig>['captionPosition'], 'inside'>) {
+    const strokeWidth = this.config.isNodeSelected?.(node)
+      ? this.config.nodeStyle.strokeWidthSelected
+      : this.config.nodeStyle.strokeWidthUnselected;
+    const offset = node.size + strokeWidth + this.config.nodeStyle.captionGap;
+    const x = node.x ?? 0;
+    const y = node.y ?? 0;
+    switch (position) {
+      case "above": return { x, y: y - offset, align: "center", baseline: "bottom" } as const;
+      case "below": return { x, y: y + offset, align: "center", baseline: "top" } as const;
+      case "left": return { x: x - offset, y, align: "right", baseline: "middle" } as const;
+      case "right": return { x: x + offset, y, align: "left", baseline: "middle" } as const;
+    }
+  }
+
+  private isOutsideCaptionInCullingBounds(node: GraphNode, ctx: CanvasRenderingContext2D): boolean {
+    const { captionPosition, fontSize, fontFamily, fontWeightSelected, fontWeightUnselected } = this.config.nodeStyle;
+    const { skipLabelsAtLowZoom, lowZoomThreshold } = this.config.largeGraph;
+    if (!this.cullingBounds || captionPosition === "inside" || (skipLabelsAtLowZoom && this.cullingZoom <= lowZoomThreshold)) return false;
+    const { x, y, align, baseline } = this.outsideCaptionLayout(node, captionPosition);
+    const text = node.displayName[0] || getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
+    const font = `${this.config.isNodeSelected?.(node) ? fontWeightSelected : fontWeightUnselected} ${fontSize}px ${fontFamily}`;
+    let cached = this.outsideCaptionMetrics.get(node.id);
+    if (!cached || cached.text !== text || cached.font !== font || cached.align !== align || cached.baseline !== baseline) {
+      ctx.save();
+      ctx.font = font;
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      const metrics = ctx.measureText(text);
+      ctx.restore();
+      cached = {
+        text, font, align, baseline,
+        width: Math.max(metrics.width, Math.abs(metrics.actualBoundingBoxLeft || 0), Math.abs(metrics.actualBoundingBoxRight || 0)),
+        height: Math.max(fontSize * 2, Math.abs(metrics.actualBoundingBoxAscent || 0), Math.abs(metrics.actualBoundingBoxDescent || 0)),
+      };
+      this.outsideCaptionMetrics.set(node.id, cached);
+    }
+    const { width, height } = cached;
+    return FalkorDBCanvas.overlaps({ minX: x - width, maxX: x + width, minY: y - height, maxY: y + height }, this.cullingBounds);
+  }
+
   /** The box around `node`'s hit area: its shape at `size + PADDING`, circle or square. */
   private nodeExtent(node: GraphNode): Bounds {
     const r = node.size + PADDING;
@@ -1652,14 +1963,14 @@ class FalkorDBCanvas extends HTMLElement {
     // along the curve and the label is drawn around its midpoint.
     const margin = Math.max(
       (link.arrowSize ?? ARROW_SIZE) * LINK_SELECTED_SCALE,
-      link.fontSize ?? LINK_FONT_SIZE,
+      link.fontSize ?? this.config.linkStyle.fontSize,
     );
 
     if (link.source.id === link.target.id) {
       // Self-loop: the cubic bezier extends roughly |curve| * nodeSize * factor
       // away from the node centre. Use that as a conservative radius.
       const nodeSize = link.source.size;
-      const loopRadius = Math.abs(link.curve || 1) * nodeSize * this.config.linkStyle.selfLoopCurveFactor + margin;
+      const loopRadius = Math.abs(link.curve2D || 1) * nodeSize * this.config.linkStyle.selfLoopCurveFactor + margin;
       return { minX: sx - loopRadius, maxX: sx + loopRadius, minY: sy - loopRadius, maxY: sy + loopRadius };
     }
 
@@ -1672,7 +1983,7 @@ class FalkorDBCanvas extends HTMLElement {
       return { minX: sx - margin, maxX: sx + margin, minY: sy - margin, maxY: sy + margin };
     }
 
-    const curvature = link.curve ?? 0;
+    const curvature = link.curve2D ?? 0;
     const perpX = dy / distance;
     const perpY = -dx / distance;
     const cx = (sx + ex) / 2 + perpX * curvature * distance;
@@ -1755,6 +2066,7 @@ class FalkorDBCanvas extends HTMLElement {
   }
 
   private drawNode(node: GraphNode, ctx: CanvasRenderingContext2D) {
+    this.cullingContext = ctx;
 
     if (node.x === undefined || node.y === undefined) {
       node.x = 0;
@@ -1762,7 +2074,7 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Viewport culling: skip nodes that are entirely outside the visible area.
-    if (this.config.largeGraph?.enabled && !this.isNodeInCullingBounds(node)) return;
+    if (this.config.largeGraph?.enabled && !this.isNodeInRenderBounds(node) && !this.isOutsideCaptionInCullingBounds(node, ctx)) return;
 
     // Focus mode dimming: reduce opacity for nodes outside the focused set.
     const isDimmed = this.config.dimmed === true && (this.config.isNodeDimmed?.(node) ?? false);
@@ -1771,32 +2083,40 @@ class FalkorDBCanvas extends HTMLElement {
       ctx.globalAlpha = this.config.dimOpacity ?? 0.15;
     }
 
-    ctx.lineWidth = this.config.isNodeSelected?.(node) ? this.config.nodeStyle.strokeWidthSelected : this.config.nodeStyle.strokeWidthUnselected;
+    const isSelected = this.config.isNodeSelected?.(node) ?? false;
+    ctx.lineWidth = isSelected ? this.config.nodeStyle.strokeWidthSelected : this.config.nodeStyle.strokeWidthUnselected;
     ctx.strokeStyle = node.borderColor ?? this.config.foregroundColor;
     ctx.fillStyle = node.color;
 
     const radius = node.size + ctx.lineWidth / 2;
+    const glowRadius = this.config.nodeStyle.glowSpread;
+    const glowSteps = this.config.nodeStyle.glowSteps;
+    const drawGlow = (color: [number, number, number], maxOpacity: number) => {
+      ctx.save();
+      const [gr, gg, gb] = color;
+      for (let i = glowSteps; i >= 1; i--) {
+        const t = i / glowSteps;
+        const spread = t * glowRadius;
+        const alpha = maxOpacity * (1 - t) * (1 - t);
+        ctx.strokeStyle = `rgba(${gr}, ${gg}, ${gb}, ${alpha})`;
+        ctx.lineWidth = glowRadius / glowSteps;
+        this.traceNodeShape(node, ctx, radius + spread);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    if (isSelected) {
+      drawGlow(this.config.nodeStyle.selectedGlowColor, this.config.nodeStyle.glowMaxOpacity / 2);
+    }
 
     // Draw glow after expand/collapse state change
     const [, expandTime] = node.expand;
     const expandAge = Date.now() - expandTime.getTime();
     const glowDuration = this.config.nodeStyle.glowDuration;
-    if (expandAge < glowDuration) {
-      ctx.save();
-      const glowRadius = this.config.nodeStyle.glowSpread;
-      const steps = this.config.nodeStyle.glowSteps;
-      const [gr, gg, gb] = this.config.nodeStyle.glowColor;
-      const glowMaxOpacity = this.config.nodeStyle.glowMaxOpacity;
-      for (let i = steps; i >= 1; i--) {
-        const t = i / steps;
-        const spread = t * glowRadius;
-        const alpha = glowMaxOpacity * (1 - t) * (1 - t);
-        ctx.strokeStyle = `rgba(${gr}, ${gg}, ${gb}, ${alpha})`;
-        ctx.lineWidth = glowRadius / steps;
-        this.traceNodeShape(node, ctx, radius + spread);
-        ctx.stroke();
-      }
-      ctx.restore();
+    if (glowDuration > 0 && expandAge < glowDuration) {
+      const progress = Math.max(0, expandAge) / glowDuration;
+      drawGlow(this.config.nodeStyle.glowColor, this.config.nodeStyle.glowMaxOpacity * (1 - progress));
       this.scheduleGlowRender(node.id, glowDuration - expandAge);
     }
 
@@ -1818,26 +2138,53 @@ class FalkorDBCanvas extends HTMLElement {
     }
 
     // Draw text
-    ctx.fillStyle = getContrastTextColor(node.color, this.config.interaction.contrastThreshold);
+    const nodeStyle = this.config.nodeStyle;
+    const nodeFontWeight = isSelected ? nodeStyle.fontWeightSelected : nodeStyle.fontWeightUnselected;
     ctx.textAlign = "center";
+
+    if (nodeStyle.captionPosition !== "inside") {
+      const text = node.displayName[0] || getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
+      node.displayName = [text, ""];
+      ctx.fillStyle = this.config.foregroundColor;
+      ctx.font = `${nodeFontWeight} ${nodeStyle.fontSize}px ${nodeStyle.fontFamily}`;
+      const { x, y, align, baseline } = this.outsideCaptionLayout(node, nodeStyle.captionPosition);
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      ctx.fillText(text, x, y);
+      if (isDimmed) ctx.restore();
+      return;
+    }
+
+    ctx.fillStyle = getContrastTextColor(node.color, this.config.interaction.contrastThreshold);
     ctx.textBaseline = "middle";
 
-    let [line1, line2] = node.displayName;
     const textRadius = node.size - PADDING / 2;
-    const nodeFontWeight = this.config.isNodeSelected?.(node) ? this.config.nodeStyle.fontWeightSelected : this.config.nodeStyle.fontWeightUnselected;
 
-    if (!line1 && !line2) {
+    if (textRadius <= 0) {
+      if (isDimmed) ctx.restore();
+      return;
+    }
+
+    const previousLayout = this.nodeTextLayout.get(node.id);
+    const cachedFontSize = this.nodeDisplayFontSize.get(node.id) ?? nodeStyle.fontSize;
+    const currentFont = `${nodeFontWeight} ${cachedFontSize}px ${nodeStyle.fontFamily}`;
+    if (previousLayout && previousLayout.font !== currentFont) {
+      node.displayName = ["", ""];
+      this.nodeDisplayFontSize.delete(node.id);
+      this.nodeTextLayout.delete(node.id);
+    }
+
+    let [line1, line2] = node.displayName;
+    if (!this.nodeDisplayFontSize.has(node.id)) {
       const text = getNodeDisplayText(node, this.config.captionsKeys, this.config.showPropertyKeyPrefix);
 
       const baseFontSize = this.config.nodeStyle.fontSize;
 
-      // Measure at the base size for line-wrapping decisions.
-      ctx.font = `${nodeFontWeight} ${baseFontSize}px ${this.config.nodeStyle.fontFamily}`;
-      [line1, line2] = wrapTextForCircularNode(ctx, text, textRadius);
-
       let chosenSize = baseFontSize;
 
-      if (this.config.nodeStyle.textFillRatio > 0 && !line2) {
+      if (this.config.nodeStyle.textFillRatio > 0) {
+        line1 = text;
+        line2 = "";
         // Auto-size mode: scale text to fill textFillRatio × nodeRadius.
         // Measure at a large reference size (20px) where canvas metrics are precise.
         const REF = 20;
@@ -1858,8 +2205,10 @@ class FalkorDBCanvas extends HTMLElement {
         } else if (refWidth > 0) {
           chosenSize = REF * (2 * r / refWidth);
         }
+      } else {
+        ctx.font = `${nodeFontWeight} ${baseFontSize}px ${this.config.nodeStyle.fontFamily}`;
+        [line1, line2] = wrapTextForCircularNode(ctx, text, textRadius);
       }
-      // else: fixed fontSize mode — chosenSize stays as baseFontSize.
 
       node.displayName = [line1, line2];
       this.nodeDisplayFontSize.set(node.id, chosenSize);
@@ -1952,7 +2301,7 @@ class FalkorDBCanvas extends HTMLElement {
     const emphasis = isLinkSelected ? LINK_SELECTED_SCALE : 1;
     const arrowLen = (link.arrowSize ?? ARROW_SIZE) * emphasis;
     const lineWidth = (link.width ?? LINK_WIDTH) * emphasis;
-    const fontSize = link.fontSize ?? LINK_FONT_SIZE;
+    const fontSize = link.fontSize ?? this.config.linkStyle.fontSize;
 
     // Low-zoom flags – evaluated once per link draw.
     // lowZoomThreshold is the zoom level below which details are hidden (e.g. 0.5 = skip at half zoom).
@@ -1968,7 +2317,7 @@ class FalkorDBCanvas extends HTMLElement {
 
     if (start.id === end.id) {
       const nodeSize = start.size;
-      const d = (link.curve || 0) * nodeSize * this.config.linkStyle.selfLoopCurveFactor;
+      const d = (link.curve2D || 0) * nodeSize * this.config.linkStyle.selfLoopCurveFactor;
 
       ctx.lineWidth = lineWidth / globalScale;
       if (this.config.linkLineDash) ctx.setLineDash(this.config.linkLineDash(link));
@@ -2068,7 +2417,7 @@ class FalkorDBCanvas extends HTMLElement {
       const perpX = dy / distance;
       const perpY = -dx / distance;
 
-      const curvature = link.curve || 0;
+      const curvature = link.curve2D || 0;
       const controlX =
         (start.x + end.x) / 2 + perpX * curvature * distance * 1.0;
       const controlY =
@@ -2255,7 +2604,7 @@ class FalkorDBCanvas extends HTMLElement {
     if (start.id === end.id) {
       // Self-loop: replicate exact cubic bezier clip from drawLink
       const nodeSize = start.size;
-      const d = (link.curve || 0) * nodeSize * this.config.linkStyle.selfLoopCurveFactor;
+      const d = (link.curve2D || 0) * nodeSize * this.config.linkStyle.selfLoopCurveFactor;
 
       const nodeStrokeWidth = this.config.isNodeSelected?.(start) ? this.config.nodeStyle.strokeWidthSelected : this.config.nodeStyle.strokeWidthUnselected;
       const borderRadius = nodeSize + nodeStrokeWidth + this.edgeGap;
@@ -2288,7 +2637,7 @@ class FalkorDBCanvas extends HTMLElement {
       const dx = end.x - start.x;
       const dy = end.y - start.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      const curvature = link.curve || 0;
+      const curvature = link.curve2D || 0;
 
       if (distance === 0) {
         ctx.moveTo(start.x, start.y);

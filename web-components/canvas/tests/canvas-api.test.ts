@@ -153,7 +153,7 @@ describe("refresh", () => {
     canvas.setConfig({ width: 800, height: 600 });
     canvas.setData(SIMPLE_DATA);
 
-    const graph = canvas.getGraph() as any;
+    const graph = canvas.twoD.getGraph() as any;
     const tunedCollide = { tuned: true };
     graph.d3Force("collide", tunedCollide);
     const internalCanvas = canvas as any;
@@ -202,7 +202,7 @@ describe("getGraph", () => {
     canvas.setConfig({ width: 800, height: 600 });
     canvas.setData(SIMPLE_DATA);
 
-    const graph = canvas.getGraph();
+    const graph = canvas.twoD.getGraph();
     expect(graph).toBeDefined();
     expect(graph).toBe(getLastInstance());
   });
@@ -210,8 +210,7 @@ describe("getGraph", () => {
   it("returns undefined before element is connected to DOM", () => {
     // Create but don't append to DOM
     const canvas = document.createElement("falkordb-canvas") as CanvasElement;
-    const graph = canvas.getGraph();
-    expect(graph).toBeUndefined();
+    expect(() => canvas.twoD.getGraph()).toThrow(/2D renderer is not active/i);
   });
 });
 

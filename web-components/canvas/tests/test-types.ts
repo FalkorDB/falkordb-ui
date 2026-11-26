@@ -2,15 +2,15 @@
  * Shared test type definitions that use the actual source types
  * so TypeScript catches type mismatches at compile time.
  */
-import type { ForceGraphConfig, Data, GraphData, GraphNode, GraphLink, ViewportState, LayoutMode, LayoutOptions, CanvasDimension } from "../src/canvas-types";
-import type { WorldBounds } from "../src/canvas";
+import type { CanvasConfig, Data, GraphData, GraphNode, GraphLink, TwoDViewportState, CameraState, LayoutMode, LayoutOptions, CanvasDimension, TwoDGraphInstance, ThreeDGraphInstance } from "../src/canvas-types";
+import type { TwoDWorldBounds } from "../src/canvas";
 
 /**
  * Base canvas element type matching the public API of FalkorDBCanvas.
  * Tests should use this (or a subset via Pick) instead of ad-hoc Record types.
  */
 export type CanvasTestElement = HTMLElement & {
-  setConfig: (config: Partial<ForceGraphConfig>) => void;
+  setConfig: (config: Partial<CanvasConfig>) => void;
   setData: (data: Data) => void;
   setGraphData: (data: Data) => void;
   getData: () => Data;
@@ -27,19 +27,27 @@ export type CanvasTestElement = HTMLElement & {
   getDimension: () => CanvasDimension;
   setDebug: (enabled: boolean) => void;
   refresh: () => void;
-  getGraph: () => unknown;
+  twoD: {
+    getGraph: () => TwoDGraphInstance;
+    getViewport: () => TwoDViewportState;
+    setViewport: (viewport: TwoDViewportState) => void;
+    getCullingStats: () => CullingStats;
+  };
+  threeD: {
+    getGraph: () => ThreeDGraphInstance;
+    getCameraState: () => CameraState;
+    setCameraState: (state: CameraState) => void;
+    getCullingStats: () => import("../src/index").ThreeDCullingStats;
+  };
   getZoom: () => number;
   zoom: (zoomLevel: number) => unknown;
   zoomToFit: (paddingMultiplier?: number, filter?: (node: GraphNode) => boolean) => void;
-  getViewport: () => ViewportState;
-  setViewport: (viewport: ViewportState) => void;
-  getCullingStats: () => CullingStats;
   centerAt: (x: number, y: number, duration?: number) => void;
 };
 
 export interface CullingStats {
   enabled: boolean;
-  bounds: WorldBounds | null;
+  bounds: TwoDWorldBounds | null;
   zoom: number;
   visibleNodes: number;
   totalNodes: number;
@@ -47,5 +55,9 @@ export interface CullingStats {
   totalLinks: number;
 }
 
+export function read3DNodeDepth(graph: ThreeDGraphInstance): number | undefined {
+  return graph.graphData().nodes[0]?.z;
+}
+
 // Re-export source types for convenience
-export type { ForceGraphConfig, Data, GraphData, GraphNode, GraphLink, ViewportState, LayoutMode, LayoutOptions, CanvasDimension, WorldBounds };
+export type { CanvasConfig, Data, GraphData, GraphNode, GraphLink, TwoDViewportState, LayoutMode, LayoutOptions, CanvasDimension, TwoDWorldBounds };

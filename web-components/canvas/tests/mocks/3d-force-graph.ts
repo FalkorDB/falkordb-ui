@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Scene } from "three";
+import { PerspectiveCamera, Scene, Vector2, Vector3 } from "three";
 
 type Vec3 = { x: number; y: number; z: number };
 
@@ -20,7 +20,30 @@ export class MockForceGraph3DInstance {
   private controlChanges = new Set<() => void>();
 
   public controlsState = {
-    target: { x: 0, y: 0, z: 0 },
+    target: new Vector3(),
+    enabled: true,
+    noPan: false,
+    noRotate: false,
+    noZoom: false,
+    state: -1,
+    keyState: -1,
+    _movePrev: new Vector2(),
+    _moveCurr: new Vector2(),
+    _zoomStart: new Vector2(),
+    _zoomEnd: new Vector2(),
+    _panStart: new Vector2(),
+    _panEnd: new Vector2(),
+    _lastAngle: 0,
+    _lastRollAngle: 0,
+    _touchRollAngle: 0,
+    _touchRollPointerIds: "",
+    mouseButtons: {} as Record<string, number | null>,
+    update: () => {
+      const { x, y, z } = this.controlsState.target;
+      this.cameraObject.position.copy(this.cameraPos);
+      this.cameraObject.lookAt(x, y, z);
+      this.cameraObject.updateMatrixWorld(true);
+    },
     addEventListener: (_name: string, callback: () => void) => { this.controlChanges.add(callback); },
     removeEventListener: (_name: string, callback: () => void) => { this.controlChanges.delete(callback); },
   };
@@ -29,11 +52,11 @@ export class MockForceGraph3DInstance {
     for (const callback of this.controlChanges) callback();
   }
 
+  public sceneObject = new Scene();
+
   public destroyed = false;
 
   public contextLost = false;
-
-  private readonly sceneObject = new Scene();
 
   scene() { return this.sceneObject; }
 
@@ -59,6 +82,9 @@ export class MockForceGraph3DInstance {
   public chargeForce = { strength: (_value: number) => this.chargeForce };
 
   constructor(public readonly container: HTMLElement) {
+    this.cameraObject.position.set(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
+    this.cameraObject.lookAt(0, 0, 0);
+    this.cameraObject.updateMatrixWorld(true);
     // The real one renders into a canvas of its own.
     container.appendChild(document.createElement("canvas"));
 
@@ -89,12 +115,16 @@ export class MockForceGraph3DInstance {
   width(value?: number) {
     if (value === undefined) return (this.props.get("width") as number) ?? 0;
     this.props.set("width", value);
+    this.cameraObject.aspect = value / (this.height() || 1);
+    this.cameraObject.updateProjectionMatrix();
     return this;
   }
 
   height(value?: number) {
     if (value === undefined) return (this.props.get("height") as number) ?? 0;
     this.props.set("height", value);
+    this.cameraObject.aspect = (this.width() || 1) / value;
+    this.cameraObject.updateProjectionMatrix();
     return this;
   }
 
@@ -122,8 +152,6 @@ export class MockForceGraph3DInstance {
 
   camera() {
     this.cameraObject.position.copy(this.cameraPos);
-    const target = this.controlsState.target;
-    this.cameraObject.lookAt(target.x, target.y, target.z);
     this.cameraObject.aspect = this.width() / this.height();
     this.cameraObject.updateProjectionMatrix();
     this.cameraObject.updateMatrixWorld();
@@ -133,14 +161,34 @@ export class MockForceGraph3DInstance {
   /** Moves the camera as a user's drag would, without it counting as a call. */
   simulateDrag(position: Vec3, target: Vec3) {
     this.cameraPos = { ...position };
-    this.controlsState.target = { ...target };
+    if (this.controlsState.target instanceof Vector3) {
+      this.controlsState.target.set(target.x, target.y, target.z);
+    } else {
+      this.controlsState.target = { ...target };
+    }
+    this.cameraObject.position.set(position.x, position.y, position.z);
+    this.cameraObject.lookAt(target.x, target.y, target.z);
+    this.cameraObject.updateMatrixWorld(true);
   }
 
   cameraPosition(position?: Partial<Vec3>, lookAt?: Vec3, transitionMs?: number) {
     if (position === undefined) return this.cameraPos;
     this.calls.push(["cameraPosition", [position, lookAt, transitionMs]]);
     this.cameraPos = { ...this.cameraPos, ...position };
-    if (lookAt) this.controlsState.target = { ...lookAt };
+    this.cameraObject.position.set(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
+    if (lookAt) {
+      if (this.controlsState.enabled && this.controlsState.target instanceof Vector3) {
+        this.controlsState.target.set(lookAt.x, lookAt.y, lookAt.z);
+      } else {
+        this.cameraObject.lookAt(lookAt.x, lookAt.y, lookAt.z);
+      }
+    }
+    this.cameraObject.updateMatrixWorld(true);
+    return this;
+  }
+
+  enableNavigationControls(enabled: boolean) {
+    this.controlsState.enabled = enabled;
     return this;
   }
 

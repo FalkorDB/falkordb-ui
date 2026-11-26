@@ -9,6 +9,19 @@ function item(geometry = new THREE.SphereGeometry(1, 12, 8), x = 1) {
   };
 }
 
+function outlinedItem(geometry = new THREE.SphereGeometry(1, 12, 8), x = 1) {
+  const value = item(geometry, x);
+  return {
+    ...value,
+    outline: new THREE.Mesh(value.body.geometry, new THREE.MeshBasicMaterial({
+      color: "#1a1a1a",
+      side: THREE.BackSide,
+      transparent: true,
+      opacity: 1,
+    })),
+  };
+}
+
 describe("opaque node instances", () => {
   it("shares one draw object per geometry with independent matrices and colors", () => {
     const scene = new THREE.Scene();
@@ -36,6 +49,32 @@ describe("opaque node instances", () => {
     mesh.raycast(new THREE.Raycaster(), hits);
     expect(hits).toEqual([]);
     instances.dispose();
+  });
+
+  it("batches unselected outlines with bodies and restores outlines when removed", () => {
+    const scene = new THREE.Scene();
+    const instances = new NodeInstances(scene);
+    const geometry = new THREE.SphereGeometry(1, 12, 8);
+    const first = outlinedItem(geometry);
+    const second = outlinedItem(geometry, 8);
+
+    instances.update([first, second]);
+
+    const batches = scene.children.filter((object): object is THREE.InstancedMesh => object instanceof THREE.InstancedMesh);
+    const outlineBatch = batches.find(batch => batch.material instanceof THREE.MeshBasicMaterial);
+    expect(batches).toHaveLength(2);
+    expect(outlineBatch?.count).toBe(2);
+    expect((outlineBatch!.material as THREE.MeshBasicMaterial).opacity).toBe(1);
+    const matrix = new THREE.Matrix4();
+    outlineBatch!.getMatrixAt(0, matrix);
+    expect(new THREE.Vector3().setFromMatrixScale(matrix).x).toBeCloseTo(first.size * 1.05);
+    expect(first.body.visible).toBe(false);
+    expect(first.outline.visible).toBe(false);
+
+    instances.update([second]);
+    expect(first.outline.visible).toBe(true);
+    instances.dispose();
+    expect(second.outline.visible).toBe(true);
   });
 
   it("does not reupload unchanged transforms or colors", () => {

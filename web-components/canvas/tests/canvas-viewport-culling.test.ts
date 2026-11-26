@@ -3,9 +3,16 @@ import {
   forceGraphMockState,
   resetForceGraphMockState,
 } from "./mocks/force-graph";
+import {
+  forceGraph3DMockState,
+  resetForceGraph3DMockState,
+  type MockForceGraph3DInstance,
+} from "./mocks/3d-force-graph";
 
 vi.mock("force-graph", async () => import("./mocks/force-graph"));
+vi.mock("3d-force-graph", async () => import("./mocks/3d-force-graph"));
 
+import { BoxGeometry, BufferGeometry, Frustum, Group, Line, LineBasicMaterial, Matrix4, Mesh, MeshBasicMaterial, Object3D, Sprite, SpriteMaterial, Vector3 } from "three";
 import "../src/canvas";
 import type { CanvasTestElement, Data, GraphNode } from "./test-types";
 
@@ -116,6 +123,55 @@ const SIMPLE_DATA: Data = {
   ],
 };
 
+function create3DData(): Data {
+  return {
+    nodes: [1, 2, 3, 4].map((id) => ({
+      id,
+      labels: ["A"],
+      visible: true,
+      color: "#f00",
+      data: { name: `node-${id}` },
+    })),
+    links: [
+      { id: 1, relationship: "VISIBLE", source: 1, target: 2, visible: true, color: "#888", data: {} },
+      { id: 2, relationship: "OFFSCREEN", source: 3, target: 4, visible: true, color: "#888", data: {} },
+    ],
+  };
+}
+
+function add3DDrawables(canvas: CanvasTestElement, graph: MockForceGraph3DInstance) {
+  const data = canvas.getGraphData();
+  const positions = [[0, 0, 0], [487, 0, 0], [1000, 0, 0], [1200, 0, 0]];
+  const nodeFactory = graph.callback("nodeThreeObject") as (node: GraphNode) => Object3D;
+
+  data.nodes.forEach((node, index) => {
+    const [x, y, z] = positions[index];
+    Object.assign(node, { x, y, z, size: 6 });
+    const object = nodeFactory(node);
+    object.position.set(x, y, z);
+    Object.assign(object, { __graphObjType: "node", __data: node });
+    graph.sceneObject.add(object);
+  });
+
+  const linkFactory = graph.callback("linkThreeObject") as (link: (typeof data.links)[number]) => Object3D;
+  for (const link of data.links) {
+    const start = link.source as GraphNode;
+    const end = link.target as GraphNode;
+    const body = new Line(
+      new BufferGeometry().setFromPoints([
+        new Vector3(start.x!, start.y!, start.z!),
+        new Vector3(end.x!, end.y!, end.z!),
+      ]),
+      new LineBasicMaterial(),
+    );
+    const label = linkFactory(link);
+    label.position.set((start.x! + end.x!) / 2, 0, 0);
+    const object = new Group().add(body, label);
+    Object.assign(object, { __graphObjType: "link", __data: link });
+    graph.sceneObject.add(object);
+  }
+}
+
 describe("viewport culling", () => {
   afterEach(() => {
     document.body.innerHTML = "";
@@ -124,7 +180,7 @@ describe("viewport culling", () => {
 
   it("culling is disabled when largeGraph.enabled is false — offscreen nodes are still drawn", () => {
     const canvas = createCanvas();
-    canvas.setConfig({ width: 800, height: 600, largeGraph: { enabled: false } });
+    canvas.setConfig({ width: 800, height: 600, twoD: { largeGraph: { enabled: false } } });
     canvas.setData(SIMPLE_DATA);
 
     const instance = getLastInstance();
@@ -186,12 +242,102 @@ describe("viewport culling", () => {
     expect(ctxOff.arc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["left", 450, 0, 383.5, 0],
+    ["right", -450, 0, -383.5, 0],
+    ["above", 0, 350, 0, 283.5],
+    ["below", 0, -350, 0, -283.5],
+  ] as const)("draws a visible %s caption even when its node is offscreen", (side, x, y, textX, textY) => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      width: 800, height: 600,
+      twoD: {
+        nodeStyle: { captionPosition: side, captionGap: 60 },
+        largeGraph: { viewportPadding: 0, skipLabelsAtLowZoom: false },
+      },
+    });
+    canvas.setData(SIMPLE_DATA);
+    const instance = getLastInstance();
+    setupInstanceDimensions(instance);
+    const node = canvas.getGraphData().nodes[0];
+    node.x = x;
+    node.y = y;
+    node.size = 6;
+    triggerZoom({ k: 1, x: 0, y: 0 });
+
+    const ctx = createCtxSpy();
+    instance.callbacks.nodeCanvasObject!(node, ctx);
+    expect(ctx.fillText).toHaveBeenCalledWith("1", textX, textY);
+
+    node.x = 5000;
+    node.y = 5000;
+    const farAway = createCtxSpy();
+    instance.callbacks.nodeCanvasObject!(node, farAway);
+    expect(farAway.fillText).not.toHaveBeenCalled();
+  });
+
+  it("reuses offscreen caption measurements and refreshes them when text or fonts change", () => {
+    let selected = false;
+    const canvas = createCanvas();
+    canvas.setConfig({
+      width: 800, height: 600,
+      captionsKeys: [["name", true]],
+      isNodeSelected: () => selected,
+      twoD: {
+        nodeStyle: { captionPosition: "left", captionGap: 20 },
+        largeGraph: { viewportPadding: 0, skipLabelsAtLowZoom: false },
+      },
+    });
+    canvas.setData(SIMPLE_DATA);
+    const instance = getLastInstance();
+    setupInstanceDimensions(instance);
+    const node = canvas.getGraphData().nodes[0];
+    node.x = 5000;
+    node.y = 0;
+    triggerZoom({ k: 1, x: 0, y: 0 });
+    const ctx = createCtxSpy();
+    const measure = vi.mocked(ctx.measureText);
+    const draw = () => instance.callbacks.nodeCanvasObject!(node, ctx);
+
+    draw();
+    draw();
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(ctx.fillText).not.toHaveBeenCalled();
+
+    selected = true;
+    draw();
+    expect(measure).toHaveBeenCalledTimes(2);
+    expect(ctx.font).toContain("700 ");
+
+    canvas.setConfig({ twoD: { nodeStyle: { fontSize: 9 } } });
+    draw();
+    expect(measure).toHaveBeenCalledTimes(3);
+
+    node.data.name = "changed";
+    canvas.refresh();
+    draw();
+    expect(measure).toHaveBeenLastCalledWith("changed");
+    expect(measure).toHaveBeenCalledTimes(4);
+
+    const listeners = vi.mocked(document.fonts.addEventListener).mock.calls;
+    const listener = listeners.filter(([event]) => event === "loadingdone").at(-1)?.[1];
+    expect(listener).toBeTypeOf("function");
+    (listener as EventListener).call(document.fonts, new Event("loadingdone"));
+    draw();
+    expect(measure).toHaveBeenCalledTimes(5);
+
+    node.x = 420;
+    draw();
+    expect(measure).toHaveBeenCalledTimes(5);
+    expect(ctx.fillText).toHaveBeenCalledWith("changed", expect.any(Number), 0);
+  });
+
   it("culling bounds include viewport padding — borderline node is drawn", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: { viewportPadding: 100 },
+      twoD: { largeGraph: { viewportPadding: 100 } },
     });
     canvas.setData(SIMPLE_DATA);
 
@@ -239,7 +385,7 @@ describe("viewport culling", () => {
     expect(ctx1.arc).not.toHaveBeenCalled();
 
     // Disable culling
-    canvas.setConfig({ largeGraph: { enabled: false } });
+    canvas.setConfig({ twoD: { largeGraph: { enabled: false } } });
 
     // Now the same offscreen node should be drawn
     const ctx2 = createCtxSpy();
@@ -252,7 +398,7 @@ describe("viewport culling", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: { viewportPadding: 50 },
+      twoD: { largeGraph: { viewportPadding: 50 } },
     });
     canvas.setData(SIMPLE_DATA);
 
@@ -260,7 +406,7 @@ describe("viewport culling", () => {
     setupInstanceDimensions(instance);
 
     // Update only viewportPadding — enabled should remain true
-    canvas.setConfig({ largeGraph: { viewportPadding: 200 } });
+    canvas.setConfig({ twoD: { largeGraph: { viewportPadding: 200 } } });
 
     const data = canvas.getGraphData();
     data.nodes[0].x = -5000;
@@ -407,14 +553,267 @@ describe("low-zoom draw skipping", () => {
     resetForceGraphMockState();
   });
 
+  describe("3D culling diagnostics", () => {
+    afterEach(() => {
+      document.body.innerHTML = "";
+      resetForceGraphMockState();
+      resetForceGraph3DMockState();
+      vi.restoreAllMocks();
+    });
+
+    it("counts partial bounds and actual captions independently of the caption limit", async () => {
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+        measureText: (text: string) => ({ width: text.length * 10 }),
+        fillRect: () => {},
+        fillText: () => {},
+      }) as unknown as CanvasRenderingContext2D);
+      const canvas = createCanvas();
+      canvas.setConfig({
+        captionsKeys: ["name"],
+        threeD: { largeGraph: { enabled: false, maxLabeledElements: 1 } },
+      });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+      const graph = forceGraph3DMockState.lastInstance!;
+      add3DDrawables(canvas, graph);
+
+      expect(canvas.threeD.getCullingStats()).toEqual({
+        frustumVisibleNodeBodies: 2,
+        totalNodeBodies: 4,
+        frustumVisibleNodeCaptions: 2,
+        totalNodeCaptions: 4,
+        frustumVisibleLinks: 1,
+        totalLinks: 2,
+        frustumVisibleLinkLabels: 1,
+        totalLinkLabels: 2,
+        captionLimitEnabled: false,
+      });
+    });
+
+    it("honors the configured 3D caption limit", async () => {
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+        measureText: (text: string) => ({ width: text.length * 10 }),
+        fillRect: () => {},
+        fillText: () => {},
+      }) as unknown as CanvasRenderingContext2D);
+      const canvas = createCanvas();
+      canvas.setConfig({
+        captionsKeys: ["name"],
+        threeD: { largeGraph: { enabled: true, maxLabeledElements: 1 } },
+      });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+      const graph = forceGraph3DMockState.lastInstance!;
+      add3DDrawables(canvas, graph);
+
+      expect(canvas.threeD.getCullingStats()).toMatchObject({
+        totalNodeCaptions: 0,
+        totalLinkLabels: 0,
+        captionLimitEnabled: true,
+      });
+    });
+
+    it.each(["dashed", "custom"] as const)("shows %s link captions after moving onscreen", async (kind) => {
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+        measureText: (text: string) => ({ width: text.length * 10 }),
+        fillRect: () => {},
+        fillText: () => {},
+      }) as unknown as CanvasRenderingContext2D);
+      const visualConfig = kind === "dashed"
+        ? { linkDashPattern: () => [4, 2] }
+        : { linkObject: () => new Group() };
+      const canvas = createCanvas();
+      canvas.setConfig({
+        threeD: { largeGraph: { enabled: true, lowZoomThreshold: 0 }, ...visualConfig },
+      });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const link = canvas.getGraphData().links[0];
+      const factory = graph.callback("linkThreeObject") as (current: typeof link) => Object3D;
+      const object = factory(link);
+      const label = object.getObjectByProperty("type", "Sprite") as Sprite;
+      const update = graph.callback("linkPositionUpdate") as (
+        object: Object3D,
+        coordinates: { start: Vector3; end: Vector3 },
+        current: typeof link,
+      ) => void;
+      graph.sceneObject.add(object);
+
+      update(object, {
+        start: new Vector3(10000, 0, 0),
+        end: new Vector3(10100, 0, 0),
+      }, link);
+      graph.controlsChanged();
+      expect(label.visible).toBe(false);
+
+      update(object, {
+        start: new Vector3(0, 0, 0),
+        end: new Vector3(100, 0, 0),
+      }, link);
+      expect(label.visible).toBe(true);
+    });
+
+    it("counts instanced node bodies using the total-node threshold when one node is hidden", async () => {
+      const canvas = createCanvas();
+      const nodes = Array.from({ length: 1000 }, (_, id) => ({
+        id,
+        labels: ["A"],
+        visible: id !== 999,
+        color: "#f00",
+        data: {},
+      }));
+      canvas.setData({ nodes, links: [] });
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const nodeFactory = graph.callback("nodeThreeObject") as (current: GraphNode) => Object3D;
+      for (const node of canvas.getGraphData().nodes) {
+        Object.assign(node, { x: 0, y: 0, z: 0 });
+        graph.sceneObject.add(nodeFactory(node));
+      }
+      graph.controlsChanged();
+
+      expect(canvas.threeD.getCullingStats()).toMatchObject({
+        frustumVisibleNodeBodies: 999,
+        totalNodeBodies: 999,
+      });
+    });
+
+    it("counts visible drawables nested inside custom 3D node objects", async () => {
+      const canvas = createCanvas();
+      canvas.setConfig({
+        threeD: {
+          nodeObject: () => new Group().add(new Mesh(new BoxGeometry(10, 10, 10), new MeshBasicMaterial())),
+        },
+      });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const node = canvas.getGraphData().nodes[0];
+      Object.assign(node, { x: 0, y: 0, z: 0 });
+      const factory = graph.callback("nodeThreeObject") as (current: GraphNode) => Object3D;
+      const object = factory(node);
+      Object.assign(object, { __graphObjType: "node", __data: node });
+      graph.sceneObject.add(object);
+
+      expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(1);
+
+      object.visible = false;
+      expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(0);
+    });
+
+    it("culls custom nodes by their own bounds while retaining caption and node visibility checks", async () => {
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+        measureText: (text: string) => ({ width: text.length * 10 }),
+        fillRect: () => {},
+        fillText: () => {},
+      }) as unknown as CanvasRenderingContext2D);
+      const nodeObject = vi.fn(() => {
+        const mesh = new Mesh(new BoxGeometry(10, 10, 10), new MeshBasicMaterial());
+        mesh.position.x = -10000;
+        return mesh;
+      });
+      const canvas = createCanvas();
+      canvas.setConfig({ captionsKeys: ["name"], threeD: { nodeObject } });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const node = canvas.getGraphData().nodes[0];
+      Object.assign(node, { x: 10000, y: 0, z: 0 });
+      const nodeFactory = graph.callback("nodeThreeObject") as (current: GraphNode) => Object3D;
+      const object = nodeFactory(node);
+      object.position.set(10000, 0, 0);
+      graph.sceneObject.add(object);
+
+      expect(nodeObject).toHaveBeenCalledTimes(1);
+      expect(object.visible).toBe(true);
+      expect(object.children.find((child) => child instanceof Sprite)?.visible).toBe(false);
+      expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(1);
+
+      node.visible = false;
+      graph.controlsChanged();
+      expect(object.visible).toBe(false);
+      expect(canvas.threeD.getCullingStats().frustumVisibleNodeBodies).toBe(0);
+    });
+
+    it("uses camera-facing bounds for custom sprites in node and link diagnostics", async () => {
+      const canvas = createCanvas();
+      canvas.setConfig({
+        threeD: {
+          nodeObject: () => {
+            const sprite = new Sprite(new SpriteMaterial());
+            sprite.name = "custom-node";
+            sprite.center.set(0, 0);
+            return sprite;
+          },
+          linkObject: () => {
+            const sprite = new Sprite(new SpriteMaterial());
+            sprite.name = "custom-link";
+            sprite.center.set(0, 0);
+            return sprite;
+          },
+        },
+      });
+      canvas.setData(create3DData());
+      await canvas.setDimension("3d");
+
+      const graph = forceGraph3DMockState.lastInstance!;
+      const data = canvas.getGraphData();
+      const camera = graph.camera();
+      const frustum = new Frustum().setFromProjectionMatrix(
+        new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+      );
+      const edgePlane = frustum.planes[0];
+      const edgePosition = edgePlane.normal.clone().multiplyScalar(-1 - edgePlane.constant);
+      const node = data.nodes[0];
+      Object.assign(node, { x: edgePosition.x, y: edgePosition.y, z: edgePosition.z });
+      const nodeFactory = graph.callback("nodeThreeObject") as (current: GraphNode) => Object3D;
+      const nodeObject = nodeFactory(node);
+      nodeObject.position.copy(edgePosition);
+      graph.sceneObject.add(nodeObject);
+
+      const link = data.links[0];
+      const linkFactory = graph.callback("linkThreeObject") as (current: typeof link) => Object3D;
+      const linkObject = linkFactory(link);
+      Object.assign(linkObject, { __graphObjType: "link", __data: link });
+      graph.sceneObject.add(linkObject);
+      const updateLink = graph.callback("linkPositionUpdate") as (
+        object: Object3D,
+        coordinates: { start: Vector3; end: Vector3 },
+        current: typeof link,
+      ) => void;
+      updateLink(linkObject, {
+        start: edgePosition.clone(),
+        end: edgePosition.clone(),
+      }, link);
+      graph.sceneObject.updateMatrixWorld(true);
+
+      const nodeSprite = nodeObject.getObjectByName("custom-node") as Sprite;
+      const linkSprite = linkObject.getObjectByName("custom-link") as Sprite;
+      expect(frustum.intersectsObject(nodeSprite)).toBe(false);
+      expect(frustum.intersectsSprite(nodeSprite)).toBe(true);
+      expect(frustum.intersectsObject(linkSprite)).toBe(false);
+      expect(frustum.intersectsSprite(linkSprite)).toBe(true);
+
+      expect(canvas.threeD.getCullingStats()).toMatchObject({
+        frustumVisibleNodeBodies: 1,
+        frustumVisibleLinks: 1,
+      });
+    });
+  });
+
   it("labels are skipped below lowZoomThreshold", () => {
     const canvas = createCanvas();
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: {
+      twoD: { largeGraph: {
         lowZoomThreshold: 0.5,
-      },
+      } },
     });
     canvas.setData(SIMPLE_DATA);
 
@@ -448,9 +847,9 @@ describe("low-zoom draw skipping", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: {
+      twoD: { largeGraph: {
         lowZoomThreshold: 0.8,
-      },
+      } },
     });
     canvas.setData(SIMPLE_DATA);
 
@@ -482,9 +881,9 @@ describe("low-zoom draw skipping", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: {
+      twoD: { largeGraph: {
         lowZoomThreshold: 0.5,
-      },
+      } },
     });
     canvas.setData(SIMPLE_DATA);
 
@@ -496,7 +895,7 @@ describe("low-zoom draw skipping", () => {
     const link = data.links[0];
     link.source = { ...data.nodes[0], x: -100, y: 0, size: 6 } as GraphNode;
     link.target = { ...data.nodes[1], x: 100, y: 0, size: 6 } as GraphNode;
-    link.curve = 0;
+    link.curve2D = 0;
 
     // Above threshold (k=0.8 > 0.5) — arrow should be drawn
     triggerZoom({ k: 0.8, x: 0, y: 0 });
@@ -519,9 +918,9 @@ describe("low-zoom draw skipping", () => {
     canvas.setConfig({
       width: 800,
       height: 600,
-      largeGraph: {
+      twoD: { largeGraph: {
         lowZoomThreshold: 0.5,
-      },
+      } },
     });
     canvas.setData(SIMPLE_DATA);
 
@@ -532,7 +931,7 @@ describe("low-zoom draw skipping", () => {
     const link = data.links[0];
     link.source = { ...data.nodes[0], x: -100, y: 0, size: 6 } as GraphNode;
     link.target = { ...data.nodes[1], x: 100, y: 0, size: 6 } as GraphNode;
-    link.curve = 0;
+    link.curve2D = 0;
 
     // Above threshold (k=0.8 > 0.5) — link label should be drawn
     triggerZoom({ k: 0.8, x: 0, y: 0 });
@@ -556,11 +955,11 @@ describe("getCullingStats", () => {
   });
 
   it("returns disabled with no bounds when largeGraph is not enabled", () => {
-    const canvas = createCanvas() as CanvasTestElement & { getCullingStats: () => unknown };
-    canvas.setConfig({ width: 800, height: 600, largeGraph: { enabled: false } });
+    const canvas = createCanvas();
+    canvas.setConfig({ width: 800, height: 600, twoD: { largeGraph: { enabled: false } } });
     canvas.setData(SIMPLE_DATA);
 
-    const stats = canvas.getCullingStats() as any;
+    const stats = canvas.twoD.getCullingStats();
     expect(stats.enabled).toBe(false);
     expect(stats.bounds).toBeNull();
     expect(stats.visibleNodes).toBe(3);
@@ -570,7 +969,7 @@ describe("getCullingStats", () => {
   });
 
   it("returns correct visible counts when culling is active", () => {
-    const canvas = createCanvas() as CanvasTestElement & { getCullingStats: () => unknown };
+    const canvas = createCanvas();
     canvas.setConfig({
       width: 800,
       height: 600,
@@ -596,7 +995,7 @@ describe("getCullingStats", () => {
 
     triggerZoom({ k: 1, x: 0, y: 0 });
 
-    const stats = canvas.getCullingStats() as any;
+    const stats = canvas.twoD.getCullingStats();
     expect(stats.enabled).toBe(true);
     expect(stats.bounds).not.toBeNull();
     expect(stats.zoom).toBe(1);
@@ -604,8 +1003,34 @@ describe("getCullingStats", () => {
     expect(stats.totalNodes).toBe(3);
   });
 
+  it("counts nodes whose outside captions remain visible after their bodies are culled", () => {
+    const canvas = createCanvas();
+    canvas.setConfig({
+      width: 800,
+      height: 600,
+      twoD: {
+        nodeStyle: { captionPosition: "left", captionGap: 60 },
+        largeGraph: { viewportPadding: 0, skipLabelsAtLowZoom: false },
+      },
+    });
+    canvas.setData(SIMPLE_DATA);
+
+    const instance = getLastInstance();
+    setupInstanceDimensions(instance);
+    const nodes = canvas.getGraphData().nodes;
+    Object.assign(nodes[0], { x: 450, y: 0, size: 6 });
+    for (const node of nodes.slice(1)) Object.assign(node, { x: 5000, y: 5000, size: 6 });
+    triggerZoom({ k: 1, x: 0, y: 0 });
+
+    const ctx = createCtxSpy();
+    instance.callbacks.nodeCanvasObject!(nodes[0], ctx);
+    expect(ctx.fillText).toHaveBeenCalledWith("1", 383.5, 0);
+
+    expect(canvas.twoD.getCullingStats().visibleNodes).toBe(1);
+  });
+
   it("panning updates visible counts correctly", () => {
-    const canvas = createCanvas() as CanvasTestElement & { getCullingStats: () => unknown };
+    const canvas = createCanvas();
     canvas.setConfig({
       width: 800,
       height: 600,
@@ -629,17 +1054,17 @@ describe("getCullingStats", () => {
 
     // Centered on origin — all visible
     triggerZoom({ k: 1, x: 0, y: 0 });
-    let stats = canvas.getCullingStats() as any;
+    let stats = canvas.twoD.getCullingStats();
     expect(stats.visibleNodes).toBe(3);
 
     // Pan far away — none visible
     triggerZoom({ k: 1, x: 5000, y: 5000 });
-    stats = canvas.getCullingStats() as any;
+    stats = canvas.twoD.getCullingStats();
     expect(stats.visibleNodes).toBe(0);
   });
 
   it("zooming in reduces visible area and culls distant nodes", () => {
-    const canvas = createCanvas() as CanvasTestElement & { getCullingStats: () => unknown };
+    const canvas = createCanvas();
     canvas.setConfig({
       width: 800,
       height: 600,
@@ -662,12 +1087,12 @@ describe("getCullingStats", () => {
 
     // At k=1, viewport half-width = 400 — all nodes within [-400, 400]
     triggerZoom({ k: 1, x: 0, y: 0 });
-    let stats = canvas.getCullingStats() as any;
+    let stats = canvas.twoD.getCullingStats();
     expect(stats.visibleNodes).toBe(3);
 
     // At k=2, viewport half-width = 200 — nodes at ±300 are outside [-200, 200]
     triggerZoom({ k: 2, x: 0, y: 0 });
-    stats = canvas.getCullingStats() as any;
+    stats = canvas.twoD.getCullingStats();
     expect(stats.visibleNodes).toBe(1);
     expect(stats.zoom).toBe(2);
   });
